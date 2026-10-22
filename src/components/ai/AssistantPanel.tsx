@@ -13,6 +13,7 @@ import {
   ImageIcon,
   FileText,
   Quote,
+  Target,
 } from 'lucide-react';
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
@@ -25,7 +26,8 @@ import { useTools } from '../../state/tools';
 import { MessageView, shownMarkdown } from './Message';
 import { SourcesList, useCitePreview } from './Citations';
 import { homeworkSources } from '../../lib/homework';
-import { linkNotes } from '../../lib/commands';
+import { linkNotes, reviewNote } from '../../lib/commands';
+import { isReviewable } from '../../lib/review/tree';
 import { ClipboardList, Compass, Link2, SearchCheck, Wand2 } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
@@ -277,6 +279,12 @@ export function AssistantPanel() {
                   {s.label}
                 </button>
               ))}
+              {note && isReviewable(note) && (
+                <button className="starter" onClick={() => reviewNote(note.meta.id)} title="Practise this note until you know it — questions and answers come only from it">
+                  <Target size={14} />
+                  Review this note
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -141,6 +141,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Quick Open…', accelerator: 'CmdOrCtrl+K', click: () => send('palette') },
         { label: 'Ask Your Library', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('library') },
+        { label: 'Review…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('review') },
         { type: 'separator' },
         { label: 'Import…', accelerator: 'CmdOrCtrl+O', click: () => send('import') },
         {

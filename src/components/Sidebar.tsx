@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronRight,
   ClipboardList,
@@ -13,13 +13,15 @@ import {
   Settings,
   SquarePen,
   Star,
+  Target,
   Trash2,
 } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useUI, type View } from '../state/ui';
 import { useAI } from '../state/ai';
 import { FileTree } from './FileTree';
-import { newClass, newFolder, newNote } from '../lib/commands';
+import { newClass, newFolder, newNote, openReview } from '../lib/commands';
+import { dueCount, useReview } from '../state/review';
 import { classForFolder, listClasses } from '../lib/classes';
 import { cx } from '../lib/util';
 import { MOD, SHIFT } from '../lib/platform';
@@ -44,7 +46,7 @@ function NavItem({
   alert?: boolean;
   onClick?(): void;
 }) {
-  const active = useUI((s) => s.view.kind === view.kind && (view.kind === 'homework' || JSON.stringify(s.view) === JSON.stringify(view)));
+  const active = useUI((s) => s.view.kind === view.kind && (view.kind === 'homework' || view.kind === 'review' || JSON.stringify(s.view) === JSON.stringify(view)));
   return (
     <button className={cx('nav-item', active && 'is-active', accent && 'is-accent')} onClick={() => (onClick ? onClick() : useUI.getState().setView(view))}>
       <span className="nav-icon">{icon}</span>
@@ -64,6 +66,12 @@ export function Sidebar() {
   const [tagsOpen, setTagsOpen] = useState(true);
   const [foldersOpen, setFoldersOpen] = useState(true);
   const [classesOpen, setClassesOpen] = useState(true);
+  // Ideas due for review (the learner model is read with the vault).
+  const reviewFile = useReview((s) => s.file);
+  const reviewDue = useMemo(() => dueCount(), [reviewFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (backend) void useReview.getState().load();
+  }, [backend]);
 
   const { live, trashed, pinned, tags, homework, overdue } = useMemo(() => {
     const all = Object.values(notes);
@@ -146,6 +154,14 @@ export function Sidebar() {
             hint={`${SHIFT}${MOD}L`}
             accent
             onClick={() => useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'all' } })}
+          />
+          <NavItem
+            icon={<Target size={16} />}
+            label="Review"
+            view={{ kind: 'review' }}
+            count={reviewDue || undefined}
+            hint={reviewDue ? undefined : `${SHIFT}${MOD}E`}
+            onClick={() => openReview()}
           />
           <NavItem icon={<Star size={16} />} label="Favorites" view={{ kind: 'favorites' }} count={pinned} />
           <NavItem icon={<Clock size={16} />} label="Recent" view={{ kind: 'recent' }} />

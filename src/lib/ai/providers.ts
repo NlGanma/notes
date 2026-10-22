@@ -37,6 +37,8 @@ export interface ChatRequest {
   maxTokens?: number;
   /** false: ask a thinking model (Ollama) to answer directly — JSON tasks don't need its reasoning. */
   think?: boolean;
+  /** A JSON schema the reply must follow (grammar-constrained where the server supports it). */
+  schema?: object;
   signal?: AbortSignal;
   onToken?(text: string): void;
   onThinking?(text: string): void;
@@ -186,7 +188,23 @@ function partialTagLength(s: string, tag: string): number {
   return 0;
 }
 
+/** Servers that rejected a JSON schema: they get plain JSON mode from then on. */
+const noSchema = new Set<string>();
+
 export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatResult> {
+  if (req.schema && !noSchema.has(cfg.baseUrl)) {
+    try {
+      return await chatOnce(cfg, req);
+    } catch (e) {
+      // Older servers don't take a schema (Ollama < 0.5): plain JSON mode still works.
+      if (!(e instanceof HttpError) || e.status !== 400) throw e;
+      noSchema.add(cfg.baseUrl);
+    }
+  }
+  return chatOnce(cfg, { ...req, schema: undefined });
+}
+
+async function chatOnce(cfg: ProviderConfig, req: ChatRequest): Promise<ChatResult> {
   const base = normalizeBase(cfg);
   let text = '';
   let thinking = '';
@@ -223,7 +241,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
         messages: req.messages.map((m) => ({ role: m.role, content: m.content, ...(m.images?.length ? { images: m.images } : {}) })),
         stream: true,
         keep_alive: '15m',
-        ...(req.json ? { format: 'json' } : {}),
+        ...(req.schema ? { format: req.schema } : req.json ? { format: 'json' } : {}),
         ...(req.think === false ? { think: false } : {}),
         options: {
           ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -277,6 +295,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
       stream: true,
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
       ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
+      ...(req.schema ? { response_format: { type: 'json_schema', json_schema: { name: 'nib', schema: req.schema, strict: true } } } : {}),
       messages: req.messages.map((m) =>
         m.images?.length
           ? {

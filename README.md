@@ -54,6 +54,15 @@ Your own NotebookLM, running locally. Answers come only from your notes, with nu
 
 ![Ask your notes with citations](docs/screenshots/ask-your-notes.png)
 
+### Review until you know it — any mix of notes
+Pick whole classes, chapters (a class's subfolders) or single notes — Spanish and Calculus together if you like — and Review quizzes you one question at a time, interleaving the classes. It runs on Nib's **Mastery Engine**:
+- **Questions come from your notes' own words.** Fill-in-the-blank, vocabulary, multiple choice (wrong choices are other lines from your notes), then *explain*, *apply* (to the example in your notes) and *connect* as you improve. Every answer key, key point and choice is a span of your notes, checked in code before a question is shown. The model may only re-phrase a question, and that's used only if the passage answers it, it doesn't give the answer away and it adds nothing your notes don't say.
+- **Answers are checked against your notes.** Short answers are graded by code (an accent or a missing article gets a note, not a zero); free answers are graded against your notes' key points, and the grader must quote your words for each one. "I don't know" is never sent to the model.
+- **It learns what you know.** Each idea has a mastery estimate (Bayesian knowledge tracing), updated by how you answered and how sure you said you were. A wrong answer gets a hint back to the right line of your notes, one retry, then the line itself. Missed ideas come back a few questions later; mastered ones come back days later (spaced repetition), sooner if you were guessing.
+- **The summary** shows what you mastered, the mix-ups to fix (confident wrong answers first), how sure vs. how right you were, and when to come back. Your progress is saved with the vault in `.nib/review.json`.
+
+Open it from the sidebar (<kbd>⇧⌘E</kbd>), a class page, a folder's or note's right-click menu, the assistant, or <kbd>⌘K</kbd> → *Review*.
+
 ### Everything else you'd expect
 Obsidian-style folder tree with drag and drop, tabs, favorites, tags and trash. Quick open and commands with <kbd>⌘K</kbd>. Import Markdown, PDF and images. Export to PDF (ruled paper included), Markdown, HTML or `.nib`. Five paper styles, Letter and A4, zoom.
 
@@ -85,7 +94,7 @@ npm run dev            # or the browser build at http://localhost:5173 (notes st
 npm run dist:mac       # build release/Nib-<version>.dmg
 ```
 
-The app keeps its vault in `~/Documents/Nib Vault` (*Settings → Vault* to change it). Every note is a `.nib` JSON file in a folder per class. Class details live in `.nib/folders.json`, and the search index in `.nib/embeddings.json`.
+The app keeps its vault in `~/Documents/Nib Vault` (*Settings → Vault* to change it). Every note is a `.nib` JSON file in a folder per class. Class details live in `.nib/folders.json`, the search index in `.nib/embeddings.json`, and Review progress in `.nib/review.json`.
 
 ## Keyboard
 
@@ -95,6 +104,7 @@ The app keeps its vault in `~/Documents/Nib Vault` (*Settings → Vault* to chan
 | <kbd>⌘K</kbd> | Quick open, search inside notes, commands |
 | <kbd>⌘J</kbd> | Assistant |
 | <kbd>⇧⌘L</kbd> | Ask your notes |
+| <kbd>⇧⌘E</kbd> | Review |
 | <kbd>⌥P</kbd> <kbd>⌥H</kbd> <kbd>⌥E</kbd> <kbd>⌥L</kbd> <kbd>⌥T</kbd> | Pen, highlighter, eraser, lasso, text |
 | <kbd>Esc</kbd> | Back to the last pen after typing |
 | <kbd>⌘D</kbd> | Sketch a symbol inline |
@@ -113,6 +123,7 @@ The full list is in **Settings → Shortcuts** (<kbd>⌘/</kbd>).
   - `engine.ts` is the scheduler, retries, metrics and activity log.
   - `rag.ts` handles retrieval: section chunks, BM25 plus local embeddings fused with reciprocal-rank fusion.
   - `prompts.ts` holds the prompts tuned for 3–14B models, and `grounding.ts` runs the citation check.
+- **Review** (`src/lib/review/`): `concepts.ts` reads the ideas in a note, `items.ts` builds questions from them and enforces the grounding invariant, `grade.ts` grades answers, `mastery.ts` is the learner model (knowledge tracing and spacing), `session.ts` picks the next question, and `prompts.ts` is the Mastery Engine prompt.
 - **Classes and homework** live in `src/lib/classes.ts` and `src/lib/homework.ts`; reading scanned pages is in `src/lib/scan.ts`.
 
 ## Tests
@@ -120,11 +131,11 @@ The full list is in **Settings → Shortcuts** (<kbd>⌘/</kbd>).
 ```bash
 npm run typecheck
 npm test               # unit tests, incl. the model engine against a mock server with injected faults
-npm run test:e2e       # browser end-to-end: ink, AI, notes-only answers, homework & classes
+npm run test:e2e       # browser end-to-end: ink, AI, notes-only answers, homework & classes, review
 npm run test:all       # all of the above + build + the desktop app (xvfb on Linux)
 ```
 
-`scripts/mock-llm.mjs` is a stand-in model server for both APIs, with streaming, thinking models, vision flags and embeddings. It answers like a careful model (citing, naming what the notes lack) and, on cue, like a careless one — a cited sentence the notes don't say — so the tests can check it gets caught. Tests can make it fail, cut replies short or load slowly through `POST /__mock` (`{"fail": 2, "status": 503}`, `{"truncate": 1}`, `{"firstTokenMs": 3000}`), so the retry, continue and loading paths are tested end to end.
+`scripts/mock-llm.mjs` is a stand-in model server for both APIs, with streaming, thinking models, vision flags and embeddings. It answers like a careful model (citing, naming what the notes lack) and, on cue, like a careless one — a cited sentence the notes don't say — so the tests can check it gets caught. For Review it plays the Mastery Engine, slips included: an idea the notes don't have, an invented name on a real line, and (with `{"badQuestions": 1}`) a question with a false premise — all must be rejected. Tests can make it fail, cut replies short or load slowly through `POST /__mock` (`{"fail": 2, "status": 503}`, `{"truncate": 1}`, `{"firstTokenMs": 3000}`), so the retry, continue and loading paths are tested end to end.
 
 CI (`.github/workflows/ci.yml`) runs everything on every push. `mac.yml` builds the `.dmg`.
 

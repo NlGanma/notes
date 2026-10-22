@@ -6,6 +6,7 @@ import { LibraryView } from './components/library/LibraryView';
 import { ClassView } from './components/classes/ClassView';
 import { ClassDialog } from './components/classes/ClassDialog';
 import { HomeworkView } from './components/homework/HomeworkView';
+import { ReviewView } from './components/review/ReviewView';
 import { NewHomeworkDialog } from './components/homework/NewHomeworkDialog';
 import { LinkNotesDialog } from './components/homework/LinkNotesDialog';
 import { AssistantPanel } from './components/ai/AssistantPanel';
@@ -125,6 +126,7 @@ export function App() {
           {view.kind === 'library' && <LibraryView />}
           {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} />}
           {view.kind === 'homework' && <HomeworkView filter={view.filter} />}
+          {view.kind === 'review' && <ReviewView preset={view.preset} />}
           {(view.kind === 'home' ||
             view.kind === 'tag' ||
             view.kind === 'favorites' ||

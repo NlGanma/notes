@@ -18,13 +18,15 @@ import {
   Pin,
   PinOff,
   SquareArrowOutUpRight,
+  Target,
   Trash2,
 } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useUI } from '../state/ui';
 import { openContextMenu, type MenuItem } from './common/ContextMenu';
 import { confirmDialog, pickFolder } from './common/dialogs';
-import { editClass, newFolder, newHomework, newNote, openClass } from '../lib/commands';
+import { editClass, newFolder, newHomework, newNote, openClass, reviewFolder, reviewNote } from '../lib/commands';
+import { isReviewable } from '../lib/review/tree';
 import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, listClasses } from '../lib/classes';
 import { ClassBadge } from './classes/ClassIcon';
 import { cx } from '../lib/util';
@@ -124,6 +126,7 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
     { label: 'New note', icon: <FilePlus size={15} />, run: () => newNote(path) },
     ...(inClass ? [{ label: 'New homework', icon: <ClipboardList size={15} />, run: () => newHomework(inClass) }] : []),
     { label: 'New folder inside', icon: <FolderPlus size={15} />, run: () => void newFolder(path) },
+    ...(count && !isHomeworkDir ? [{ label: isClass ? 'Review this class' : 'Review this folder', icon: <Target size={15} />, run: () => reviewFolder(path) }] : []),
     { separator: true },
     ...(isClass
       ? [{ label: 'Class details…', icon: <Settings2 size={15} />, run: () => editClass(path) }]
@@ -285,6 +288,7 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
             },
           },
         ]),
+    ...(isReviewable(n) ? [{ label: 'Review this note', icon: <Target size={15} />, run: () => reviewNote(n.meta.id) }] : []),
     ...moveToClassItems(n),
     {
       label: 'Move to…',

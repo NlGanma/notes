@@ -19,7 +19,8 @@ const MODELS = [
 
 // Fault injection for the test harness: POST /__mock {fail, status, truncate, firstTokenMs}
 // makes the next chat requests fail, stop early (done_reason "length") or start slowly.
-const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0 };
+// badQuestions makes the next Review questions carry a false premise (the app must reject them).
+const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0, badQuestions: 0 };
 const stats = { chat: 0, failed: 0, kinds: [], last: [] };
 
 /** Which feature a request came from (for tests: e.g. "no notes prompt was sent"). */
@@ -30,7 +31,7 @@ function kindOf(messages) {
   if (/Check your answer against the excerpts/.test(last)) return 'verify';
   const task = /^Nib task: ([\w-]+)/m.exec(system + '\n' + last)?.[1];
   if (task) return task;
-  if (/Mastery Engine/i.test(system)) return 'mastery';
+  if (/Mastery Engine/i.test(system)) return `mastery-${/^Task: (\w+)/m.exec(last)?.[1] ?? 'other'}`;
   if (/come from the note the student has open|The student has their note/i.test(system)) return 'note';
   if (/homework helper/i.test(system)) return 'homework';
   if (/library assistant/i.test(system)) return 'library';
@@ -138,6 +139,91 @@ function firstFact(e) {
   );
 }
 
+// ------------------------------------------------------------------ the Mastery Engine (Review)
+
+/** Excerpts as the Review tasks give them: [n] (where) then the text between triple quotes. */
+function parseTaskExcerpts(text) {
+  const out = [];
+  const re = /\[(\d+)\] \(([^\n]*)\)\n"""\n([\s\S]*?)\n"""/g;
+  let m;
+  while ((m = re.exec(text))) out.push({ n: Number(m[1]), where: m[2], text: m[3] });
+  return out;
+}
+const statementLines = (text) =>
+  text
+    .split('\n')
+    .map((l) => l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim())
+    .filter((l) => l && !l.startsWith('#') && !/^\[Handwritten/.test(l) && !l.startsWith('$$') && l.split(/\s+/).length >= 5);
+const firstWords = (l, n) => l.split(/\s+/).slice(0, n).join(' ');
+
+function masteryReply(q) {
+  const task = /^Task: (\w+)/m.exec(q)?.[1];
+  if (task === 'concepts') {
+    const concepts = [];
+    for (const e of parseTaskExcerpts(q)) {
+      for (const line of statementLines(e.text).slice(0, 2)) {
+        const name = (line.replace(/\*\*|==|\$[^$]*\$/g, ' ').match(/\p{L}{4,}/gu) ?? []).slice(0, 3).join(' ');
+        if (!name) continue;
+        const bold = /\*\*([^*]+)\*\*/.exec(line)?.[1];
+        concepts.push({ name, source: e.n, proof: firstWords(line, 8), key: bold ?? line.split(/\s+/).pop().replace(/[.,;:!?]+$/, '') });
+      }
+    }
+    // Two slips a small model makes, which the app must reject: a proof that isn't in
+    // the notes, and an invented name on a real line.
+    if (concepts.length) {
+      concepts.push({ name: 'Photosynthesis in plants', source: 1, proof: 'Plants turn sunlight into sugar using chlorophyll', key: 'chlorophyll' });
+      concepts.push({ name: 'Mitochondria powerhouse', source: 1, proof: concepts[0].proof, key: concepts[0].key });
+    }
+    return JSON.stringify({ concepts });
+  }
+  if (task === 'question') {
+    const name = /about "([^"]*)" that the excerpt answers/.exec(q)?.[1] ?? 'this';
+    const level = /^Level: (\w+)/m.exec(q)?.[1] ?? 'explain';
+    const ex = parseTaskExcerpts(q)[0];
+    if (!ex) return '{"skip": true}';
+    const lines = statementLines(ex.text);
+    const nameW = content(name);
+    const line = [...lines].sort((a, b) => [...content(b)].filter((w) => nameW.has(w)).length - [...content(a)].filter((w) => nameW.has(w)).length)[0];
+    if (!line) return '{"skip": true}';
+    const clean = name.replace(/\*\*/g, '');
+    if (faults.badQuestions > 0) {
+      faults.badQuestions--;
+      return JSON.stringify({ question: `What did Napoleon say about ${clean} in 1805?`, proof: firstWords(line, 8), keyPoints: [firstWords(line, 6)] });
+    }
+    const example = /use this example that is written in the excerpt: "([^"]*)"/.exec(q)?.[1];
+    const question =
+      level === 'apply' && example
+        ? `Which idea from your notes does this example show, and why? “${example}”`
+        : level === 'connect'
+          ? `How does ${clean} relate to the other idea in this part of your notes?`
+          : `In your own words, what do your notes say about ${clean}?`;
+    // The key point is the idea (for "apply", the line without the example the student is shown).
+    const idea = example ? line.replace(example, '').replace(/[:\s]+$/, '') : line;
+    const tail = idea.split(/\s+/).slice(-6).join(' ').replace(/[.;:]+$/, '');
+    return JSON.stringify({ question, proof: firstWords(line, 8), keyPoints: [tail] });
+  }
+  if (task === 'grade') {
+    const points = [...(q.split(/Key points[^\n]*\n/)[1] ?? '').split("Student's answer")[0].matchAll(/^(\d+)\. (.*)$/gm)].map((m) => ({ n: Number(m[1]), text: m[2] }));
+    const answer = /Student's answer:\n"""\n([\s\S]*?)\n"""/.exec(q)?.[1] ?? '';
+    const stem = (w) => w.slice(0, 5);
+    const aw = new Set(words(answer).map(stem));
+    return JSON.stringify({
+      points: points.map(({ n, text }) => {
+        const pw = [...new Set(words(text).filter((w) => w.length > 2).map(stem))];
+        const r = pw.length ? pw.filter((w) => aw.has(w)).length / pw.length : 0;
+        return { n, hit: r >= 0.6 ? 'yes' : r >= 0.3 ? 'partly' : 'no', quote: r >= 0.3 ? answer.trim().slice(0, 160) : '' };
+      }),
+      contradicts: '',
+    });
+  }
+  if (task === 'nudge') {
+    const blanked = /From their notes: "([\s\S]*?)"\nStudent's answer/.exec(q)?.[1] ?? '';
+    const start = blanked.replace(/\*\*|==/g, '').split(/\s+/).slice(0, 4).join(' ');
+    return JSON.stringify({ nudge: `What does the line in your notes say about ${start}?` });
+  }
+  return '{"skip": true}';
+}
+
 // ------------------------------------------------------------------ replies
 
 function reply(messages) {
@@ -157,6 +243,8 @@ function reply(messages) {
   }
   const q = last.content;
   const images = last.images ?? [];
+
+  if (/Mastery Engine/.test(system)) return masteryReply(q);
 
   // Double-check: quote the excerpt line behind each statement (the app verifies the quote).
   if (/Check your answer against the excerpts/.test(q)) {

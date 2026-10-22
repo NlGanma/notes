@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { BookMarked, ChevronRight, FolderPlus, Layers, ListChecks, Pencil, Plus, ScanText, ScrollText, Sparkles } from 'lucide-react';
+import { BookMarked, ChevronRight, FolderPlus, Layers, ListChecks, Pencil, Plus, ScanText, ScrollText, Sparkles, Target } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAssistant } from '../../state/assistant';
 import { classHomework, classInfo, classNotes, HOMEWORK_SUBFOLDER } from '../../lib/classes';
-import { editClass, newFolder, newHomework, newNote, openLibrary } from '../../lib/commands';
+import { editClass, newFolder, newHomework, newNote, openLibrary, reviewFolder } from '../../lib/commands';
+import { isReviewable } from '../../lib/review/tree';
 import { SCAN_TYPES } from '../../lib/import';
 import { STUDY_TOOLS, type StudyTool } from '../../lib/ai/prompts';
 import { ClassBadge } from './ClassIcon';
@@ -139,6 +140,16 @@ export function ClassView({ path }: { path: string }) {
               <span className="class-section-sub">made only from your {cls.name} notes</span>
             </div>
             <div className="class-study">
+              {allNotes.some(isReviewable) && (
+                <button className="class-study-tool is-review" onClick={() => reviewFolder(path)}>
+                  <span className="class-study-icon">
+                    <Target size={17} />
+                  </span>
+                  <span className="class-study-name">Review</span>
+                  <span className="class-study-hint">Practise until you know it</span>
+                  <ChevronRight size={14} className="class-study-chev" />
+                </button>
+              )}
               {STUDY.map((s) => (
                 <button key={s.tool} className="class-study-tool" onClick={() => study(s.tool)}>
                   <span className="class-study-icon">{s.icon}</span>

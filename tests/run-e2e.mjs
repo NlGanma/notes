@@ -13,7 +13,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const args = process.argv.slice(2);
 const withElectron = args.includes('--electron');
 const only = args.filter((a) => !a.startsWith('--'));
-const BROWSER_SUITES = ['ink', 'ai', 'grounding', 'homework'];
+const BROWSER_SUITES = ['ink', 'ai', 'grounding', 'homework', 'review'];
 const suites = (only.length ? only : [...BROWSER_SUITES, ...(withElectron ? ['electron'] : [])]).filter((s) =>
   fs.existsSync(path.join(root, 'tests/e2e', `${s}.mjs`)),
 );

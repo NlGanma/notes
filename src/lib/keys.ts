@@ -7,6 +7,7 @@ import {
   newHomework,
   newNote,
   openLibrary,
+  openReview,
   openVaultFolder,
   redo,
   revealCurrent,
@@ -42,6 +43,9 @@ export function runCommand(cmd: string, arg?: string) {
       break;
     case 'library':
       openLibrary();
+      break;
+    case 'review':
+      openReview();
       break;
     case 'import':
       void importFiles();
@@ -111,6 +115,7 @@ export function handleGlobalKey(e: KeyboardEvent) {
     map['0'] = () => runCommand('zoom', 'reset');
     if (e.shiftKey) map['l'] = () => runCommand('library');
     if (e.shiftKey) map['y'] = () => runCommand('new-homework');
+    if (e.shiftKey) map['e'] = () => runCommand('review');
   }
   const fn = map[key];
   if (fn && !(key === 'l' && !e.shiftKey)) {

@@ -19,13 +19,16 @@ import {
   Cpu,
   ClipboardList,
   GraduationCap,
+  Target,
 } from 'lucide-react';
 import { listClasses } from '../lib/classes';
 import { ClassBadge } from './classes/ClassIcon';
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
 import { keywordSearch } from '../state/library';
-import { newClass, newFolder, newHomework, newNote, openClass, openLibrary, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
+import { newClass, newFolder, newHomework, newNote, openClass, openLibrary, openReview, reviewFolder, reviewNote, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
+import { isReviewable } from '../lib/review/tree';
+import { dueNotes } from '../state/review';
 import { importFiles } from '../lib/import';
 import { exportNote } from '../lib/export';
 import { snippet } from '../lib/ai/rag';
@@ -195,7 +198,26 @@ function Palette() {
           icon: <ClassBadge cls={c} size={18} />,
           run: () => openLibrary({ kind: 'folder', path: c.path }),
         },
+        {
+          id: `c:review:${c.path}`,
+          group: 'Commands',
+          label: `Review ${c.name}`,
+          sub: 'Practise until you know it — from this class’s notes',
+          icon: <ClassBadge cls={c} size={18} />,
+          run: () => reviewFolder(c.path),
+        },
       ]),
+      { id: 'c:review', group: 'Commands', label: 'Review…', sub: 'Pick any notes, mix classes', icon: <Target size={15} />, hint: `${SHIFT}${MOD}E`, run: () => openReview() },
+      {
+        id: 'c:review-due',
+        group: 'Commands',
+        label: 'Review what’s due',
+        icon: <Target size={15} />,
+        run: () => openReview(dueNotes().ids),
+      },
+      ...(noteId && notes[noteId] && isReviewable(notes[noteId])
+        ? [{ id: 'c:review-note', group: 'Commands', label: 'Review this note', icon: <Target size={15} />, run: () => reviewNote(noteId) }]
+        : []),
       { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={15} />, run: () => void newFolder() },
       { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
       { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <Sparkles size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },

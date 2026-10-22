@@ -12,7 +12,9 @@ export type View =
   | { kind: 'trash' }
   | { kind: 'library' }
   | { kind: 'class'; path: string }
-  | { kind: 'homework'; filter?: 'todo' | 'done' };
+  | { kind: 'homework'; filter?: 'todo' | 'done' }
+  /** Review: `preset` picks these notes when it opens. */
+  | { kind: 'review'; preset?: string[] };
 
 /** Modal dialogs that several places can open. */
 export type Dialog =
@@ -115,7 +117,7 @@ export const useUI = create<UIState>()(
     {
       name: 'nib.ui',
       partialize: (s) => ({
-        view: s.view.kind === 'library' ? { kind: 'home' } : s.view,
+        view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'home' } : s.view,
         tabs: s.tabs,
         sidebar: s.sidebar,
         assistant: s.assistant,

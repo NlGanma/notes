@@ -22,7 +22,8 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
           .slice(2)
           .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '').replace(/\?v=\w+/, '').replace(/\?t=\d+/, ''));
         const ours = frames.filter((l) => /\bsrc\//.test(l));
-        const stack = [...frames.slice(0, 4), '…', ...ours.slice(0, 12)].join(' | ');
+        // No frames of ours: the loop runs inside a library — show which part of it.
+        const stack = (ours.length ? [...frames.slice(0, 4), '…', ...ours.slice(0, 12)] : frames.slice(3, 40)).join(' | ');
         return orig.call(console, `${args[0]} AT: ${stack}`);
       }
       return orig.apply(console, args);
@@ -46,7 +47,7 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
     }
     errors.push(`console: ${text}`);
     // Print right away too, so the log shows which step caused it.
-    if (/Maximum update depth/.test(text)) console.log(`     [react warning at this point] ${text.slice(0, 1500)}`);
+    if (/Maximum update depth/.test(text)) console.log(`     [react warning at this point] ${text.slice(0, 5000)}`);
   });
   return { browser, context, page, errors };
 }

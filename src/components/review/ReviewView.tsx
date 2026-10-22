@@ -1,0 +1,150 @@
+import { useEffect, useMemo } from 'react';
+import { AlertTriangle, Play, Shuffle, Target } from 'lucide-react';
+import { useVault } from '../../state/vault';
+import { useAI } from '../../state/ai';
+import { conceptsOf, dueNotes, noteMastery, useReview } from '../../state/review';
+import { buildReviewTree, selectionLabel } from '../../lib/review/tree';
+import { notReviewable } from '../../lib/review/concepts';
+import { isDue } from '../../lib/review/mastery';
+import { ReviewPicker } from './ReviewPicker';
+import { ReviewSession } from './ReviewSession';
+import { ReviewSummary } from './ReviewSummary';
+import { cx, plural } from '../../lib/util';
+
+const LENGTHS: { n: number; label: string }[] = [
+  { n: 10, label: 'Quick · 10' },
+  { n: 15, label: '15' },
+  { n: 25, label: 'Long · 25' },
+];
+
+/** Review: pick any notes (mix classes if you like), then practise until you know them. */
+export function ReviewView({ preset }: { preset?: string[] }) {
+  const loaded = useReview((s) => s.loaded);
+  const session = useReview((s) => s.session);
+  const summary = useReview((s) => s.summary);
+
+  useEffect(() => {
+    void useReview.getState().load();
+  }, []);
+  useEffect(() => {
+    if (preset?.length) useReview.getState().setSelection(preset);
+  }, [preset]);
+
+  if (session) return <ReviewSession />;
+  if (summary) return <ReviewSummary />;
+  return <ReviewSetup loaded={loaded} />;
+}
+
+function ReviewSetup({ loaded }: { loaded: boolean }) {
+  const notes = useVault((s) => s.notes);
+  const folders = useVault((s) => s.folders);
+  const folderMeta = useVault((s) => s.folderMeta);
+  const selection = useReview((s) => s.selection);
+  const opts = useReview((s) => s.opts);
+  const reading = useReview((s) => s.reading);
+  const file = useReview((s) => s.file);
+  const online = useAI((s) => s.status === 'online');
+  const tree = useMemo(() => buildReviewTree(notes, folders, folderMeta), [notes, folders, folderMeta]);
+  const selected = useMemo(() => new Set(selection.filter((id) => notes[id])), [selection, notes]);
+
+  // What the selection holds: ideas, how many are due, how many are new.
+  const stats = useMemo(() => {
+    const now = Date.now();
+    let ideas = 0;
+    let due = 0;
+    let fresh = 0;
+    const blocked: string[] = [];
+    const groups = new Set<string>();
+    for (const id of selected) {
+      const n = notes[id];
+      if (!n) continue;
+      const cs = conceptsOf(n, file);
+      ideas += cs.length;
+      for (const c of cs) {
+        const st = file.states[c.id];
+        if (!st?.attempts) fresh++;
+        else if (isDue(st, now)) due++;
+      }
+      for (const s of notReviewable(n)) blocked.push(`${n.meta.title} › ${s}`);
+      groups.add(tree.find((g) => g.chapters.some((ch) => ch.notes.some((x) => x.meta.id === id)))?.key ?? '');
+    }
+    return { ideas, due, fresh, blocked, groups: groups.size };
+  }, [selected, notes, file, tree]);
+
+  // "What's due": every note with an idea due now.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dueIds = useMemo(() => (loaded ? dueNotes().ids : []), [notes, file, loaded]);
+
+  const set = (ids: Set<string>) => useReview.getState().setSelection([...ids]);
+  const mastery = (id: string) => (notes[id] ? noteMastery(notes[id]) : null);
+
+  return (
+    <div className="collection review-view">
+      <div className="collection-head">
+        <div className="collection-title">
+          <span className="collection-icon is-review">
+            <Target size={20} />
+          </span>
+          <div>
+            <h1>Review</h1>
+            <div className="collection-sub">Pick any notes — mix classes if you like. Every question and answer comes only from these notes.</div>
+          </div>
+        </div>
+        {dueIds.length > 0 && (
+          <div className="collection-actions">
+            <button className="btn is-ghost" onClick={() => set(new Set(dueIds))}>
+              What’s due ({dueIds.length === 1 ? '1 note' : `${dueIds.length} notes`})
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="rv-setup">
+        <ReviewPicker selected={selected} onChange={set} mastery={mastery} />
+        <aside className="rv-panel">
+          <div className="rv-panel-label">{selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet'}</div>
+          {selected.size > 0 && (
+            <div className="rv-panel-stats">
+              {plural(stats.ideas, 'idea')} · {stats.due} due · {stats.fresh} new
+              {reading && <span className="rv-reading"> · finding more…</span>}
+            </div>
+          )}
+          <div className="rv-field">
+            <span className="rv-field-label">Length</span>
+            <div className="seg">
+              {LENGTHS.map((l) => (
+                <button key={l.n} className={cx(opts.length === l.n && 'is-active')} onClick={() => useReview.getState().setOpts({ length: l.n })}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className={cx('rv-check', stats.groups < 2 && 'is-off')} title="Mixing topics feels harder but sticks better.">
+            <input type="checkbox" checked={opts.mix} disabled={stats.groups < 2} onChange={(e) => useReview.getState().setOpts({ mix: e.target.checked })} />
+            <Shuffle size={14} /> Mix classes
+          </label>
+          <label className="rv-check" title="Saying how sure you are helps catch the mix-ups you don’t know you have.">
+            <input type="checkbox" checked={opts.askConfidence} onChange={(e) => useReview.getState().setOpts({ askConfidence: e.target.checked })} />
+            Ask how sure I am
+          </label>
+          {stats.blocked.length > 0 && (
+            <div className="rv-warn">
+              <AlertTriangle size={14} />
+              <span>
+                {stats.blocked.length === 1 ? '1 handwritten part isn’t' : `${stats.blocked.length} handwritten parts aren’t`} transcribed yet, so {stats.blocked.length === 1 ? 'it' : 'they'} can’t be
+                reviewed. Open the note and use “Read handwriting”.
+              </span>
+            </div>
+          )}
+          <button className="btn is-primary rv-start" disabled={!selected.size || !stats.ideas || !loaded} onClick={() => useReview.getState().start([...selected])}>
+            <Play size={15} /> Start review
+          </button>
+          <div className="rv-promise">
+            Questions are built from your notes’ own words, and answers are checked against them.
+            {!online && ' Your local model is offline — you’ll get questions built straight from your notes.'}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}

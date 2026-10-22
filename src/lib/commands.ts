@@ -5,6 +5,7 @@ import { editors } from '../editor/registry';
 import { bridge, isElectron } from './platform';
 import { toast } from '../components/common/toast';
 import { classForFolder, homeworkFolderFor } from './classes';
+import { isReviewable } from './review/tree';
 import type { Scope } from './ai/rag';
 import type { JSONContent } from '@tiptap/core';
 
@@ -167,4 +168,22 @@ export async function openVaultFolder() {
   useVault.setState({ notes: {}, folders: [], folderMeta: {}, ready: false });
   await useVault.getState().init(root);
   toast.success('Vault opened', root);
+}
+
+/** Opens Review, optionally with these notes picked. */
+export function openReview(noteIds?: string[]) {
+  useUI.getState().setView({ kind: 'review', preset: noteIds });
+}
+
+/** Review every reviewable note in a folder or class (its chapters included). */
+export function reviewFolder(path: string) {
+  const { notes } = useVault.getState();
+  const ids = Object.values(notes)
+    .filter((n) => isReviewable(n) && (n.meta.folder === path || n.meta.folder.startsWith(`${path}/`)))
+    .map((n) => n.meta.id);
+  openReview(ids);
+}
+
+export function reviewNote(id: string) {
+  openReview([id]);
 }
