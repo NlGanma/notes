@@ -384,7 +384,7 @@ function WritingSection() {
   return (
     <div className="settings-section">
       <h2>Writing & ink</h2>
-      <Field label="Default paper" hint="For new notes. Change any note’s paper from its header.">
+      <Field label="Default paper" hint="For new notes. Change a note’s paper with the Paper button in its toolbar.">
         <div className="paper-picks">
           {PAPERS.map((p) => (
             <button key={p.id} className={cx('paper-pick', s.paper === p.id && 'is-active')} onClick={() => s.set({ paper: p.id })}>

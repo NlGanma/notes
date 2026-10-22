@@ -298,7 +298,9 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
                 <span className={cx('color-tile', !c.value && 'is-default')} style={{ background: c.value || undefined }}>
                   A
                 </span>
-                <span className="menu-label">{c.name === 'Default' ? 'Default background' : c.name === 'Highlight' ? 'Highlighter' : `${c.name} background`}</span>
+                <span className="menu-label">
+                  {c.name === 'Default' ? 'Default background' : c.name === 'Highlight' ? 'Highlighter' : `${c.name} background`}
+                </span>
                 {on && <Check size={18} className="bubble-check" />}
               </button>
             );
@@ -317,7 +319,13 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
             setPanel(null);
           }}
         >
-          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a link…" autoFocus onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()} />
+          <input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Paste a link…"
+            autoFocus
+            onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}
+          />
           <button type="submit" className="btn is-small is-ghost">
             {link.trim() || !st.link ? 'Apply' : 'Remove'}
           </button>

@@ -199,7 +199,7 @@ export function HomeworkView({ filter = 'todo' }: { filter?: Tab }) {
 
   return (
     <div
-      className={cx('page homework-view', dropping && 'is-drop')}
+      className={cx('screen homework-view', dropping && 'is-drop')}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -217,8 +217,8 @@ export function HomeworkView({ filter = 'todo' }: { filter?: Tab }) {
         newHomework(classFilter || null, { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
       }}
     >
-      <div className="page-head">
-        <h1 className="page-title">Homework</h1>
+      <div className="screen-head">
+        <h1 className="screen-title">Homework</h1>
       </div>
       <Tabs
         items={[
@@ -229,8 +229,8 @@ export function HomeworkView({ filter = 'todo' }: { filter?: Tab }) {
         value={filter}
         onChange={(t) => useUI.getState().setView({ kind: 'homework', filter: t })}
       />
-      <div className="page-scroll">
-        <div className="page-column">
+      <div className="screen-scroll">
+        <div className="screen-column">
           <div className="hw-toolbar">
             <button ref={createBtn} className="btn is-primary is-create" onClick={() => setCreateOpen((v) => !v)}>
               <Plus size={22} /> New homework
@@ -286,7 +286,7 @@ export function HomeworkView({ filter = 'todo' }: { filter?: Tab }) {
               })}
             </div>
           ) : (
-            <div className="page-empty">{filterName && all.length ? `Nothing for ${filterName} on this list.` : EMPTY[filter]}</div>
+            <div className="screen-empty">{filterName && all.length ? `Nothing for ${filterName} on this list.` : EMPTY[filter]}</div>
           )}
         </div>
       </div>

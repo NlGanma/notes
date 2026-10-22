@@ -321,8 +321,14 @@ function MathBlockView({ node, updateAttributes, selected, editor, getPos, delet
       )}
       <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
         <div className="menu ink-menu" role="menu">
-          {latex && item(<MessageCircleQuestion size={20} />, 'Ask about this', () => editorBus.emit('math:ask', { editor, latex, mode: 'explain', blockId: node.attrs.id }))}
-          {latex && item(<GraduationCap size={20} />, 'Tutor me through it', () => editorBus.emit('math:ask', { editor, latex, mode: 'tutor', blockId: node.attrs.id }))}
+          {latex &&
+            item(<MessageCircleQuestion size={20} />, 'Ask about this', () =>
+              editorBus.emit('math:ask', { editor, latex, mode: 'explain', blockId: node.attrs.id }),
+            )}
+          {latex &&
+            item(<GraduationCap size={20} />, 'Tutor me through it', () =>
+              editorBus.emit('math:ask', { editor, latex, mode: 'tutor', blockId: node.attrs.id }),
+            )}
           {latex && <div className="menu-sep" />}
           {item(<Pencil size={20} />, 'Edit equation', () => setEditing(true), 'Enter')}
           {latex &&

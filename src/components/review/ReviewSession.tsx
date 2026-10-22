@@ -110,7 +110,7 @@ export function ReviewSession() {
   const tip = pastSessions < 3 && session.index < 3 && (ask || current.phase === 'self');
 
   return (
-    <div className="page review-view rv-session" style={{ ['--rv-sheet' as string]: `${feedback ? sheet : 0}px` }}>
+    <div className="screen review-view rv-session" style={{ ['--rv-sheet' as string]: `${feedback ? sheet : 0}px` }}>
       <StudyBar title={groups.join(' + ')}>
         <button className="btn is-secondary rv-options-btn" onClick={() => setOptions(true)}>
           Options

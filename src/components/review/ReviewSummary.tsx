@@ -132,7 +132,7 @@ export function ReviewSummary() {
   );
 
   return (
-    <div className="page review-view rv-summary">
+    <div className="screen review-view rv-summary">
       <StudyBar title={summary.label}>
         <div className="rv-summary-actions">
           <button className="btn is-primary" onClick={done}>
@@ -141,7 +141,7 @@ export function ReviewSummary() {
         </div>
       </StudyBar>
 
-      <div className="page-scroll">
+      <div className="screen-scroll">
         <div className="rv-summary-column">
           <header className="rv-summary-head">
             <h1>{headline(pct, summary.stopped)}</h1>

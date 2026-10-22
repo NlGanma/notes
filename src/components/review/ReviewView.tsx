@@ -107,9 +107,9 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
         : null;
 
   return (
-    <div className="page review-view rv-setup-page">
-      <div className="page-head">
-        <h1 className="page-title">Review</h1>
+    <div className="screen review-view rv-setup-page">
+      <div className="screen-head">
+        <h1 className="screen-title">Review</h1>
         <span className="grow" />
         {dueIds.length > 0 && (
           <button className="btn is-secondary" onClick={() => set(new Set(dueIds))}>
@@ -117,7 +117,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
           </button>
         )}
       </div>
-      <div className="page-scroll">
+      <div className="screen-scroll">
         <div className="rv-setup-column">
           <div className="rv-intro">Quiz yourself on any notes. Questions and answers come only from them.</div>
           <div className="rv-setup">

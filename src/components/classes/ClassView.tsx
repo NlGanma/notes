@@ -100,7 +100,7 @@ export function ClassView({ path, tab = 'stream' }: { path: string; tab?: ClassT
 
   return (
     <div
-      className={cx('page class-view', dropping && 'is-drop')}
+      className={cx('screen class-view', dropping && 'is-drop')}
       style={themeVars(cls.theme) as React.CSSProperties}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
@@ -119,7 +119,7 @@ export function ClassView({ path, tab = 'stream' }: { path: string; tab?: ClassT
         newHomework(path, { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
       }}
     >
-      <div className="page-head">
+      <div className="screen-head">
         <nav className="crumbs" aria-label="Breadcrumb">
           <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'classes' })}>
             Classes
@@ -148,7 +148,7 @@ export function ClassView({ path, tab = 'stream' }: { path: string; tab?: ClassT
           <Settings size={20} />
         </button>
       </Tabs>
-      <div className="page-scroll">
+      <div className="screen-scroll">
         {tab === 'stream' && <Stream path={path} notes={notes} onTab={setTab} />}
         {tab === 'classwork' && <Classwork path={path} notes={notes} folders={folders} />}
         {tab === 'study' && <Study path={path} />}
@@ -307,7 +307,7 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
   return (
     <div className="classwork">
       <nav className="topic-list" aria-label="Topics">
-        <button className="topic-link is-active" onClick={() => document.querySelector('.page-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}>
+        <button className="topic-link is-active" onClick={() => document.querySelector('.screen-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}>
           All topics
         </button>
         {homework.length > 0 && (
@@ -334,8 +334,8 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
           )}
         </div>
         {empty && (
-          <div className="page-empty is-block">
-            <div className="page-empty-title">This is where your notes and homework live</div>
+          <div className="screen-empty is-block">
+            <div className="screen-empty-title">This is where your notes and homework live</div>
             <div>Add notes and homework for this class, then organise them into topics.</div>
           </div>
         )}

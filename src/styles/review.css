@@ -220,7 +220,7 @@
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.rv-tree.is-empty .page-empty {
+.rv-tree.is-empty .screen-empty {
   display: flex;
   flex-direction: column;
   align-items: center;

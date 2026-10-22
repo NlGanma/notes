@@ -96,12 +96,8 @@
   font: inherit;
   color: inherit;
 }
-.crumb-sep,
-.crumb-dot {
+.page-meta :is(.crumb-sep, .crumb-dot) {
   color: var(--text-3);
-}
-.crumb-date {
-  color: var(--text-2);
 }
 
 .paper-swatch {
@@ -792,9 +788,7 @@
   background: var(--accent-soft);
 }
 .tb-tool.is-active:hover {
-  background:
-    linear-gradient(var(--bg-hover), var(--bg-hover)),
-    var(--accent-soft);
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--accent-soft);
 }
 .tb-tool-ink {
   position: absolute;
@@ -901,7 +895,9 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 .tb-swatch:hover > span:first-child {
-  box-shadow: 0 0 0 2px var(--bg-subtle), 0 0 0 4px rgba(31, 31, 31, 0.08);
+  box-shadow:
+    0 0 0 2px var(--bg-subtle),
+    0 0 0 4px rgba(31, 31, 31, 0.08);
 }
 .tb-swatch.is-active > span:first-child {
   box-shadow:
@@ -1440,9 +1436,7 @@
   --edge: 3px;
 }
 :is(.pp-thumb, .paper-swatch):is(.paper-ruled, .paper-legal) {
-  background-image:
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)),
-    linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
+  background-image: linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
   background-size:
     100% var(--band),
     100% var(--t);
@@ -1451,8 +1445,7 @@
 :is(.pp-thumb, .paper-swatch).paper-legal {
   background-image:
     linear-gradient(to right, transparent var(--edge), var(--rule-margin) var(--edge), var(--rule-margin) calc(var(--edge) + 1px), transparent 0),
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)),
-    linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
+    linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
   background-size:
     100% 100%,
     100% var(--band),
@@ -1461,8 +1454,7 @@
 }
 :is(.pp-thumb, .paper-swatch).paper-grid {
   background-image:
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)),
-    linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--grid-line) 0),
+    linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--grid-line) 0),
     linear-gradient(to right, transparent calc(var(--t) - 1px), var(--grid-line) 0);
   background-size:
     100% var(--band),
@@ -1474,9 +1466,7 @@
   --grid-line: #dde4ec;
 }
 :is(.pp-thumb, .paper-swatch).paper-dots {
-  background-image:
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)),
-    radial-gradient(circle at center, var(--dot) 0.6px, transparent 0.9px);
+  background-image: linear-gradient(var(--paper, #fff), var(--paper, #fff)), radial-gradient(circle at center, var(--dot) 0.6px, transparent 0.9px);
   background-size:
     100% var(--band),
     var(--t) var(--t);

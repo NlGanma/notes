@@ -109,8 +109,8 @@ export function NoteGrid({ view }: { view: View }) {
   const sortLabel = sort === 'updated' ? 'Last edited' : sort === 'title' ? 'Name' : 'Date created';
 
   return (
-    <div className="page notes-view">
-      <div className="page-head">
+    <div className="screen notes-view">
+      <div className="screen-head">
         {view.kind === 'folder' && view.path.includes('/') ? (
           <nav className="crumbs" aria-label="Breadcrumb">
             {view.path
@@ -124,11 +124,11 @@ export function NoteGrid({ view }: { view: View }) {
                   <ChevronRight size={20} className="crumb-sep" />
                 </span>
               ))}
-            <h1 className="page-title">{title}</h1>
+            <h1 className="screen-title">{title}</h1>
           </nav>
         ) : (
-          <h1 className="page-title">
-            {view.kind === 'tag' && <Tag size={20} className="page-title-icon" />}
+          <h1 className="screen-title">
+            {view.kind === 'tag' && <Tag size={20} className="screen-title-icon" />}
             {title}
           </h1>
         )}
@@ -154,7 +154,7 @@ export function NoteGrid({ view }: { view: View }) {
         </div>
       </div>
 
-      <div className="page-scroll">
+      <div className="screen-scroll">
         <div className="notes-body">
           {view.kind === 'trash' && list.length > 0 && (
             <div className="info-bar">
@@ -408,5 +408,5 @@ function EmptyState({ view }: { view: View }) {
           : view.kind === 'recent'
             ? 'No recent notes'
             : 'No notes here yet';
-  return <div className="page-empty">{text}</div>;
+  return <div className="screen-empty">{text}</div>;
 }

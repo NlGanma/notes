@@ -185,7 +185,13 @@ export function SlashMenu() {
 
   return createPortal(
     <>
-      <div ref={ref} className="slash-menu" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight }} data-ui onMouseDown={(e) => e.preventDefault()}>
+      <div
+        ref={ref}
+        className="slash-menu"
+        style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight }}
+        data-ui
+        onMouseDown={(e) => e.preventDefault()}
+      >
         <div className="slash-list" ref={listRef}>
           {!items.length && <div className="slash-empty">No results</div>}
           {grouped.map(({ g, list }) => (

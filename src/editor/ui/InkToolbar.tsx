@@ -322,12 +322,20 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
         <Italic size={20} />
         <Tip label="Italic" kbd={`${MOD}I`} />
       </button>
-      <button className={cx('tb-btn is-mark tb-x2', ed.underline && 'is-active')} onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
+      <button
+        className={cx('tb-btn is-mark tb-x2', ed.underline && 'is-active')}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        aria-label="Underline"
+      >
         <Underline size={20} />
         <Tip label="Underline" kbd={`${MOD}U`} />
       </button>
       <span className="tb-sep is-inner tb-x2" />
-      <button className={cx('tb-btn tb-hl tb-x2', pop === 'textHl' && 'is-open')} onClick={(e) => open('textHl', e.currentTarget)} aria-label="Highlight colour">
+      <button
+        className={cx('tb-btn tb-hl tb-x2', pop === 'textHl' && 'is-open')}
+        onClick={(e) => open('textHl', e.currentTarget)}
+        aria-label="Highlight colour"
+      >
         <span className="tb-hl-glyph">
           <Highlighter size={20} />
           <span style={{ background: ed.hlColor || BG_COLORS[1].value }} />
@@ -335,7 +343,11 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
         <ChevronDown size={14} />
         <Tip label="Highlight" kbd={`⇧${MOD}H`} />
       </button>
-      <button className={cx('tb-btn is-mark tb-x1', ed.task && 'is-active')} onClick={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist">
+      <button
+        className={cx('tb-btn is-mark tb-x1', ed.task && 'is-active')}
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        aria-label="Checklist"
+      >
         <ListChecks size={20} />
         <Tip label="Checklist" kbd="[]" />
       </button>
@@ -398,7 +410,11 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
         <span className="tb-sep" />
         <div className={cx('tb-context', hasSummary && 'has-summary')}>{context}</div>
         {hasSummary && (
-          <button className={cx('tb-btn tb-summary', pop === 'summary' && 'is-open')} onClick={(e) => open('summary', e.currentTarget)} aria-label="Tool options">
+          <button
+            className={cx('tb-btn tb-summary', pop === 'summary' && 'is-open')}
+            onClick={(e) => open('summary', e.currentTarget)}
+            aria-label="Tool options"
+          >
             {t.tool === 'eraser' ? (
               <span className="tb-ring" style={{ width: 4 + t.eraser.size / 3.2, height: 4 + t.eraser.size / 3.2 }} />
             ) : (

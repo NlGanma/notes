@@ -100,8 +100,8 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
   if (!tree.length)
     return (
       <div className="rv-tree is-empty" role="tree">
-        <div className="page-empty is-block">
-          <div className="page-empty-title">Nothing to review yet</div>
+        <div className="screen-empty is-block">
+          <div className="screen-empty-title">Nothing to review yet</div>
           <div>Write or import a note, then come back to quiz yourself on it.</div>
           <button className="btn is-secondary rv-empty-btn" onClick={() => newNote()}>
             New note

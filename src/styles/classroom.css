@@ -6,7 +6,7 @@
 
 /* ------------------------------------------------------------------ page frame */
 
-.page {
+.screen {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -14,7 +14,7 @@
   background: var(--bg);
   position: relative;
 }
-.page-head {
+.screen-head {
   height: 64px;
   flex: none;
   display: flex;
@@ -22,34 +22,34 @@
   gap: 12px;
   padding: 0 16px 0 24px;
 }
-.page-title {
+.screen-title {
   margin: 0;
   font-size: 22px;
   line-height: 28px;
   font-weight: 400;
   color: var(--text);
 }
-.page-scroll {
+.screen-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.page-column {
+.screen-column {
   max-width: 760px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
-.page-empty {
+.screen-empty {
   padding: 64px 0;
   text-align: center;
   font-size: 14px;
   line-height: 20px;
   color: var(--text-2);
 }
-.page-empty.is-block {
+.screen-empty.is-block {
   padding: 48px 24px;
 }
-.page-empty-title {
+.screen-empty-title {
   font-size: 16px;
   line-height: 24px;
   font-weight: 500;
