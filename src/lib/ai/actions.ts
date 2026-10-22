@@ -10,7 +10,7 @@ export { parseJSONLoose } from './json';
 
 export class NoVisionModelError extends Error {
   constructor() {
-    super('No model that can read images is configured. Pull one with “ollama pull qwen2.5vl:7b” (or gemma3, llama3.2-vision) and pick it in Settings → AI.');
+    super('No model that can read images is configured. Pull one with “ollama pull qwen2.5vl:7b” (or gemma3, llama3.2-vision) and pick it in Settings → Local AI.');
   }
 }
 
@@ -19,7 +19,7 @@ export interface CompleteOpts {
   signal?: AbortSignal;
   vision?: boolean;
   temperature?: number;
-  /** Shown in Settings → AI → Activity. */
+  /** Shown in Settings → Local AI → Activity. */
   label?: string;
   /** Background work yields to anything the student is waiting for. */
   priority?: Priority;
@@ -30,7 +30,7 @@ export interface CompleteOpts {
 export async function complete(messages: ChatMessage[], opts: CompleteOpts = {}) {
   const s = useAI.getState();
   const model = opts.vision ? visionModel() : s.chatModel;
-  if (!model) throw opts.vision ? new NoVisionModelError() : new Error('No chat model selected. Open Settings → AI.');
+  if (!model) throw opts.vision ? new NoVisionModelError() : new Error('No chat model selected. Open Settings → Local AI.');
   return chatRobust({
     label: opts.label ?? (opts.vision ? 'Vision' : 'Completion'),
     model,

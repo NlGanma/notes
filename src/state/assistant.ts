@@ -123,7 +123,7 @@ const emptyDraft = (): Draft => ({ attachments: [], text: '', mode: 'chat' });
 
 export const LIBRARY_KEY = 'library';
 
-const OFFLINE = 'Your local model server isn’t reachable. Start Ollama or LM Studio, then press Detect in Settings → AI.';
+const OFFLINE = 'Your local model server isn’t reachable. Start Ollama or LM Studio, then press Detect in Settings → Local AI.';
 
 export const useAssistant = create<AssistantState>()(
   persist(
@@ -300,7 +300,7 @@ export const useAssistant = create<AssistantState>()(
           push(key, userMsg, botMsg);
 
           if (ai.status !== 'online' || !ai.chatModel) {
-            patchMsg(key, botMsg.id, { status: 'error', phase: undefined, error: ai.status === 'offline' ? OFFLINE : 'Choose a model in Settings → AI.' });
+            patchMsg(key, botMsg.id, { status: 'error', phase: undefined, error: ai.status === 'offline' ? OFFLINE : 'Choose a model in Settings → Local AI.' });
             return;
           }
 
@@ -574,12 +574,12 @@ function withAttachmentText(question: string, attachments?: Attachment[]): strin
 
 export function friendlyError(e: unknown): string {
   const msg = String((e as Error)?.message ?? e);
-  if (/model .* not found|not found, try pulling/i.test(msg)) return `${msg}. Pull it with Ollama or pick another model in Settings → AI.`;
+  if (/model .* not found|not found, try pulling/i.test(msg)) return `${msg}. Pull it with Ollama or pick another model in Settings → Local AI.`;
   if (/does not support (images|vision)|image input/i.test(msg))
-    return 'This model can’t read images. Choose a vision model (e.g. qwen2.5vl, gemma3, llama3.2-vision) in Settings → AI.';
+    return 'This model can’t read images. Choose a vision model (e.g. qwen2.5vl, gemma3, llama3.2-vision) in Settings → Local AI.';
   if (/ECONNREFUSED|Failed to fetch|fetch failed|NetworkError|HTTP 0/i.test(msg))
     return 'Couldn’t reach your local model server. Is Ollama / LM Studio running?';
-  if (/context|too long|num_ctx/i.test(msg)) return `${msg} — try a shorter question or raise the context size in Settings → AI.`;
+  if (/context|too long|num_ctx/i.test(msg)) return `${msg} — try a shorter question or raise the context size in Settings → Local AI.`;
   if (/HTTP 5\d\d/.test(msg)) return `The model server had a problem (${msg}). It was retried automatically; try again in a moment.`;
   return msg;
 }

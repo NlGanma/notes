@@ -135,7 +135,7 @@ export function buildSeedNotes(): NoteDoc[] {
         ' or any OpenAI-compatible server. For the best experience, pull a model that can see images so it can read your handwriting:',
       ),
       code('ollama pull qwen2.5vl:7b        # reads handwriting & diagrams\nollama pull nomic-embed-text     # semantic search across your notes'),
-      p('Then open ', b('Settings → AI'), ' (⌘,) and press ', i('Detect'), '.'),
+      p('Then open ', b('Settings → Local AI'), ' (⌘,) and press ', i('Detect'), '.'),
     ),
     0,
     { pinned: true, color: '#2160e8' },

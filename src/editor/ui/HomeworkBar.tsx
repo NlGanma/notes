@@ -50,7 +50,7 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
 
   const readPages = async () => {
     if (!visionModel(useAI.getState())) {
-      toast.error('No vision model', 'Reading scanned pages needs a model that can see images (e.g. qwen2.5vl). Set one in Settings → AI.');
+      toast.error('No vision model', 'Reading scanned pages needs a model that can see images (e.g. qwen2.5vl). Set one in Settings → Local AI.');
       return;
     }
     setReading(true);

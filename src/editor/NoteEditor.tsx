@@ -339,7 +339,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     ) => {
       if (!editor) return;
       if (!visionModel()) {
-        toast.error('No vision model', 'Converting handwriting needs a model that can read images (e.g. qwen2.5vl, gemma3). Set one in Settings → AI.');
+        toast.error('No vision model', 'Converting handwriting needs a model that can read images (e.g. qwen2.5vl, gemma3). Set one in Settings → Local AI.');
         return;
       }
       const id = toast.info(to === 'math' ? 'Reading your math…' : 'Reading your handwriting…', `Using ${visionModel()}`);
@@ -404,7 +404,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       editorBus.on('ink:transcribe', async ({ editor: ed, blockId }) => {
         if (ed !== editor) return;
         if (!visionModel()) {
-          toast.error('No vision model', 'Reading handwriting needs a model that can see images. Set one in Settings → AI.');
+          toast.error('No vision model', 'Reading handwriting needs a model that can see images. Set one in Settings → Local AI.');
           return;
         }
         try {

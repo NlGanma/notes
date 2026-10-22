@@ -268,5 +268,5 @@ export async function chatJSON<T>(
   });
   const v2 = validate(parse(repair.text));
   if (v2 !== null) return { value: v2, result: repair };
-  throw new Error('The model did not return the expected format. Try again, or pick a larger model in Settings → AI.');
+  throw new Error('The model did not return the expected format. Try again, or pick a larger model in Settings → Local AI.');
 }
