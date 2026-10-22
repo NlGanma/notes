@@ -13,6 +13,8 @@
 .note-scroll {
   flex: 1;
   overflow: auto;
+  /* The page is scaled to the width; a scrollbar appearing must not change that width. */
+  scrollbar-gutter: stable;
   container-type: inline-size;
   container-name: notescroll;
   background: var(--bg-canvas);

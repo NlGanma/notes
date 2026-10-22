@@ -1,5 +1,21 @@
 import { useMemo, useState } from 'react';
-import { AlignLeft, CaseSensitive, Check, FoldVertical, Heading, List, Loader2, Palette, Pilcrow, ScanText, Sigma, Sparkles, Tags, Text } from 'lucide-react';
+import {
+  AlignLeft,
+  CaseSensitive,
+  GraduationCap,
+  Check,
+  FoldVertical,
+  Heading,
+  List,
+  Loader2,
+  Palette,
+  Pilcrow,
+  ScanText,
+  Sigma,
+  Sparkles,
+  Tags,
+  Text,
+} from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useAI, visionModel } from '../state/ai';
 import { useSettings, LINE_PX } from '../state/settings';
@@ -20,6 +36,7 @@ const ICONS: Record<Suggestion['icon'], React.ReactNode> = {
   bullets: <Text size={16} />,
   summary: <AlignLeft size={16} />,
   headings: <Heading size={16} />,
+  class: <GraduationCap size={16} />,
 };
 
 function useSuggestions(noteId: string | null) {

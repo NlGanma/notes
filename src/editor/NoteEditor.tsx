@@ -177,7 +177,9 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     const measure = () => {
       if (!el.clientWidth) return;
       const avail = el.clientWidth - 48;
-      setFit(Math.min(1, Math.max(0.45, avail / pageWidth)));
+      const next = Math.min(1, Math.max(0.45, avail / pageWidth));
+      // Ignore sub-pixel jitter so resizing can never ping-pong.
+      setFit((cur) => (Math.abs(cur - next) < 0.004 ? cur : next));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -188,7 +190,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
   useLayoutEffect(() => {
     const el = pageRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setPageHeight(el.offsetHeight));
+    const ro = new ResizeObserver(() => setPageHeight((h) => (Math.abs(h - el.offsetHeight) < 1 ? h : el.offsetHeight)));
     ro.observe(el);
     setPageHeight(el.offsetHeight);
     return () => ro.disconnect();

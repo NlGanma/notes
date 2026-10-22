@@ -11,10 +11,22 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, storageState: storage });
   const page = await context.newPage();
+  // NIB_CPU_THROTTLE=4 slows the page down like a CI runner, to shake out timing bugs.
+  if (process.env.NIB_CPU_THROTTLE) {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.NIB_CPU_THROTTLE) });
+  }
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+  page.on('console', async (m) => {
+    if (m.type() !== 'error') return;
+    let text = m.text();
+    // React warnings carry the component stack as an argument.
+    if (/Maximum update depth|Warning:/.test(text)) {
+      const args = await Promise.all(m.args().map((a) => a.jsonValue().catch(() => '')));
+      text += ` ${args.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 600)}`;
+    }
+    errors.push(`console: ${text}`);
   });
   return { browser, context, page, errors };
 }

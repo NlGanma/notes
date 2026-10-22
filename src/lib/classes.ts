@@ -1,4 +1,6 @@
 import type { FolderMeta, NoteDoc } from './vault/types';
+import { bm25Scores, buildBm25, chunkVault, tokenize } from './ai/rag';
+import { docToText } from './ai/context';
 
 /**
  * Classes are top-level folders flagged in the vault's folder metadata. On
@@ -124,4 +126,47 @@ export function homeworkFolderFor(classPath: string | null): string {
 /** Short label for a class: its code if it has one, else its name. */
 export function classLabel(c: Pick<ClassInfo, 'name' | 'code'>): string {
   return c.code || c.name;
+}
+
+export interface ClassSuggestion {
+  cls: ClassInfo;
+  /** Words the note shares with that class's notes — shown as the reason. */
+  terms: string[];
+}
+
+/**
+ * Which class an unfiled note probably belongs to: the class whose notes
+ * best match it (BM25 over their sections), when it clearly beats the rest.
+ */
+export function suggestClass(note: NoteDoc, notes: Record<string, NoteDoc>, folders: string[], folderMeta: Record<string, FolderMeta>): ClassSuggestion | null {
+  if (classForFolder(note.meta.folder, folderMeta) || note.meta.tags.includes('guide')) return null;
+  const classes = listClasses(folders, folderMeta);
+  if (!classes.length) return null;
+  const text = docToText(note.content);
+  const qTokens = [...new Set(tokenize(`${note.meta.title} ${text}`))].filter((t) => t.length > 2);
+  if (qTokens.length < 4) return null;
+  const query = qTokens.slice(0, 120).join(' ');
+  const chunks = classes.flatMap((c) => chunkVault(classNotes(c.path, notes).filter((n) => n.meta.id !== note.meta.id)));
+  if (!chunks.length) return null;
+  const scores = bm25Scores(buildBm25(chunks), query);
+  const perClass = new Map<string, number[]>();
+  chunks.forEach((ch, i) => {
+    const cls = classForFolder(ch.folder, folderMeta)!;
+    perClass.set(cls, [...(perClass.get(cls) ?? []), scores[i]]);
+  });
+  // A class's score: its three best matching sections.
+  const ranked = [...perClass.entries()]
+    .map(([path, s]) => ({
+      path,
+      score: s
+        .sort((a, b) => b - a)
+        .slice(0, 3)
+        .reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const [best, second] = ranked;
+  if (!best || best.score < 3 || (second && best.score < second.score * 1.6)) return null;
+  const cls = classes.find((c) => c.path === best.path)!;
+  const classTokens = new Set(chunks.filter((c) => classForFolder(c.folder, folderMeta) === best.path).flatMap((c) => tokenize(`${c.section} ${c.text}`)));
+  return { cls, terms: qTokens.filter((t) => classTokens.has(t) && t.length > 3).slice(0, 4) };
 }

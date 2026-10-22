@@ -13,6 +13,7 @@ import { BULLETS_PROMPT, SUMMARY_PROMPT, TAGS_PROMPT, TITLE_PROMPT } from './ai/
 import { fittedHeight, setTranscript } from '../editor/ink/ops';
 import { uid, wordCount } from './util';
 import { useVault } from '../state/vault';
+import { homeworkFolderFor, suggestClass } from './classes';
 
 /**
  * "Polish": suggestions that keep notes tidy and consistent as you go.
@@ -21,7 +22,7 @@ import { useVault } from '../state/vault';
 
 export interface Suggestion {
   id: string;
-  icon: 'title' | 'tags' | 'space' | 'lines' | 'list' | 'colors' | 'read' | 'math' | 'bullets' | 'summary' | 'headings';
+  icon: 'title' | 'tags' | 'space' | 'lines' | 'list' | 'colors' | 'read' | 'math' | 'bullets' | 'summary' | 'headings' | 'class';
   title: string;
   detail: string;
   action: string;
@@ -113,6 +114,23 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
         useVault.getState().updateMeta(n.meta.id, { title });
       },
     });
+  }
+
+  // File unfiled notes in the class they belong to.
+  {
+    const { notes, folders, folderMeta } = useVault.getState();
+    const s = suggestClass(note, notes, folders, folderMeta);
+    if (s)
+      out.push({
+        id: 'class',
+        icon: 'class',
+        title: `Move to ${s.cls.name}`,
+        detail: s.terms.length ? `It matches your ${s.cls.name} notes (${s.terms.join(', ')}).` : `It reads like your ${s.cls.name} notes.`,
+        action: 'Move',
+        apply(_e, n) {
+          useVault.getState().moveNote(n.meta.id, n.meta.homework ? homeworkFolderFor(s.cls.path) : s.cls.path);
+        },
+      });
   }
 
   // Empty space in handwriting areas

@@ -38,6 +38,7 @@ await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
 await mock({ fail: 0, truncate: 0, firstTokenMs: 0 });
 
 // ---------------------------------------------------------------- classes
+await page.waitForSelector('.tree-row.is-class', { timeout: 15000 });
 const classRows = await page.locator('.tree-row.is-class').allTextContents();
 check(classRows.length === 4, `the demo notebooks are classes (${classRows.map((t) => t.replace(/\d+$/, '').trim()).join(', ')})`);
 check((await page.textContent('.nav-item:has-text("Homework") .nav-count')) === '1', 'Homework shows one assignment to do');
@@ -225,6 +226,29 @@ await page.click('.tree-row.is-class:has-text("Calculus I")');
 await page.click('.class-study-tool:has-text("Flashcards")');
 await page.waitForSelector('.flashcard, .flashcards', { timeout: 20000 });
 check(true, 'flashcards are made from the class from its page');
+
+// ---------------------------------------------------------------- Polish files loose notes into classes
+await page.click('.nav-item:has-text("All notes")');
+await page.click('.collection .btn.is-primary');
+await page.locator(`${V} .page-title`).fill('Exam review');
+await page.locator(`${V} .page-title`).press('Enter');
+await page.keyboard.type('Squeeze theorem: if g is below f and h above, and both limits equal L, the limit of f is L. A removable discontinuity is a hole.');
+await page.waitForTimeout(700);
+await page.click('.top-btn:has-text("Polish")');
+const moveRow = page.locator('.polish-row:has-text("Move to Calculus I")');
+check(await moveRow.count(), 'Polish suggests filing an unfiled note in the class it matches');
+await moveRow.locator('button').click();
+await page.waitForTimeout(400);
+check(
+  /Calculus I/.test(
+    (await page
+      .locator(`${V} .crumb.is-class`)
+      .textContent()
+      .catch(() => '')) ?? '',
+  ),
+  '…and moves it there',
+);
+await page.keyboard.press('Escape');
 
 // ---------------------------------------------------------------- renaming a class keeps links
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');

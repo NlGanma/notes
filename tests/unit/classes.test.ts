@@ -51,3 +51,19 @@ test('class notes exclude homework and trash; homework is listed separately', ()
     ['Problem Set 4'],
   );
 });
+
+test('an unfiled note is matched to the class whose notes it resembles', async () => {
+  const { suggestClass } = await import('../../src/lib/classes');
+  const { note, p, h } = await import('./fixtures');
+  const v = vault();
+  const folders = ['Biology', 'Calculus I', 'Calculus I/Homework', 'Calculus I/Unit 2'];
+  const loose = note('Untitled', '', [
+    h('Review'),
+    p('The squeeze theorem: if g ≤ f ≤ h and lim g = lim h = L then lim f = L. Continuity needs the limit to exist.'),
+  ]);
+  const s = suggestClass(loose, { ...v.notes, [loose.meta.id]: loose }, folders, CLASSES);
+  assert.equal(s?.cls.name, 'Calculus I');
+  // Already in a class, or nothing to go on: no suggestion.
+  assert.equal(suggestClass(v.lecture4, v.notes, folders, CLASSES), null);
+  assert.equal(suggestClass(v.loose, v.notes, folders, CLASSES), null);
+});
