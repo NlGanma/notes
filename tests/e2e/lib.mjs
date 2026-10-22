@@ -12,14 +12,17 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, storageState: storage });
   // React can't name the component for "Maximum update depth" warnings; record where the update came from.
   await context.addInitScript(() => {
+    Error.stackTraceLimit = 80;
     const orig = console.error;
     console.error = function (...args) {
       if (/Maximum update depth/.test(String(args[0]))) {
-        const stack = (new Error().stack || '')
+        // The frames from our own code say who dispatched; library frames only say how.
+        const frames = (new Error().stack || '')
           .split('\n')
-          .slice(2, 14)
-          .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '').replace(/\?v=\w+/, ''))
-          .join(' | ');
+          .slice(2)
+          .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '').replace(/\?v=\w+/, '').replace(/\?t=\d+/, ''));
+        const ours = frames.filter((l) => /\bsrc\//.test(l));
+        const stack = [...frames.slice(0, 4), '…', ...ours.slice(0, 12)].join(' | ');
         return orig.call(console, `${args[0]} AT: ${stack}`);
       }
       return orig.apply(console, args);
