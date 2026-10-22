@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import type StateInline from 'markdown-it/lib/rules_inline/state_inline.mjs';
 import type StateBlock from 'markdown-it/lib/rules_block/state_block.mjs';
+import type Token from 'markdown-it/lib/token.mjs';
 import { renderMath } from '../katex';
 
 /**
@@ -161,6 +162,8 @@ export const OWN_OPEN = '\uE000';
 export const OWN_CLOSE = '\uE001';
 export const WEAK_OPEN = '\uE002';
 export const WEAK_CLOSE = '\uE003';
+/** Closes an own-knowledge mark without its "not in your notes" tag: a table row's cells but the last (one tag per row). */
+export const OWN_END = '\uE004';
 const FENCE_CLOSE = /^\s*:{3,}\s*$/;
 
 /**
@@ -328,10 +331,11 @@ export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite
 
 /** Statements the notes-only check marked inside lists, quotes and tables. */
 function inlineMarkers(html: string): string {
-  if (!/[\uE000-\uE003]/.test(html)) return html;
+  if (!/[\uE000-\uE004]/.test(html)) return html;
   return html
     .replace(/\uE000/g, `<span class="own-inline" title="${OWN_HEAD}">`)
     .replace(/\uE001/g, `</span><span class="own-tag" title="${OWN_HEAD}">${OWN_TAG}</span>`)
+    .replace(/\uE004/g, '</span>')
     .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note — check it">')
     .replace(/\uE003/g, '</span>');
 }
@@ -353,11 +357,26 @@ export function markdownToEditorHTML(src: string, opts: { stripCitations?: boole
   md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
   md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
   md.renderer.rules.outside_close = () => '</div></div>\n';
+  // The editor has no tables: each row becomes a bullet, its cells joined by " · " (the header row in bold).
+  const blank = (t: Token[], i: number) => !t[i]?.content.trim();
+  const cell = (t: Token[], i: number) => {
+    if (blank(t, i + 1)) return '';
+    for (let j = i - 1; j >= 0 && t[j].type !== 'tr_open'; j--) if (t[j].type === 'inline' && !blank(t, j)) return ' · ';
+    return '';
+  };
+  md.renderer.rules.table_open = () => '<ul>\n';
+  md.renderer.rules.table_close = () => '</ul>\n';
+  for (const rule of ['thead_open', 'thead_close', 'tbody_open', 'tbody_close', 'td_close']) md.renderer.rules[rule] = () => '';
+  md.renderer.rules.tr_open = () => '<li><p>';
+  md.renderer.rules.tr_close = () => '</p></li>\n';
+  md.renderer.rules.th_open = (t, i) => (blank(t, i + 1) ? '' : `${cell(t, i)}<strong>`);
+  md.renderer.rules.th_close = (t, i) => (blank(t, i - 1) ? '' : '</strong>');
+  md.renderer.rules.td_open = (t, i) => cell(t, i);
   if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
-  // Inline own-knowledge marks stay visible in the note as words.
+  // Inline own-knowledge marks stay visible in the note as words (once per table row).
   return md
     .render(normalizeOutside(src), { maxCite: opts.maxCite })
-    .replace(/\uE000/g, '')
+    .replace(/[\uE000\uE004]/g, '')
     .replace(/\uE001/g, ' <em>(not from your notes — the AI’s own knowledge)</em>')
     .replace(/[\uE002\uE003]/g, '');
 }
