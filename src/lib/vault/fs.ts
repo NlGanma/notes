@@ -105,6 +105,9 @@ export function createFsVault(bridge: NibBridge, root: string): VaultBackend {
     writeKV(key, value) {
       return enqueue(`\u0000kv:${key}`, () => v.writeText(root, `.nib/${key}.json`, value).then(() => undefined));
     },
+    writeKVSync(key, value) {
+      v.writeSync(root, `.nib/${key}.json`, value);
+    },
     reveal(id) {
       const cur = paths.get(id);
       if (cur) v.reveal(root, cur);

@@ -1,6 +1,7 @@
 import { useVault } from '../state/vault';
 import { useUI } from '../state/ui';
 import { useAssistant } from '../state/assistant';
+import { flushReview } from '../state/review';
 import { editors } from '../editor/registry';
 import { bridge, isElectron } from './platform';
 import { toast } from '../components/common/toast';
@@ -163,6 +164,8 @@ export async function openVaultFolder() {
   const root = await bridge.vault.choose();
   if (!root) return;
   useVault.getState().flush(true);
+  // Review's pending save goes to this vault before the other one opens.
+  flushReview();
   localStorage.setItem('nib.vaultRoot', root);
   useUI.getState().set({ tabs: [], view: { kind: 'home' } });
   useVault.setState({ notes: {}, folders: [], folderMeta: {}, ready: false });

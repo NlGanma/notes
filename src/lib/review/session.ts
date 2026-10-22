@@ -1,5 +1,19 @@
 import type { Concept } from './concepts';
-import { isDue, isMastered, percent, recall, statusOf, type Confidence, type ConceptState, type Level, type MasteryNeeds } from './mastery';
+import { DAY, isDue, isMastered, percent, recall, statusOf, type Confidence, type ConceptState, type Level, type MasteryNeeds } from './mastery';
+
+/**
+ * When a review falls, by calendar day — "today", "tomorrow", a weekday this
+ * week, else a date — not in 24-hour steps (which call tonight "tomorrow").
+ */
+export function dayLabel(t: number | null, now = Date.now()): string {
+  if (!t) return '—';
+  const day = (x: number) => new Date(x).setHours(0, 0, 0, 0);
+  const days = Math.round((day(t) - day(now)) / DAY);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 7) return new Date(t).toLocaleDateString(undefined, { weekday: 'long' });
+  return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 /**
  * Choosing the next question. Pure and seeded, so sessions are reproducible.

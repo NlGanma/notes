@@ -20,6 +20,7 @@ import { SlashMenu } from './editor/ui/SlashMenu';
 import { useVault } from './state/vault';
 import { useUI } from './state/ui';
 import { useAI } from './state/ai';
+import { flushReview, useReview } from './state/review';
 import { bridge, isElectron, isMac } from './lib/platform';
 import { runCommand, handleGlobalKey } from './lib/keys';
 import { importDropped } from './lib/import';
@@ -31,6 +32,7 @@ export function App() {
   const notes = useVault((s) => s.notes);
   const folderMeta = useVault((s) => s.folderMeta);
   const folders = useVault((s) => s.folders);
+  const backend = useVault((s) => s.backend);
   const { view, tabs, sidebar, assistant } = useUI();
   const [dropping, setDropping] = useState(false);
 
@@ -48,17 +50,28 @@ export function App() {
       beat = setTimeout(tick, useAI.getState().status === 'online' ? 30_000 : 10_000);
     };
     beat = setTimeout(tick, 10_000);
-    const onUnload = () => useVault.getState().flush(true);
+    const onUnload = () => {
+      useVault.getState().flush(true);
+      flushReview(true);
+    };
     window.addEventListener('beforeunload', onUnload);
+    window.addEventListener('pagehide', onUnload);
     const off = bridge?.onMenu((cmd, arg) => runCommand(cmd, arg));
     window.addEventListener('keydown', handleGlobalKey, true);
     return () => {
       window.removeEventListener('beforeunload', onUnload);
+      window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('keydown', handleGlobalKey, true);
       clearTimeout(beat);
       off?.();
     };
   }, []);
+
+  // The vault's review file is read as soon as the vault is open (what's due shows with the sidebar
+  // hidden too), and read again — nothing of the last vault's kept — when another vault is opened.
+  useEffect(() => {
+    if (backend) void useReview.getState().load();
+  }, [backend]);
 
   // Keep the open note in the tab strip; drop tabs whose note is gone.
   useEffect(() => {

@@ -66,12 +66,19 @@ export function Sidebar() {
   const [tagsOpen, setTagsOpen] = useState(true);
   const [foldersOpen, setFoldersOpen] = useState(true);
   const [classesOpen, setClassesOpen] = useState(true);
-  // Ideas due for review (the learner model is read with the vault).
+  // Ideas due for review: counted again when the review file or the notes change (a moment after typing
+  // stops — it reads every note), and every minute, as reviews fall due.
   const reviewFile = useReview((s) => s.file);
-  const reviewDue = useMemo(() => dueCount(), [reviewFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [reviewDue, setReviewDue] = useState(0);
+  const [minute, setMinute] = useState(0);
   useEffect(() => {
-    if (backend) void useReview.getState().load();
-  }, [backend]);
+    const t = setInterval(() => setMinute((m) => m + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setReviewDue(dueCount()), 300);
+    return () => clearTimeout(t);
+  }, [reviewFile, notes, minute]);
 
   const { live, trashed, pinned, tags, homework, overdue } = useMemo(() => {
     const all = Object.values(notes);

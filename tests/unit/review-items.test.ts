@@ -93,6 +93,17 @@ test('the grounding invariant rejects an item whose answer the notes don’t con
   assert.ok(!assertGroundedItem({ ...item, choices: ['toy', 'Napoleon'] }, text), 'an invented choice');
 });
 
+test('alternatives that share words (“portarse bien / mal”) are read from the key, and the item is still grounded', () => {
+  const c = vocab.find((x) => x.name === 'portarse bien / mal')!;
+  const toSpanish = buildItem(c, 0, ctxFor(c, vocab, { firstExposure: false }));
+  const toEnglish = buildItem(c, 0, ctxFor(c, vocab, { firstExposure: false, avoid: [toSpanish.key] }));
+  assert.deepEqual(toSpanish.accept, ['portarse bien', 'portarse mal']);
+  assert.deepEqual(toEnglish.accept, ['to behave well', 'to behave badly']);
+  const text = chunkOf(c.noteId, c);
+  for (const item of [toSpanish, toEnglish]) assert.ok(assertGroundedItem(item, text), item.expected);
+  assert.ok(!assertGroundedItem({ ...toSpanish, accept: ['portarse fatal'] }, text), 'an alternative the key doesn’t give');
+});
+
 test('a blank never hides most of a line, and leaves enough to know what is asked', () => {
   const f = { id: 'f', text: 'The **imperfect** describes ongoing or repeated past actions.', key: 'imperfect', example: false, fromInk: false, item: false };
   assert.equal(blankOut(f), 'The _____ describes ongoing or repeated past actions.');
@@ -137,6 +148,32 @@ test('a model-phrased question is used only if the passage answers it, it gives 
   assert.ok(ok, 'an apply question that quotes the example is accepted');
   assert.equal(ok!.fact, apply.fact, '…and the answer shown is the idea, not the example');
   assert.notEqual(apply.fact, apply.source.text);
+});
+
+test('two key points the model quotes from the same line of the notes are one point', () => {
+  const text = 'Mitochondria are the powerhouse of the cell and produce ATP through cellular respiration. Ribosomes build proteins from amino acids.';
+  const line = text.split('. ')[0] + '.';
+  const item = {
+    key: 'c_x:f_y:explain',
+    conceptId: 'c_x',
+    factId: 'f_y',
+    format: 'explain' as const,
+    level: 1 as const,
+    graded: 'rubric' as const,
+    prompt: 'Explain **Mitochondria** in your own words.',
+    fact: line,
+    points: [line],
+    source: { noteId: 'n1', title: 'Cells', section: 'Organelles', blockId: null, text },
+    origin: 'template' as const,
+  };
+  const q = validateQuestion(
+    { question: 'What do your notes say mitochondria do for the cell?', proof: 'Mitochondria are the powerhouse of the cell and produce ATP', keyPoints: ['the powerhouse of the cell', 'produce ATP through cellular respiration'] },
+    item,
+    text,
+    'Mitochondria',
+  );
+  assert.ok(q);
+  assert.equal(q!.points!.length, new Set(q!.points).size);
 });
 
 test('a model-phrased question may not name the idea its example shows, nor add a premise in plain words', () => {

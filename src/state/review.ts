@@ -9,12 +9,12 @@ import { classForFolder, classInfo } from '../lib/classes';
 import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
 import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
 import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
-import { gradeShort, isDontKnow, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
-import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type Level } from '../lib/review/mastery';
+import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
+import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
 import { conceptsTask, gradeTask, LEVEL_HINT, MASTERY_ENGINE_PROMPT, nudgeTask, questionTask, SCHEMAS } from '../lib/review/prompts';
 import { debounce, hashString, uid } from '../lib/util';
-import type { NoteDoc } from '../lib/vault/types';
+import type { NoteDoc, VaultBackend } from '../lib/vault/types';
 
 /**
  * Review: retrieval practice on any mix of notes, run by the Mastery Engine.
@@ -77,8 +77,8 @@ export interface Current {
   hint?: string;
   hintUsed: boolean;
   feedback?: Feedback;
-  /** A second try after a miss (not counted). */
-  retry?: { answer: string; s: number };
+  /** A second try after a miss (not counted): its score — none when only the student can tell — or being checked. */
+  retry?: { answer: string; s?: number; checking?: boolean };
   revealed: boolean;
   firstInSession: boolean;
   wasDue: boolean;
@@ -113,12 +113,14 @@ interface ReviewState {
   setSelection(ids: string[]): void;
   setOpts(p: Partial<SessionOpts>): void;
   start(noteIds?: string[]): void;
+  /** How sure the student says they are about the question on screen. */
+  setConf(conf: Confidence | null): void;
   submit(answer: string, conf: Confidence | null): Promise<void>;
   choose(index: number, conf: Confidence | null): void;
   dontKnow(): void;
   selfGrade(s: number): void;
   showHint(): void;
-  retry(answer: string): void;
+  retry(answer: string): Promise<void>;
   reveal(): void;
   next(): void;
   override(): void;
@@ -129,13 +131,97 @@ interface ReviewState {
 
 let rng = mulberry32(1);
 let control: AbortController | null = null;
-let loadedFor: unknown = null;
 
-const persist = debounce(() => {
-  const backend = useVault.getState().backend;
-  if (!backend) return;
-  backend.writeKV('review', JSON.stringify(useReview.getState().file)).catch((e) => console.warn('review not saved', e));
-}, 800);
+/** The vault the review file was read from — and is saved to, whichever vault is open now. */
+let loadedFor: VaultBackend | null = null;
+/** That read, while it's in progress. */
+let pendingRead: Promise<void> | null = null;
+/** Bumped when another vault's file is read: a model job started before keeps nothing it found. */
+let generation = 0;
+/** Changes not written yet. */
+let dirty = false;
+/** The vault's file couldn't be read, nor kept aside: it's left as it is. */
+let readOnly = false;
+
+/** Writes the review file to the vault it was read from — never before it was read, nor over one that couldn't be. */
+function writeFile(sync: boolean) {
+  const backend = loadedFor;
+  if (!dirty || !backend || readOnly || !useReview.getState().loaded) return;
+  dirty = false;
+  const text = JSON.stringify(useReview.getState().file);
+  if (sync && backend.writeKVSync) backend.writeKVSync('review', text);
+  else backend.writeKV('review', text).catch((e) => console.warn('review not saved', e));
+}
+const persist = debounce(() => writeFile(false), 800);
+
+/** Saves what Review changed now, instead of in a moment (while the window closes: synchronously, where the vault can). */
+export function flushReview(sync = false) {
+  persist.cancel();
+  writeFile(sync);
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** A saved review file with anything malformed left out; null when it isn't one this version can read. */
+export function parseReviewFile(raw: string): ReviewFile | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(v) || v.version !== 1) return null;
+  const entries = <T>(x: unknown, ok: (e: Record<string, unknown>) => boolean) =>
+    (isRecord(x) ? Object.fromEntries(Object.entries(x).filter(([, e]) => isRecord(e) && ok(e))) : {}) as Record<string, T>;
+  const list = (x: unknown) => (Array.isArray(x) ? x : []);
+  const states = entries<ConceptState>(v.states, (s) => typeof s.p === 'number' && typeof s.attempts === 'number');
+  for (const [id, s] of Object.entries(states)) states[id] = { ...freshState(0), ...s, recent: list(s.recent), correctKeys: list(s.correctKeys) };
+  return {
+    version: 1,
+    modelConcepts: entries<Concept>(
+      v.modelConcepts,
+      (c) => typeof c.id === 'string' && typeof c.noteId === 'string' && typeof c.chunkHash === 'string' && typeof c.name === 'string' && list(c.facts).length > 0 && list(c.facts).every((f) => isRecord(f) && typeof f.text === 'string'),
+    ),
+    extracted: entries(v.extracted, () => true),
+    states,
+    questions: (isRecord(v.questions)
+      ? Object.fromEntries(Object.entries(v.questions).filter(([, q]) => Array.isArray(q) && q.every((x) => isRecord(x) && typeof x.prompt === 'string' && typeof x.fact === 'string' && Array.isArray(x.points))))
+      : {}) as ReviewFile['questions'],
+    bad: list(v.bad).filter((x): x is string => typeof x === 'string'),
+    sessions: list(v.sessions).filter(isRecord) as unknown as SessionSummary[],
+  };
+}
+
+/**
+ * The file without what can't be used any more: the model's findings and the questions it phrased for
+ * passages no note has now (every edit of a passage leaves its old ones behind). What the student learned
+ * and reported is kept.
+ */
+export function pruneFile(file: ReviewFile, notes: Record<string, NoteDoc>): ReviewFile {
+  const live = new Set(Object.values(notes).flatMap((n) => chunkNote(n).map((c) => c.hash)));
+  const keep = <T>(rec: Record<string, T>, ok: (key: string, v: T) => boolean): Record<string, T> => {
+    const kept = Object.entries(rec).filter(([k, v]) => ok(k, v));
+    return kept.length === Object.keys(rec).length ? rec : Object.fromEntries(kept);
+  };
+  const extracted = keep(file.extracted, (hash) => live.has(hash));
+  const modelConcepts = keep(file.modelConcepts, (_, c) => !!notes[c.noteId] && live.has(c.chunkHash));
+  const questions = keep(file.questions, (key) => live.has(key.slice(key.lastIndexOf('#') + 1)));
+  return extracted === file.extracted && modelConcepts === file.modelConcepts && questions === file.questions ? file : { ...file, extracted, modelConcepts, questions };
+}
+
+/** A vault's review file: fresh when it has none; one this version can't read is kept aside first — or, if it can't be, left alone. */
+async function readFile(backend: VaultBackend | null): Promise<{ file: ReviewFile; writable: boolean }> {
+  const raw = backend ? await backend.readKV('review').catch(() => null) : null;
+  if (raw == null) return { file: EMPTY, writable: true };
+  const file = parseReviewFile(raw);
+  if (file) return { file, writable: true };
+  try {
+    await backend!.writeKV(`review-unreadable-${Date.now()}`, raw);
+    return { file: EMPTY, writable: true };
+  } catch {
+    return { file: EMPTY, writable: false };
+  }
+}
 
 /** The class or folder a note belongs to, with its colour; and whether it's a language class. */
 function groupOf(note: NoteDoc) {
@@ -220,6 +306,7 @@ const where = (c: Concept, title: string) => [title, c.section].filter(Boolean).
 export const useReview = create<ReviewState>((set, get) => {
   const save = (file: ReviewFile) => {
     set({ file });
+    dirty = true;
     persist();
   };
 
@@ -244,6 +331,7 @@ export const useReview = create<ReviewState>((set, get) => {
   const extract = async (noteIds: string[]) => {
     if (!online()) return;
     const ai = useAI.getState();
+    const gen = generation;
     const jobs: { note: NoteDoc; chunks: Chunk[] }[] = [];
     for (const id of noteIds) {
       const note = noteOf(id);
@@ -278,6 +366,8 @@ export const useReview = create<ReviewState>((set, get) => {
           (v) => (Array.isArray((v as { concepts?: unknown })?.concepts) || (v as { skip?: boolean })?.skip ? (v as { concepts?: unknown[] }) : null),
           parseJSONLoose,
         );
+        // Another vault was opened meanwhile: what was found belongs to the one that's gone.
+        if (gen !== generation) return;
         const found: Concept[] = [];
         const known = conceptsOf(note);
         for (const raw of (value.concepts ?? []) as Record<string, unknown>[]) {
@@ -330,6 +420,7 @@ export const useReview = create<ReviewState>((set, get) => {
       } catch (e) {
         if (!(e instanceof PreemptedError)) console.warn('concept reading failed', e);
       }
+      if (gen !== generation) return;
       set({ reading: { done: (get().reading?.done ?? 0) + 1, total: jobs.length } });
     }
     set({ reading: null });
@@ -347,6 +438,7 @@ export const useReview = create<ReviewState>((set, get) => {
     const have = get().file.questions[cacheKey] ?? [];
     if (have.length >= 3 || phrasing.has(cacheKey)) return;
     phrasing.add(cacheKey);
+    const gen = generation;
     const note = noteOf(c.noteId);
     const level = item.format === 'apply' ? 'apply' : item.format === 'connect' ? 'connect' : 'explain';
     const hint =
@@ -382,7 +474,8 @@ export const useReview = create<ReviewState>((set, get) => {
         parseJSONLoose,
       );
       const ok = validateQuestion(value, item, ch.text, c.name);
-      if (!ok) return;
+      // Not kept if another vault was opened meanwhile.
+      if (!ok || gen !== generation) return;
       const file = get().file;
       // Reported while it was being phrased.
       if (file.bad.includes(item.key) || (file.questions[cacheKey] ?? []).some((q) => q.prompt === ok.prompt)) return;
@@ -419,12 +512,42 @@ export const useReview = create<ReviewState>((set, get) => {
         (v) => (Array.isArray((v as GraderReply)?.points) ? (v as GraderReply) : null),
         parseJSONLoose,
       );
-      return scoreRubric(value, item.points ?? [item.fact], answer, item.fact);
+      return scoreRubric(value, item.points ?? [item.fact], answer, item.fact, item.prompt);
     } catch {
       return null;
     } finally {
       if (control === ctrl) control = null;
     }
+  };
+
+  /**
+   * An answer graded the way its item asks: by code first, by the model when
+   * code can't tell — null when neither can (the student compares with the
+   * notes). `waiting` shows that the model is being asked.
+   */
+  const gradeAnswer = async (
+    item: Item,
+    c: Concept,
+    answer: string,
+    waiting: (ask: () => Promise<Grade | null>) => Promise<Grade | null>,
+  ): Promise<{ g: Grade; graded: GradedBy } | null> => {
+    if (item.format === 'cloze' || item.format === 'recall') {
+      const note = noteOf(c.noteId);
+      const g = gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false });
+      // A longer typed answer that isn't the exact words may still say it: check it like a free answer — if the
+      // hidden words are in it (the line it was shown, typed back, says nothing).
+      const keys = [item.expected ?? '', ...(item.accept ?? [])].filter(Boolean);
+      if (g.s < 0.8 && contentWords(answer).length > 3 && keys.some((k) => hasKey(answer, k))) {
+        const free = quickRubric(answer, [item.fact]) ?? (online() ? await waiting(() => gradeWithModel({ ...item, points: [item.fact] }, answer)) : null);
+        if (free && free.s > g.s) return { g: free, graded: 'rubric' };
+      }
+      return { g, graded: 'typed' };
+    }
+    // Free answers: code first, the model only when code can't tell.
+    const quick = quickRubric(answer, item.points ?? [item.fact]);
+    if (quick) return { g: quick, graded: 'rubric' };
+    const g = online() ? await waiting(() => gradeWithModel(item, answer)) : null;
+    return g ? { g, graded: 'rubric' } : null;
   };
 
   /** A guiding question after a miss: code's cue at once, the model's (if it passes the checks) a moment later. */
@@ -436,9 +559,10 @@ export const useReview = create<ReviewState>((set, get) => {
       before && before.split(/\s+/).length >= 2
         ? `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'} — the line that starts “${before}…”. What comes next?`
         : `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}. What do your notes say about ${c.name.replace(/\*\*/g, '')}?`;
+    const gen = generation;
     const setHint = (h: string) => {
       const cur = get().current;
-      if (cur && cur.item.key === item.key) set({ current: { ...cur, hint: h } });
+      if (cur && cur.item.key === item.key && gen === generation) set({ current: { ...cur, hint: h } });
     };
     setHint(cue);
     if (!online() || item.format === 'mcq' || isDontKnow(answer)) return;
@@ -621,14 +745,16 @@ export const useReview = create<ReviewState>((set, get) => {
     const meta = get().pool.find((p) => p.id === c.id);
     if (!meta) return;
     const conf = cur.conf ?? null;
-    const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: cur.answer, firstInSession: cur.firstInSession };
+    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception.
+    const named = !!cur.answer && namesPoint(cur.answer, cur.item.points ?? []);
+    const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: named ? undefined : cur.answer, firstInSession: cur.firstInSession };
     const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
     const mastered = isMastered(after, meta.cap, meta.needs);
     const file = get().file;
     save({ ...file, states: { ...file.states, [c.id]: after } });
     const verdict = verdictOf(g.s);
-    const missed = cur.item.points?.filter((p) => verdict !== 'right' && !(cur.answer && quickRubric(cur.answer, [p])?.s));
-    const hypercorrect = verdict === 'wrong' && conf === 'sure';
+    const missed = cur.item.points?.filter((p) => verdict !== 'right' && !(cur.answer && covers(cur.answer, p)));
+    const hypercorrect = verdict === 'wrong' && conf === 'sure' && !named;
     if (hypercorrect && cur.answer) set({ misconceptions: [...get().misconceptions, { conceptId: c.id, wrote: cur.answer.slice(0, 80), notesSay: cur.item.fact }] });
     // Right after a hint counts as partly known: it comes back later in the session, without one.
     const hinted = cur.hintUsed && verdict === 'right';
@@ -657,6 +783,12 @@ export const useReview = create<ReviewState>((set, get) => {
   const finish = () => {
     const sess = get().session;
     if (!sess) return;
+    // Nothing was asked (nothing due or new): no session to sum up or keep.
+    if (!sess.history.length) {
+      control?.abort();
+      set({ session: null, current: null });
+      return;
+    }
     const now = Date.now();
     const pool = get().pool;
     const startStates = get().startStates;
@@ -679,7 +811,7 @@ export const useReview = create<ReviewState>((set, get) => {
     save({ ...file, sessions: [summary, ...file.sessions].slice(0, 30) });
     control?.abort();
     set({ session: null, current: null, summary });
-    persist.flush();
+    flushReview();
   };
 
   return {
@@ -696,22 +828,33 @@ export const useReview = create<ReviewState>((set, get) => {
     misconceptions: [],
     startStates: {},
 
-    async load() {
+    load() {
       const backend = useVault.getState().backend;
-      // Once per vault (switching vaults reads that vault's review file).
-      if (get().loaded && loadedFor === backend) return;
-      loadedFor = backend;
-      let file = EMPTY;
-      try {
-        const raw = backend ? await backend.readKV('review') : null;
-        if (raw) {
-          const parsed = JSON.parse(raw) as Partial<ReviewFile>;
-          if (parsed && parsed.version === 1) file = { ...EMPTY, ...parsed } as ReviewFile;
-        }
-      } catch {
-        /* start fresh */
+      // Once per vault: a second call while it's read waits for the same read.
+      if (backend === loadedFor && (get().loaded || pendingRead)) return pendingRead ?? Promise.resolve();
+      // Another vault: what's pending is saved to the vault it belongs to, and nothing of it carries over
+      // (its session, its picks, a model job still running).
+      if (loadedFor && loadedFor !== backend) {
+        flushReview();
+        scheduleExtract.cancel();
+        control?.abort();
+        set({ session: null, current: null, pool: [], summary: null, selection: [], reading: null, overrides: 0, misconceptions: [], startStates: {} });
       }
-      set({ file, loaded: true });
+      const gen = ++generation;
+      loadedFor = backend;
+      readOnly = false;
+      dirty = false;
+      set({ loaded: false, file: EMPTY });
+      const read = readFile(backend).then(({ file, writable }) => {
+        if (gen !== generation) return;
+        readOnly = !writable;
+        const vault = useVault.getState();
+        set({ file: vault.ready && vault.backend === backend ? pruneFile(file, vault.notes) : file, loaded: true });
+      });
+      pendingRead = read.finally(() => {
+        if (gen === generation) pendingRead = null;
+      });
+      return pendingRead;
     },
 
     readMore: extract,
@@ -740,44 +883,33 @@ export const useReview = create<ReviewState>((set, get) => {
       advance();
     },
 
+    setConf(conf) {
+      const cur = get().current;
+      if (cur && cur.phase === 'ask') set({ current: { ...cur, conf } });
+    },
+
     async submit(answer, conf) {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      set({ current: { ...cur, answer, conf } });
       const item = cur.item;
+      // A self-check has no written answer: the student compares the one in their head.
+      if (item.format === 'rate') {
+        set({ current: { ...cur, answer: undefined, conf, phase: 'self', revealed: true } });
+        return;
+      }
+      set({ current: { ...cur, answer, conf } });
       if (isDontKnow(answer)) {
         apply({ s: 0 }, item.graded);
         get().reveal();
         return;
       }
-      if (item.format === 'rate') {
-        set({ current: { ...get().current!, phase: 'self', revealed: true } });
-        return;
-      }
-      if (item.format === 'cloze' || item.format === 'recall') {
-        const note = noteOf(cur.concept.noteId);
-        const g = gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false });
-        // A longer typed answer that isn't the exact words may still say it: check it like a free answer.
-        if (g.s < 0.8 && contentWords(answer).length > 3) {
-          const free = quickRubric(answer, [item.fact]) ?? (await withGrading(() => gradeWithModel({ ...item, points: [item.fact] }, answer)));
-          if (free && free.s > g.s) {
-            apply(free, 'rubric');
-            return;
-          }
-        }
-        apply(g, 'typed');
-        return;
-      }
-      // Free answers: code first, the model only when code can't tell.
-      const quick = quickRubric(answer, item.points ?? [item.fact]);
-      if (quick) {
-        apply(quick, 'rubric');
-        return;
-      }
-      const g = await withGrading(() => gradeWithModel(item, answer));
-      if (g) apply(g, 'rubric');
+      const r = await gradeAnswer(item, cur.concept, answer, withGrading);
+      // Moved on (or the session ended) while the model was checking.
+      const now = get().current;
+      if (!now || now.shownAt !== cur.shownAt) return;
+      if (r) apply(r.g, r.graded);
       // No model (or no valid verdict): the student compares with the notes.
-      else set({ current: { ...get().current!, phase: 'self', revealed: true } });
+      else set({ current: { ...now, phase: 'self', revealed: true } });
     },
 
     choose(index, conf) {
@@ -812,20 +944,28 @@ export const useReview = create<ReviewState>((set, get) => {
       set({ current: { ...cur, hintUsed: true, hint: `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}${start ? ` — it starts “${start}…”` : ''}.` } });
     },
 
-    retry(answer) {
+    async retry(answer) {
       const cur = get().current;
-      if (!cur || cur.phase !== 'feedback' || cur.retry) return;
-      const item = cur.item;
-      const note = noteOf(cur.concept.noteId);
-      const g =
-        item.format === 'cloze' || item.format === 'recall'
-          ? gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false })
-          : (quickRubric(answer, item.points ?? [item.fact]) ?? { s: 0 });
-      // Not counted, but the next update learns more for having been re-taught.
+      if (!cur || cur.phase !== 'feedback' || cur.retry || cur.item.format === 'mcq' || cur.item.format === 'rate') return;
+      // Still this question (the student may move on while the model checks).
+      const same = () => {
+        const now = get().current;
+        return now && now.shownAt === cur.shownAt && now.item.key === cur.item.key ? now : null;
+      };
+      // Graded like a first answer, but not counted.
+      const r = await gradeAnswer(cur.item, cur.concept, answer, (ask) => {
+        const now = same();
+        if (now) set({ current: { ...now, retry: { answer, checking: true } } });
+        return ask();
+      });
+      const now = same();
+      if (!now) return;
+      // The next update learns more for having been re-taught.
       const file = get().file;
       const st = file.states[cur.concept.id];
       if (st) save({ ...file, states: { ...file.states, [cur.concept.id]: { ...st, retaught: true } } });
-      set({ current: { ...cur, retry: { answer, s: g.s }, revealed: true } });
+      // Undecided (no model): the notes are shown to compare with.
+      set({ current: { ...now, retry: { answer, s: r?.g.s }, revealed: true } });
     },
 
     reveal() {

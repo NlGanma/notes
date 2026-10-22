@@ -68,11 +68,20 @@ const clean = (s: string) =>
     .trim();
 const BLANK = '_____';
 
-/** Alternatives the note gives in the key itself: "daycare / nursery school", "A or B". */
+/**
+ * Alternatives the note gives in the key itself: "daycare / nursery school",
+ * "A or B". A shorter later part replaces the end of the first:
+ * "portarse bien / mal" is "portarse bien" or "portarse mal" (not "mal").
+ */
 export function alternatives(key: string): string[] {
   const k = clean(key);
   const parts = k.split(/\s+\/\s+|\s+or\s+|\s+o\s+/).map((p) => p.trim());
-  return parts.length > 1 && parts.every((p) => p.length >= 3) ? parts : [];
+  if (parts.length < 2 || !parts.every((p) => p.length >= 3)) return [];
+  const head = parts[0].split(/\s+/);
+  return parts.map((p, i) => {
+    const n = p.split(/\s+/).length;
+    return i > 0 && n < head.length ? [...head.slice(0, head.length - n), p].join(' ') : p;
+  });
 }
 
 /** The fact with its key blanked out (the key's first occurrence). */
@@ -294,7 +303,9 @@ export function assertGroundedItem(item: Item, chunkText: string, siblingTexts: 
   const inNote = (s: string) => isSpanOf(s, chunkText) || siblingTexts.some((t) => isSpanOf(s, t));
   if (!isSpanOf(clean(item.fact), clean(chunkText))) return false;
   if (item.expected && !inNote(item.expected)) return false;
-  if (item.accept?.some((a) => !inNote(a))) return false;
+  // An alternative is the note's text, or read from the note's key by code ("portarse bien / mal" → "portarse mal").
+  const fromKey = item.expected ? alternatives(item.expected) : [];
+  if (item.accept?.some((a) => !inNote(a) && !fromKey.includes(a))) return false;
   if (item.points?.some((p) => !inNote(p) && !isSpanOf(p, chunkText))) return false;
   if (item.choices?.some((ch) => !inNote(ch))) return false;
   return true;
@@ -364,6 +375,8 @@ export function validateQuestion(raw: ModelQuestion, item: Item, chunkText: stri
       .filter((p) => contentWords(p).length >= 3)
       .slice(0, 3);
   if (!points.length) points = [clean(proofSpan)];
+  // Two key points quoted from the same line of the notes are one point (graded once, listed once).
+  points = [...new Set(points.map(clean))];
   // Applying an idea, the student is shown the note's example: its words give nothing away.
   const exampleWords = item.format === 'apply' ? contentWords(item.source.text) : [];
   const example = new Set(exampleWords);

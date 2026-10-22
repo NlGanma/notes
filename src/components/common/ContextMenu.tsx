@@ -49,7 +49,12 @@ export function ContextMenuHost() {
       if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
       hide();
     };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && hide();
+    // Escape closes the menu, and only the menu (not a review session or a panel underneath).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      hide();
+    };
     window.addEventListener('pointerdown', close, true);
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('blur', hide);

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReviewTree, selectionLabel } from '../../src/lib/review/tree';
 import { BKT, bktUpdate, DAY, freshState, isMastered, percent, recall, recordAnswer, retention, slipGuess, type Answer, type Level } from '../../src/lib/review/mastery';
+import { dayLabel } from '../../src/lib/review/session';
 import { byId, CLASSES, note, p, vault } from './fixtures';
 
 const FOLDERS = ['Biology', 'Calculus I', 'Calculus I/Homework', 'Calculus I/Unit 2', 'Old Class', 'Drafts'];
@@ -147,6 +148,16 @@ test('mastery asks only for what an idea’s notes allow: one item if there is o
     f = recordAnswer(f, { s: 1, graded: i ? 'rubric' : 'self', level: Math.min(i, 2) as Level, key, conf: 'unsure' }, 2, now + i * 600_000, { keys: 2, code: false });
   assert.ok(isMastered(f, 2, { keys: 2, code: false }), 'a formula is only ever self-checked or rubric-graded');
   assert.ok(!isMastered(f, 2));
+});
+
+test('“next review” goes by calendar day: tonight is today, after midnight is tomorrow', () => {
+  const at = (s: string) => new Date(s).getTime();
+  assert.equal(dayLabel(at('2026-10-22T22:00'), at('2026-10-22T09:00')), 'today');
+  assert.equal(dayLabel(at('2026-10-23T01:00'), at('2026-10-22T23:00')), 'tomorrow');
+  assert.equal(dayLabel(at('2026-10-23T23:00'), at('2026-10-22T00:30')), 'tomorrow');
+  assert.equal(dayLabel(at('2026-10-22T08:00'), at('2026-10-22T09:00')), 'today', 'already due');
+  assert.equal(dayLabel(at('2026-10-24T07:00'), at('2026-10-22T08:00')), new Date(at('2026-10-24T07:00')).toLocaleDateString(undefined, { weekday: 'long' }));
+  assert.equal(dayLabel(null), '—');
 });
 
 test('reviewing early earns no extra interval; recall is 0.9 on the due date', () => {
