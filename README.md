@@ -30,9 +30,9 @@ How well does that hold? The check is code, so it has blind spots: it reads word
 - **Polish.** One button suggests cleanups: a title and tags, tidier spacing, matching ink colours, typeset handwritten math, and a summary at the top.
 
 ### Classes
-Create a class (name, course code, teacher, term, colour, icon) and everything follows it:
+Create a class (name, course code, teacher, term; its colour and banner icon under *Customize*) and everything follows it:
 - new notes, homework, *Ask your notes* and the study tools all scope to the class you're in;
-- the class page brings together homework due, flashcards and quizzes made from that class's notes, and the notes themselves;
+- each class has a Google Classroom-style page: **Stream** (what's new and what's due), **Classwork** (notes and homework by topic) and **Study** (a study guide, summary, key terms, flashcards, a quiz or a review made from that class's notes);
 - on disk a class is an ordinary folder of `.nib` files, so the vault is still Obsidian-style plain files.
 
 ![A class page](docs/screenshots/class.png)
@@ -42,7 +42,7 @@ Create a class (name, course code, teacher, term, colour, icon) and everything f
 - **Link the notes it covers.** Nib suggests the lectures that match the questions, and you can link whole classes or individual notes.
 - **Answers follow your notes exactly.** The homework helper uses only the linked notes and the same method, steps and notation as your teacher, and it cites every claim. Where the notes don't cover something, it says so and puts any general-knowledge help in a box marked **Not from your notes**.
 - **Grounding check.** Under each answer, Nib counts the statements backed by your notes, flags anything uncited and any citation that doesn't match its excerpt, and shows the cited passage when you click a citation.
-- Due dates, a done checkbox, and a Homework list grouped by what's due.
+- Due dates, *Mark as done*, and a Homework list (Assigned / Missing / Done) grouped by when it's due.
 
 ![The homework helper marking what is not from the notes](docs/screenshots/homework.png)
 
@@ -54,7 +54,7 @@ Create a class (name, course code, teacher, term, colour, icon) and everything f
 ![Tutoring on handwritten work](docs/screenshots/tutor.png)
 
 ### Ask your notes
-Your own NotebookLM, running locally. Answers come only from your notes, with numbered citations that open the exact passage, so you know it's what was taught in class. Search the whole vault, a single class, a folder or a tag. Study tools build a study guide, flashcards, a quiz or a glossary from your notes.
+Your own NotebookLM, running locally. Tick the sources — every note, a class, or any mix — and ask: answers come from those notes, with numbered citations that show the exact passage, so you know it's what was taught in class. The Studio builds a study guide, summary, key terms, flashcards or a quiz from the same notes.
 
 ![Ask your notes with citations](docs/screenshots/ask-your-notes.png)
 
@@ -68,7 +68,23 @@ Pick whole classes, chapters (a class's subfolders) or single notes — Spanish 
 Open it from the sidebar (<kbd>⇧⌘E</kbd>), a class page, a folder's or note's right-click menu, the assistant, or <kbd>⌘K</kbd> → *Review*.
 
 ### Everything else you'd expect
-Obsidian-style folder tree with drag and drop, tabs, favorites, tags and trash. Quick open and commands with <kbd>⌘K</kbd>. Import Markdown, PDF and images. Export to PDF (ruled paper included), Markdown, HTML or `.nib`. Five paper styles, Letter and A4, zoom.
+Google Drive-style notes view (grid or list) with folders, drag and drop, tabs, favorites, labels and trash. Quick open and commands with <kbd>⌘K</kbd>. Import Markdown, PDF and images. Export to PDF (ruled paper included), Markdown, HTML or `.nib`. Five paper styles, Letter and A4, zoom.
+
+### One design, borrowed from apps you already know
+Nib doesn't invent its own interface. Each part copies the app that already does that job well, pieced together in one Google Material 3 look (Google Sans, one blue accent). The AI features use the same buttons and colours as everything else, so nothing looks like a separate add-on.
+
+| In Nib | Modelled on |
+|---|---|
+| Classes home, class pages, Create class | Google Classroom |
+| Homework list, homework page, New homework | Classroom's To-do, assignment page and Create assignment |
+| Linking notes to homework | The Google Drive picker |
+| All notes, folders, Trash, Settings, search | Google Drive |
+| Editor toolbar and pens | GoodNotes 6's tools in a Google Docs toolbar |
+| Page header and text formatting | Apple Notes |
+| `/` menu, selection toolbar, callouts | Notion |
+| Ask your notes | NotebookLM |
+| Assistant panel | Gemini's side panel in Google Docs |
+| Review | Anki's deck list, Quizlet Learn and results, Duolingo's answer feedback |
 
 ## Set up a local model
 
