@@ -1,0 +1,4 @@
+dist
+node_modules
+src/lib/vault/seedInk.json
+tests/e2e/out

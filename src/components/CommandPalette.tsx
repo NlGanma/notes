@@ -1,0 +1,277 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  ArrowRight,
+  CornerDownLeft,
+  FilePlus,
+  FileText,
+  FolderPlus,
+  FileUp,
+  Keyboard,
+  LibraryBig,
+  PanelLeft,
+  Search,
+  Settings,
+  Sparkles,
+  TextSearch,
+  FileDown,
+  Folder,
+  Cpu,
+} from 'lucide-react';
+import { useUI } from '../state/ui';
+import { useVault } from '../state/vault';
+import { keywordSearch } from '../state/library';
+import { newFolder, newNote, openLibrary, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
+import { importFiles } from '../lib/import';
+import { exportNote } from '../lib/export';
+import { snippet } from '../lib/ai/rag';
+import { cx, formatRelativeTime } from '../lib/util';
+import { MOD, SHIFT } from '../lib/platform';
+
+interface Item {
+  id: string;
+  group: string;
+  label: string;
+  sub?: string;
+  icon: React.ReactNode;
+  hint?: string;
+  run(): void;
+}
+
+function fuzzyScore(text: string, q: string): number {
+  const t = text.toLowerCase();
+  const query = q.toLowerCase();
+  if (!query) return 1;
+  const i = t.indexOf(query);
+  if (i >= 0) return 100 - i + (i === 0 ? 50 : 0);
+  let ti = 0;
+  let score = 0;
+  for (const ch of query) {
+    const found = t.indexOf(ch, ti);
+    if (found < 0) return 0;
+    score += found === ti ? 3 : 1;
+    ti = found + 1;
+  }
+  return score;
+}
+
+function highlight(text: string, q: string) {
+  const words = q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+  if (!words.length) return text;
+  const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
+}
+
+export function CommandPalette() {
+  const open = useUI((s) => s.palette);
+  if (!open) return null;
+  return createPortal(<Palette />, document.body);
+}
+
+function Palette() {
+  const notes = useVault((s) => s.notes);
+  const folders = useVault((s) => s.folders);
+  const [q, setQ] = useState('');
+  const [index, setIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const close = () => useUI.getState().setPalette(false);
+
+  useEffect(() => inputRef.current?.focus(), []);
+
+  const items = useMemo<Item[]>(() => {
+    const out: Item[] = [];
+    const live = Object.values(notes).filter((n) => !n.meta.trashed);
+    const query = q.trim();
+    const isCmd = query.startsWith('>');
+    const term = isCmd ? query.slice(1).trim() : query;
+
+    if (!isCmd) {
+      const titled = live
+        .map((n) => ({ n, s: fuzzyScore(`${n.meta.title || 'Untitled'} ${n.meta.folder}`, term) }))
+        .filter((x) => x.s > 0)
+        .sort((a, b) => b.s - a.s || b.n.meta.updated - a.n.meta.updated)
+        .slice(0, term ? 6 : 8);
+      for (const { n } of titled) {
+        out.push({
+          id: `note:${n.meta.id}`,
+          group: term ? 'Notes' : 'Recent notes',
+          label: n.meta.title || 'Untitled',
+          sub: [n.meta.folder, formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
+          icon: <FileText size={15} style={n.meta.color ? { color: n.meta.color } : undefined} />,
+          run: () => useUI.getState().openNote(n.meta.id, { newTab: true }),
+        });
+      }
+      if (term.length > 2) {
+        const seen = new Set(titled.map((x) => x.n.meta.id));
+        for (const h of keywordSearch(term, 8)) {
+          if (seen.has(`${h.chunk.noteId}:${h.chunk.section}`)) continue;
+          seen.add(`${h.chunk.noteId}:${h.chunk.section}`);
+          out.push({
+            id: `hit:${h.chunk.id}`,
+            group: 'In your notes',
+            label: snippet(h.chunk.text, term, 110),
+            sub: [h.chunk.title, h.chunk.section].filter(Boolean).join(' › '),
+            icon: <TextSearch size={15} />,
+            run: () => useUI.getState().openNote(h.chunk.noteId, { newTab: true, blockId: h.chunk.blockIds[0] }),
+          });
+        }
+        for (const f of folders.filter((f) => fuzzyScore(f, term) > 20).slice(0, 3)) {
+          out.push({
+            id: `folder:${f}`,
+            group: 'Folders',
+            label: f.split('/').pop()!,
+            sub: f,
+            icon: <Folder size={15} />,
+            run: () => useUI.getState().setView({ kind: 'folder', path: f }),
+          });
+        }
+        out.push({
+          id: 'ask-library',
+          group: 'Ask',
+          label: `Ask your notes: “${term}”`,
+          icon: <Sparkles size={15} />,
+          run: () => {
+            openLibrary();
+            setTimeout(() => window.dispatchEvent(new CustomEvent('nib:library-ask', { detail: term })), 50);
+          },
+        });
+      }
+    }
+
+    const noteId = currentNoteId();
+    const commands: Item[] = [
+      { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus size={15} />, hint: `${MOD}N`, run: () => newNote() },
+      { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={15} />, run: () => void newFolder() },
+      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: openLibrary },
+      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <Sparkles size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },
+      { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={15} />, run: () => void importFiles() },
+      ...(noteId
+        ? [
+            {
+              id: 'c:pdf',
+              group: 'Commands',
+              label: 'Export note as PDF',
+              icon: <FileDown size={15} />,
+              hint: `${MOD}P`,
+              run: () => void exportNote(noteId, 'pdf'),
+            },
+          ]
+        : []),
+      {
+        id: 'c:sidebar',
+        group: 'Commands',
+        label: 'Toggle sidebar',
+        icon: <PanelLeft size={15} />,
+        hint: `${MOD}\\`,
+        run: () => useUI.getState().toggleSidebar(),
+      },
+      { id: 'c:ai', group: 'Commands', label: 'AI settings — connect a local model', icon: <Cpu size={15} />, run: () => useUI.getState().openSettings('ai') },
+      {
+        id: 'c:settings',
+        group: 'Commands',
+        label: 'Settings',
+        icon: <Settings size={15} />,
+        hint: `${MOD},`,
+        run: () => useUI.getState().openSettings('writing'),
+      },
+      {
+        id: 'c:keys',
+        group: 'Commands',
+        label: 'Keyboard shortcuts',
+        icon: <Keyboard size={15} />,
+        hint: `${MOD}/`,
+        run: () => useUI.getState().openSettings('shortcuts'),
+      },
+      { id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <Folder size={15} />, run: () => void openVaultFolder() },
+    ];
+    const cmdMatches = commands.filter((c) => !term || fuzzyScore(c.label, term) > (isCmd ? 0 : 30));
+    out.push(...(isCmd || !term ? cmdMatches : cmdMatches.slice(0, 3)));
+    return out;
+  }, [q, notes, folders]);
+
+  useEffect(() => setIndex(0), [q]);
+  useEffect(() => {
+    listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [index]);
+
+  const run = (it: Item | undefined) => {
+    if (!it) return;
+    close();
+    it.run();
+  };
+
+  let lastGroup = '';
+  return (
+    <div className="palette-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="palette" role="dialog" aria-label="Quick open">
+        <div className="palette-input">
+          <Search size={17} />
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search notes, or type > for commands"
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setIndex((i) => Math.min(items.length - 1, i + 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setIndex((i) => Math.max(0, i - 1));
+              } else if (e.key === 'Enter') {
+                e.preventDefault();
+                run(items[index]);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                close();
+              }
+            }}
+          />
+          <kbd>esc</kbd>
+        </div>
+        <div className="palette-list" ref={listRef}>
+          {items.length === 0 && <div className="palette-empty">No matches. Press ↵ to create “{q}”.</div>}
+          {items.map((it, i) => {
+            const header = it.group !== lastGroup ? it.group : null;
+            lastGroup = it.group;
+            return (
+              <div key={it.id}>
+                {header && <div className="palette-group">{header}</div>}
+                <button className={cx('palette-item', i === index && 'is-active')} onMouseMove={() => setIndex(i)} onClick={() => run(it)}>
+                  <span className="palette-icon">{it.icon}</span>
+                  <span className="palette-text">
+                    <span className="palette-label">{it.group === 'In your notes' ? highlight(it.label, q) : it.label}</span>
+                    {it.sub && <span className="palette-sub">{it.sub}</span>}
+                  </span>
+                  {it.hint ? (
+                    <kbd>{it.hint}</kbd>
+                  ) : i === index ? (
+                    <CornerDownLeft size={13} className="palette-enter" />
+                  ) : (
+                    <ArrowRight size={13} className="palette-arrow" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="palette-foot">
+          <span>
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> navigate
+          </span>
+          <span>
+            <kbd>↵</kbd> open
+          </span>
+          <span>
+            <kbd>&gt;</kbd> commands
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

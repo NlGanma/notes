@@ -1,0 +1,383 @@
+/*
+ * Document typography — shared by the live editor (.nib-editor), thumbnails
+ * (.thumb-body) and print / HTML export (.doc-body), so a note looks the same
+ * everywhere. Everything sits on a baseline grid of var(--line).
+ */
+
+.nib-editor,
+.doc-body,
+.thumb-body {
+  --line: 32px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: var(--line);
+  color: var(--text);
+  letter-spacing: -0.003em;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  word-wrap: break-word;
+}
+.page .nib-editor,
+.nib-doc .doc-body,
+.nib-doc .thumb-body {
+  --line: inherit;
+}
+.font-serif :is(.nib-editor, .doc-body, .thumb-body) {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  letter-spacing: 0;
+}
+.font-mono :is(.nib-editor, .doc-body, .thumb-body) {
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+}
+
+:is(.nib-editor, .doc-body, .thumb-body) :is(p, h1, h2, h3, ul, ol, blockquote, pre) {
+  margin: 0;
+}
+
+:is(.nib-editor, .doc-body, .thumb-body) h1 {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: var(--line);
+  margin-top: var(--line);
+}
+:is(.nib-editor, .doc-body, .thumb-body) h2 {
+  font-family: var(--font-display);
+  font-size: 20.5px;
+  font-weight: 680;
+  letter-spacing: -0.016em;
+  line-height: var(--line);
+  margin-top: var(--line);
+}
+:is(.nib-editor, .doc-body, .thumb-body) h3 {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.008em;
+  line-height: var(--line);
+  margin-top: calc(var(--line) * 0.5);
+}
+.font-serif :is(.nib-editor, .doc-body, .thumb-body) :is(h1, h2) {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+:is(.nib-editor, .doc-body, .thumb-body) > :first-child :is(h1, h2, h3),
+:is(.nib-editor, .doc-body, .thumb-body) > :is(h1, h2, h3):first-child,
+.doc-body > .blk:first-child > :is(h1, h2, h3),
+.thumb-body > .blk:first-child > :is(h1, h2, h3) {
+  margin-top: 0;
+}
+
+:is(.nib-editor, .doc-body, .thumb-body) :is(strong, b) {
+  font-weight: 650;
+}
+:is(.nib-editor, .doc-body, .thumb-body) a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: rgba(33, 96, 232, 0.35);
+  text-underline-offset: 3px;
+}
+:is(.nib-editor, .doc-body, .thumb-body) mark {
+  color: inherit;
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0 -1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+:is(.nib-editor, .doc-body, .thumb-body) code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: #f2f2ef;
+  color: #b8392a;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+
+/* lists */
+:is(.nib-editor, .doc-body, .thumb-body) :is(ul, ol) {
+  padding-left: 26px;
+}
+:is(.nib-editor, .doc-body, .thumb-body) li > p {
+  margin: 0;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul > li::marker {
+  color: var(--text-3);
+}
+:is(.nib-editor, .doc-body, .thumb-body) ol > li::marker {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul ul > li {
+  list-style-type: circle;
+}
+
+/* checklists */
+:is(.nib-editor, .doc-body, .thumb-body) ul:is([data-type='taskList'], .tasks) {
+  list-style: none;
+  padding-left: 2px;
+}
+:is(.nib-editor, .doc-body, .thumb-body) :is(ul[data-type='taskList'], .tasks) > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] > li > label {
+  flex: none;
+  height: var(--line);
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] > li > div {
+  flex: 1;
+  min-width: 0;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox'],
+.task-box {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border-radius: 5px;
+  border: 1.5px solid #c9cbd0;
+  background: #fff;
+  display: inline-grid;
+  place-items: center;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+  flex: none;
+}
+.task-box {
+  margin-top: calc((var(--line) - 17px) / 2);
+  font-size: 11px;
+  color: #fff;
+  font-weight: 700;
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:hover {
+  border-color: var(--accent);
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:checked,
+.task.is-done .task-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+:is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:checked::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border: 2px solid #fff;
+  border-top: 0;
+  border-right: 0;
+  transform: translateY(-1px) rotate(-45deg);
+}
+:is(.nib-editor, .doc-body, .thumb-body) :is(li[data-checked='true'], .task.is-done) > div {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: rgba(0, 0, 0, 0.25);
+}
+
+/* quotes, code, rules, images */
+:is(.nib-editor, .doc-body, .thumb-body) blockquote {
+  padding-left: 16px;
+  border-left: 3px solid #e3e3df;
+  color: var(--text-2);
+}
+:is(.nib-editor, .doc-body, .thumb-body) pre {
+  background: #f7f7f5;
+  box-shadow: inset 0 0 0 1px var(--border);
+  border-radius: 10px;
+  padding: 4px 16px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: calc(var(--line) * 0.75);
+  white-space: pre-wrap;
+  color: #2b2d33;
+}
+:is(.nib-editor, .doc-body, .thumb-body) pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+:is(.nib-editor, .doc-body, .thumb-body) hr {
+  border: 0;
+  height: 1px;
+  background: var(--border-strong);
+  margin: calc(var(--line) / 2 - 0.5px) 0;
+}
+:is(.nib-editor, .doc-body, .thumb-body) img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+/* callouts */
+:is(.nib-editor, .doc-body, .thumb-body) .callout {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 12px;
+  background: #f5f7fa;
+  box-shadow: inset 0 0 0 1px #e8ecf2;
+  line-height: 1.62;
+}
+:is(.nib-editor, .doc-body, .thumb-body) .callout-body {
+  flex: 1;
+  min-width: 0;
+}
+:is(.nib-editor, .doc-body, .thumb-body) .callout-body :is(p, li) {
+  line-height: 1.62;
+}
+:is(.nib-editor, .doc-body, .thumb-body) .callout-body > * + * {
+  margin-top: 6px;
+}
+.doc-body .callout::before,
+.thumb-body .callout::before {
+  content: '';
+  width: 4px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.35;
+  flex: none;
+}
+.callout-icon {
+  width: 24px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  flex: none;
+  color: #66748a;
+  cursor: pointer;
+}
+.callout-icon:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.callout[data-variant='tip'] {
+  background: #f0faf3 !important;
+  box-shadow: inset 0 0 0 1px #dbf0e2 !important;
+  color: #155d33;
+}
+.callout[data-variant='tip'] .callout-icon {
+  color: #1f9d4c;
+}
+.callout[data-variant='important'] {
+  background: #fff8e8 !important;
+  box-shadow: inset 0 0 0 1px #f6e6c0 !important;
+}
+.callout[data-variant='important'] .callout-icon {
+  color: #c98a04;
+}
+.callout[data-variant='question'] {
+  background: #f5f2ff !important;
+  box-shadow: inset 0 0 0 1px #e6dfff !important;
+}
+.callout[data-variant='question'] .callout-icon {
+  color: #7346e6;
+}
+.callout[data-variant='ai'] {
+  background: linear-gradient(135deg, #f7f4ff, #f1f6ff) !important;
+  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.16) !important;
+}
+.callout[data-variant='ai'] .callout-icon {
+  color: var(--ai);
+  cursor: default;
+}
+.callout-body,
+.callout {
+  color: var(--text);
+}
+
+/* math */
+:is(.nib-editor, .doc-body, .thumb-body) .math-display {
+  text-align: center;
+  padding: 6px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+:is(.doc-body, .thumb-body) .math-display .katex-display {
+  margin: 0;
+}
+.katex {
+  font-size: 1.06em;
+}
+.math-error {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* static documents: ink travels with its block */
+.nib-doc .blk {
+  position: relative;
+}
+.nib-doc .blk-ink {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.nib-doc .ink-area {
+  width: 100%;
+}
+.ink-inline {
+  overflow: visible;
+  display: inline-block;
+}
+
+/* paper */
+.paper-ruled :is(.surface, .doc-body, .thumb-body),
+.paper-legal :is(.surface, .doc-body, .thumb-body) {
+  background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--rule) calc(100% - 1px));
+  background-size: 100% var(--line);
+  background-position: 0 calc(var(--line) * -0.25);
+}
+.paper-legal :is(.surface, .doc-body, .thumb-body) {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent calc(var(--page-pad-x) - 16px),
+      var(--rule-margin) calc(var(--page-pad-x) - 16px),
+      var(--rule-margin) calc(var(--page-pad-x) - 15px),
+      transparent calc(var(--page-pad-x) - 15px)
+    ),
+    linear-gradient(to bottom, transparent calc(100% - 1px), var(--rule) calc(100% - 1px));
+  background-size:
+    100% 100%,
+    100% var(--line);
+  background-position:
+    0 0,
+    0 calc(var(--line) * -0.25);
+}
+.paper-grid :is(.surface, .doc-body, .thumb-body) {
+  background-image:
+    linear-gradient(to bottom, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px)),
+    linear-gradient(to right, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px));
+  background-size: calc(var(--line) / 2) calc(var(--line) / 2);
+  background-position: calc(var(--page-pad-x) - 1px) calc(var(--line) * -0.25);
+}
+.paper-dots :is(.surface, .doc-body, .thumb-body) {
+  background-image: radial-gradient(circle at center, var(--dot) 1.15px, transparent 1.5px);
+  background-size: var(--line) var(--line);
+  background-position: calc(var(--page-pad-x) - var(--line) / 2) calc(var(--line) * 0.25);
+}
+/* static docs have no side padding on the body */
+:is(.doc-body, .thumb-body) {
+  --page-pad-x: 0px;
+}
+.thumb-page.paper-legal .thumb-body,
+.nib-print.paper-legal .doc-body {
+  background-position:
+    -60px 0,
+    0 calc(var(--line) * -0.25);
+}

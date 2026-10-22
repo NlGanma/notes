@@ -1,0 +1,476 @@
+import { useEffect, useState } from 'react';
+import { Check, Copy, Cpu, Eye, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, ShieldCheck, Type, HardDrive } from 'lucide-react';
+import { Modal } from './common/Modal';
+import { useUI, type SettingsSection } from '../state/ui';
+import { useAI } from '../state/ai';
+import { useSettings, type FontChoice, type LineSpacing, type PageSize } from '../state/settings';
+import { useTools } from '../state/tools';
+import { useVault } from '../state/vault';
+import { DEFAULT_URLS, type ModelInfo } from '../lib/ai/providers';
+import { PAPERS, PaperSwatch } from '../editor/ui/PageHeader';
+import { Toggle } from '../editor/ui/InkToolbar';
+import { bridge, isElectron, MOD, SHIFT, ALT } from '../lib/platform';
+import { openVaultFolder } from '../lib/commands';
+import { cx } from '../lib/util';
+
+const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
+  { id: 'ai', label: 'Local AI', icon: <Cpu size={16} /> },
+  { id: 'writing', label: 'Writing & ink', icon: <PenLine size={16} /> },
+  { id: 'vault', label: 'Vault', icon: <HardDrive size={16} /> },
+  { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={16} /> },
+  { id: 'about', label: 'About', icon: <Info size={16} /> },
+];
+
+export function SettingsModal() {
+  const section = useUI((s) => s.settings);
+  return (
+    <Modal open={!!section} onClose={() => useUI.getState().openSettings(null)} width={820} bare className="settings">
+      <div className="settings-layout">
+        <nav className="settings-nav">
+          <div className="settings-nav-title">Settings</div>
+          {SECTIONS.map((s) => (
+            <button key={s.id} className={cx('settings-nav-item', section === s.id && 'is-active')} onClick={() => useUI.getState().openSettings(s.id)}>
+              {s.icon}
+              {s.label}
+            </button>
+          ))}
+        </nav>
+        <div className="settings-body">
+          {section === 'ai' && <AISection />}
+          {section === 'writing' && <WritingSection />}
+          {section === 'vault' && <VaultSection />}
+          {section === 'shortcuts' && <ShortcutsSection />}
+          {section === 'about' && <AboutSection />}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="field">
+      <div className="field-text">
+        <div className="field-label">{label}</div>
+        {hint && <div className="field-hint">{hint}</div>}
+      </div>
+      <div className="field-control">{children}</div>
+    </div>
+  );
+}
+
+function modelLabel(m: ModelInfo) {
+  const parts = [m.name];
+  if (m.params) parts.push(m.params);
+  return parts.join(' · ');
+}
+
+function ModelSelect({
+  value,
+  onChange,
+  models,
+  filter,
+  none,
+}: {
+  value: string;
+  onChange(v: string): void;
+  models: ModelInfo[];
+  filter(m: ModelInfo): boolean;
+  none?: string;
+}) {
+  const list = models.filter(filter);
+  const known = list.some((m) => m.name === value);
+  return (
+    <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {none !== undefined && <option value="">{none}</option>}
+      {!known && value && <option value={value}>{value} (not found)</option>}
+      {list.map((m) => (
+        <option key={m.name} value={m.name}>
+          {modelLabel(m)}
+          {m.vision ? '  — sees images' : ''}
+          {m.thinking ? '  — reasoning' : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function CopyCmd({ cmd, note }: { cmd: string; note: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <div className="cmd">
+      <code>{cmd}</code>
+      <span className="cmd-note">{note}</span>
+      <button
+        className="icon-btn is-tiny"
+        onClick={() => {
+          navigator.clipboard?.writeText(cmd).catch(() => undefined);
+          setOk(true);
+          setTimeout(() => setOk(false), 1200);
+        }}
+        aria-label="Copy"
+      >
+        {ok ? <Check size={13} /> : <Copy size={13} />}
+      </button>
+    </div>
+  );
+}
+
+function AISection() {
+  const ai = useAI();
+  const [url, setUrl] = useState(ai.baseUrl);
+  const [detecting, setDetecting] = useState(false);
+  useEffect(() => setUrl(ai.baseUrl), [ai.baseUrl]);
+  useEffect(() => {
+    if (ai.status === 'unknown') void ai.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const chatModels = ai.models.filter((m) => !m.embedding);
+  const statusText =
+    ai.status === 'online'
+      ? `Connected${ai.serverLabel ? ` to ${ai.serverLabel}` : ''} · ${ai.models.length} model${ai.models.length === 1 ? '' : 's'} available`
+      : ai.status === 'checking'
+        ? 'Connecting…'
+        : ai.status === 'offline'
+          ? 'Can’t reach a model server at this address'
+          : 'Not connected yet';
+
+  return (
+    <div className="settings-section">
+      <h2>Local AI</h2>
+      <p className="settings-lead">
+        Nib talks only to a model running on your own machine. Your notes never leave it.
+        <span className="privacy">
+          <ShieldCheck size={13} /> Private by design
+        </span>
+      </p>
+
+      <div className={cx('status-card', `is-${ai.status}`)}>
+        <span className="ai-dot" />
+        <div className="status-text">
+          <div className="status-title">{statusText}</div>
+          <div className="status-sub">
+            {ai.status === 'offline' ? ai.lastError : `${ai.provider === 'ollama' ? 'Ollama' : 'OpenAI-compatible'} · ${ai.baseUrl}`}
+          </div>
+        </div>
+        <button
+          className="btn is-secondary"
+          disabled={detecting}
+          onClick={async () => {
+            setDetecting(true);
+            await ai.autodetect();
+            setDetecting(false);
+          }}
+        >
+          {detecting ? <Loader2 size={14} className="spin" /> : <Radar size={14} />} Detect
+        </button>
+        <button className="icon-btn" onClick={() => void ai.refresh()} aria-label="Refresh" title="Refresh model list">
+          <RefreshCw size={15} />
+        </button>
+      </div>
+
+      <Field label="Server" hint="Ollama, or anything that speaks the OpenAI API — LM Studio, llama.cpp, Jan, vLLM.">
+        <div className="seg is-wide">
+          <button className={cx(ai.provider === 'ollama' && 'is-active')} onClick={() => ai.set({ provider: 'ollama', baseUrl: DEFAULT_URLS.ollama })}>
+            Ollama
+          </button>
+          <button className={cx(ai.provider === 'openai' && 'is-active')} onClick={() => ai.set({ provider: 'openai', baseUrl: DEFAULT_URLS.openai })}>
+            OpenAI-compatible
+          </button>
+        </div>
+      </Field>
+      <Field label="Address">
+        <input
+          className="input"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onBlur={() => url !== ai.baseUrl && ai.set({ baseUrl: url })}
+          onKeyDown={(e) => e.key === 'Enter' && ai.set({ baseUrl: url })}
+          spellCheck={false}
+        />
+      </Field>
+      {ai.provider === 'openai' && (
+        <Field label="API key" hint="Usually not needed for local servers.">
+          <input className="input" type="password" value={ai.apiKey} onChange={(e) => ai.set({ apiKey: e.target.value })} placeholder="optional" />
+        </Field>
+      )}
+
+      <div className="settings-divider" />
+
+      <Field label="Chat model" hint="Answers questions, tutors, summarises.">
+        <ModelSelect value={ai.chatModel} onChange={(v) => ai.set({ chatModel: v })} models={ai.models} filter={(m) => !m.embedding} />
+      </Field>
+      <Field
+        label="Vision model"
+        hint={
+          <>
+            <Eye size={12} /> Reads your handwriting and what’s on screen.
+          </>
+        }
+      >
+        <ModelSelect
+          value={ai.visionModel}
+          onChange={(v) => ai.set({ visionModel: v })}
+          models={ai.models}
+          filter={(m) => !m.embedding && (m.vision || ai.forceVision)}
+          none={chatModels.find((m) => m.name === ai.chatModel)?.vision ? 'Same as chat model' : 'None'}
+        />
+      </Field>
+      <Field label="Embedding model" hint="Optional. Makes “Ask your notes” understand meaning, not just keywords.">
+        <ModelSelect
+          value={ai.embedModel}
+          onChange={(v) => ai.set({ embedModel: v })}
+          models={ai.models}
+          filter={(m) => m.embedding}
+          none="None — keyword search"
+        />
+      </Field>
+      <Field label="Context size" hint="How much of a long note the model can read at once. Larger uses more memory.">
+        <select className="select" value={ai.numCtx} onChange={(e) => ai.set({ numCtx: Number(e.target.value) })}>
+          {[4096, 8192, 16384, 32768, 65536].map((n) => (
+            <option key={n} value={n}>
+              {n / 1024}K tokens
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Creativity" hint={`${ai.temperature.toFixed(1)} — lower is more precise.`}>
+        <input
+          className="slider"
+          type="range"
+          min={0}
+          max={1.2}
+          step={0.1}
+          value={ai.temperature}
+          onChange={(e) => ai.set({ temperature: Number(e.target.value) })}
+        />
+      </Field>
+      <div className="toggles">
+        <Toggle
+          checked={ai.autoTranscribe}
+          onChange={(v) => ai.set({ autoTranscribe: v })}
+          label="Read handwriting in the background"
+          hint="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
+        />
+        <Toggle
+          checked={ai.strictLibrary}
+          onChange={(v) => ai.set({ strictLibrary: v })}
+          label="Ask your notes: only use my notes"
+          hint="Never mix in the model’s general knowledge."
+        />
+        <Toggle
+          checked={ai.forceVision}
+          onChange={(v) => ai.set({ forceVision: v })}
+          label="My chat model can see images"
+          hint="Turn on if detection missed it."
+        />
+      </div>
+
+      <div className="recommend">
+        <div className="recommend-title">Recommended models</div>
+        <div className="recommend-sub">Install Ollama from ollama.com, then run:</div>
+        <CopyCmd cmd="ollama pull qwen2.5vl:7b" note="Reads handwriting & math · 6 GB" />
+        <CopyCmd cmd="ollama pull gemma3:4b" note="Fast, sees images · 3 GB" />
+        <CopyCmd cmd="ollama pull nomic-embed-text" note="Semantic search · 0.3 GB" />
+        <CopyCmd cmd="ollama pull llama3.2-vision" note="Alternative vision model · 8 GB" />
+      </div>
+    </div>
+  );
+}
+
+function WritingSection() {
+  const s = useSettings();
+  const t = useTools();
+  return (
+    <div className="settings-section">
+      <h2>Writing & ink</h2>
+      <Field label="Default paper" hint="For new notes. Change any note’s paper from its header.">
+        <div className="paper-picks">
+          {PAPERS.map((p) => (
+            <button key={p.id} className={cx('paper-pick', s.paper === p.id && 'is-active')} onClick={() => s.set({ paper: p.id })}>
+              <PaperSwatch paper={p.id} />
+              <span>{p.label}</span>
+            </button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Line spacing" hint="Typed text and handwriting share these lines.">
+        <div className="seg">
+          {(['compact', 'comfortable', 'roomy'] as LineSpacing[]).map((v) => (
+            <button key={v} className={cx(s.lineSpacing === v && 'is-active')} onClick={() => s.set({ lineSpacing: v })}>
+              {v[0].toUpperCase() + v.slice(1)}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Typeface">
+        <div className="seg">
+          {(
+            [
+              ['sans', 'Sans'],
+              ['serif', 'Serif'],
+              ['mono', 'Mono'],
+            ] as [FontChoice, string][]
+          ).map(([v, l]) => (
+            <button key={v} className={cx(`font-${v}`, s.font === v && 'is-active')} onClick={() => s.set({ font: v })}>
+              <Type size={13} /> {l}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Page size" hint="Matches the exported PDF.">
+        <div className="seg">
+          {(['letter', 'a4'] as PageSize[]).map((v) => (
+            <button key={v} className={cx(s.pageSize === v && 'is-active')} onClick={() => s.set({ pageSize: v })}>
+              {v === 'letter' ? 'US Letter' : 'A4'}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <div className="toggles">
+        <Toggle checked={s.fitWidth} onChange={(v) => s.set({ fitWidth: v })} label="Fit the page to the window" />
+        <Toggle checked={s.spellcheck} onChange={(v) => s.set({ spellcheck: v })} label="Check spelling" />
+        <Toggle
+          checked={t.stylusDraws}
+          onChange={(v) => t.set({ stylusDraws: v })}
+          label="Stylus always draws"
+          hint="With a drawing tablet or Sidecar Apple Pencil, the pen writes and the mouse types — no switching."
+        />
+        <Toggle
+          checked={t.holdToSnap}
+          onChange={(v) => t.set({ holdToSnap: v })}
+          label="Hold to snap shapes"
+          hint="Pause at the end of a stroke to turn it into a clean line, circle or box."
+        />
+        <Toggle checked={t.highlighter.straighten} onChange={(v) => t.setHighlighter({ straighten: v })} label="Straighten highlighter strokes" />
+      </div>
+    </div>
+  );
+}
+
+function VaultSection() {
+  const backend = useVault((s) => s.backend);
+  const notes = useVault((s) => s.notes);
+  const folders = useVault((s) => s.folders);
+  const live = Object.values(notes).filter((n) => !n.meta.trashed).length;
+  return (
+    <div className="settings-section">
+      <h2>Vault</h2>
+      <p className="settings-lead">
+        {isElectron
+          ? 'Your notes are ordinary files in a folder on your Mac — put it in iCloud Drive or Dropbox to sync, and back it up like any other folder.'
+          : 'In the browser, notes are stored in this browser’s local storage.'}
+      </p>
+      <div className="vault-card">
+        <FolderOpen size={20} />
+        <div className="vault-card-text">
+          <div className="vault-path">{backend?.label}</div>
+          <div className="vault-stats">
+            {live} notes · {folders.length} folders
+          </div>
+        </div>
+        {bridge && (
+          <button className="btn is-secondary" onClick={() => void openVaultFolder()}>
+            Open another folder…
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SHORTCUTS: [string, [string, string][]][] = [
+  [
+    'General',
+    [
+      [`${MOD}N`, 'New note'],
+      [`${MOD}K`, 'Quick open & commands'],
+      [`${MOD}J`, 'Assistant'],
+      [`${SHIFT}${MOD}L`, 'Ask your notes'],
+      [`${MOD}\\`, 'Toggle sidebar'],
+      [`${MOD}P`, 'Export as PDF'],
+      [`${MOD}=  /  ${MOD}-`, 'Zoom page'],
+    ],
+  ],
+  [
+    'Writing by hand',
+    [
+      [`${ALT}P`, 'Pen'],
+      [`${ALT}H`, 'Highlighter'],
+      [`${ALT}E`, 'Eraser'],
+      [`${ALT}L`, 'Lasso'],
+      [`${ALT}S`, 'Shapes'],
+      [`${ALT}A`, 'Ask AI about an area'],
+      ['Just type', 'Switch to typing below your handwriting'],
+      ['Esc', 'Back to the pen'],
+      ['Hold', 'Snap a stroke into a shape'],
+      [`${MOD}D`, 'Sketch inline (while typing)'],
+    ],
+  ],
+  [
+    'Formatting',
+    [
+      ['/', 'Insert any block'],
+      ['# ## ###', 'Headings'],
+      ['- or 1.', 'Lists'],
+      ['[]', 'Checklist'],
+      ['$x^2$', 'Inline math'],
+      ['$$ + space', 'Equation'],
+      [`${MOD}B / ${MOD}I / ${MOD}U`, 'Bold / italic / underline'],
+      [`${SHIFT}${MOD}H`, 'Highlight'],
+      [`${ALT}${SHIFT}↑ ↓`, 'Move block'],
+    ],
+  ],
+];
+
+function ShortcutsSection() {
+  return (
+    <div className="settings-section">
+      <h2>Keyboard shortcuts</h2>
+      <div className="shortcut-groups">
+        {SHORTCUTS.map(([g, list]) => (
+          <div key={g} className="shortcut-group">
+            <div className="shortcut-group-title">{g}</div>
+            {list.map(([k, d]) => (
+              <div key={d} className="shortcut-row">
+                <span>{d}</span>
+                <kbd>{k}</kbd>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AboutSection() {
+  const [info, setInfo] = useState<{ version: string; electron: string } | null>(null);
+  useEffect(() => {
+    bridge
+      ?.appInfo()
+      .then(setInfo)
+      .catch(() => undefined);
+  }, []);
+  return (
+    <div className="settings-section about">
+      <div className="about-mark">
+        <svg viewBox="0 0 32 32" width="56" height="56">
+          <rect x="1" y="1" width="30" height="30" rx="8" fill="#1c1c1e" />
+          <path
+            d="M11 22.5c2.4-5.6 4.2-9.6 5.2-12.2.4-1 1.7-1 2 .1l.3 1.2c.3 1.2 1.1 2.4 2.3 3.1"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+          <circle cx="22.5" cy="9.5" r="1.8" fill="#8cc6ff" />
+        </svg>
+      </div>
+      <h2>Nib</h2>
+      <p>A notebook where typing and handwriting share the page — and a study assistant that runs entirely on your own computer.</p>
+      <p className="muted">{info ? `Version ${info.version} · Electron ${info.electron}` : 'Version 0.1.0'}</p>
+    </div>
+  );
+}

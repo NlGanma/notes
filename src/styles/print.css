@@ -1,0 +1,46 @@
+#print-root {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  body.is-printing #root {
+    display: none !important;
+  }
+  body.is-printing #print-root,
+  #print-root {
+    display: block !important;
+  }
+  .nib-print {
+    --line: 32px;
+    --page-pad-x: 0px;
+    color: #1c1c1e;
+  }
+  .nib-print .doc-title {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 720;
+    letter-spacing: -0.03em;
+    margin: 0 0 22px;
+    line-height: 1.2;
+  }
+  .nib-print .blk {
+    break-inside: avoid;
+  }
+  .nib-print .blk-paragraph,
+  .nib-print .blk-bulletList,
+  .nib-print .blk-orderedList {
+    break-inside: auto;
+  }
+  .nib-print :is(h1, h2, h3) {
+    break-after: avoid;
+  }
+  .nib-print img {
+    box-shadow: none;
+  }
+}
