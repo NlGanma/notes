@@ -26,7 +26,7 @@ export interface InkPadState {
  * an arrow, a Greek letter, a chemical structure — and it drops into the
  * sentence at the caret, scaled to the text and sitting on its baseline.
  */
-export function InkPad({ state, onClose }: { state: InkPadState; onClose(): void }) {
+export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClose(): void; onPopOut?(pos: number): void }) {
   const { editor, pos } = state;
   const tools = useTools();
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -200,6 +200,11 @@ export function InkPad({ state, onClose }: { state: InkPadState; onClose(): void
             <Palette size={13} /> {matchText ? 'Matches text colour' : 'Pen colour'}
           </button>
           <span className="grow" />
+          {typeof pos === 'number' && onPopOut && (
+            <button className="btn is-ghost" onClick={() => onPopOut(pos)} title="Turn it back into handwriting on the page">
+              Pop out
+            </button>
+          )}
           <button className="btn is-ghost" onClick={onClose}>
             Cancel
           </button>

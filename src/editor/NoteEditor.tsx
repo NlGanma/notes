@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { EditorContent, useEditor } from '@tiptap/react';
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { closeHistory } from '@tiptap/pm/history';
 import { buildExtensions } from './extensions';
 import { createClipboardSerializer, normalizeDocJSON } from './extensions/blockAttrs';
 import { InkLayer, type InkAskRequest, type InkLayerHandle, type InkSession } from './ink/InkLayer';
@@ -12,7 +13,7 @@ import { PageHeader } from './ui/PageHeader';
 import { editorBus } from './bus';
 import { editors, inkLayers } from './registry';
 import { captureInlineSketch, startTypingFromInk } from './ink/typeFlow';
-import { findBlock, inkOf, replaceBlockWith, setTranscript } from './ink/ops';
+import { findBlock, inkOf, removeStrokes, replaceBlockWith, setTranscript } from './ink/ops';
 import { useVault } from '../state/vault';
 import { LINE_PX, PAGE_WIDTH, useSettings } from '../state/settings';
 import { useTools } from '../state/tools';
@@ -335,7 +336,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     async (
       strokes: Stroke[],
       to: 'text' | 'math',
-      place: { afterBlockId: string; removeBlockId?: string; removeStrokes?: { blockId: string; ids: Set<string> } },
+      place: { afterBlockId: string; removeBlockId?: string; removeStrokes?: Map<string, Set<string>> },
     ) => {
       if (!editor) return;
       if (!visionModel()) {
@@ -374,14 +375,12 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         if (place.removeBlockId) {
           replaceBlockWith(editor, place.removeBlockId, nodes);
         } else {
-          replaceBlockWith(editor, place.afterBlockId, nodes, true);
-          if (place.removeStrokes) {
-            const f = findBlock(editor.state.doc, place.removeStrokes.blockId);
-            if (f) {
-              const keep = inkOf(f.node).filter((s: Stroke) => !place.removeStrokes!.ids.has(s.id));
-              editor.view.dispatch(editor.state.tr.setNodeAttribute(f.pos, 'ink', keep.length ? keep : null));
-            }
-          }
+          // The text goes in and the handwriting comes out of every block it was in: one undo step.
+          const tr = editor.state.tr;
+          if (place.removeStrokes) removeStrokes(tr, place.removeStrokes);
+          const f = findBlock(tr.doc, place.afterBlockId);
+          if (f) tr.insert(f.pos + f.node.nodeSize, nodes);
+          editor.view.dispatch(closeHistory(tr));
         }
         toast.success(to === 'math' ? 'Typeset your math' : 'Converted to text', 'Undo with ⌘Z if it isn’t right.');
       } catch (e) {
@@ -519,11 +518,13 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
                       if (!byBlock.has(it.blockId)) byBlock.set(it.blockId, new Set());
                       byBlock.get(it.blockId)!.add(it.strokeId);
                     }
-                    const [blockId, ids] = [...byBlock.entries()][0];
-                    const blk = layout.blocks.find((b) => b.id === blockId);
-                    const local = strokes.map((s) => translateStroke(s, 0, -(blk?.top ?? 0)));
+                    // The typed version goes below the last block the handwriting was in.
+                    const blocks = layout.blocks.filter((b) => byBlock.has(b.id));
+                    const blk = blocks[blocks.length - 1];
+                    if (!blk) return;
+                    const local = strokes.map((s) => translateStroke(s, 0, -blk.top));
                     inkRef.current?.clearSelection();
-                    void convertInk(local, to, { afterBlockId: blockId, removeStrokes: { blockId, ids } });
+                    void convertInk(local, to, { afterBlockId: blk.id, removeStrokes: byBlock });
                   }}
                 />
                 {flash && <div key={flash.at} className="nib-flash-box" style={{ top: flash.top - 4, height: flash.height + 8 }} />}
@@ -534,7 +535,16 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         </div>
       </div>
       {active && <BubbleMenu editor={editor} onAsk={onAskText} />}
-      {pad && <InkPad state={pad} onClose={() => setPad(null)} />}
+      {pad && (
+        <InkPad
+          state={pad}
+          onClose={() => setPad(null)}
+          onPopOut={(pos) => {
+            setPad(null);
+            inkRef.current?.popOut(pos);
+          }}
+        />
+      )}
     </div>
   );
 }
