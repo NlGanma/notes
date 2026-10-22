@@ -17,9 +17,8 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
       if (/Maximum update depth/.test(String(args[0]))) {
         const stack = (new Error().stack || '')
           .split('\n')
-          .filter((l) => /\/src\//.test(l))
-          .slice(0, 8)
-          .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, ''))
+          .slice(2, 14)
+          .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, '').replace(/\?v=\w+/, ''))
           .join(' | ');
         return orig.call(console, `${args[0]} AT: ${stack}`);
       }
@@ -43,6 +42,8 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
       text += ` ${args.slice(1).join(' ').replace(/\s+/g, ' ').slice(0, 600)}`;
     }
     errors.push(`console: ${text}`);
+    // Print right away too, so the log shows which step caused it.
+    if (/Maximum update depth/.test(text)) console.log(`     [react warning at this point] ${text.slice(0, 1500)}`);
   });
   return { browser, context, page, errors };
 }
