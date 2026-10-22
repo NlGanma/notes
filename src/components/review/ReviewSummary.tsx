@@ -6,6 +6,7 @@ import { useVault } from '../../state/vault';
 import { useAssistant } from '../../state/assistant';
 import { renderMarkdown } from '../../lib/ai/markdown';
 import { calibrationMessage, dayLabel } from '../../lib/review/session';
+import { percent, statusOf } from '../../lib/review/mastery';
 import { isReviewable } from '../../lib/review/tree';
 import { openLibrary } from '../../lib/commands';
 import { ClassLetter, Donut, StudyBar } from './parts';
@@ -30,6 +31,7 @@ const CONF_LABEL = { sure: 'Sure', unsure: 'Unsure', guess: 'Guessing' } as cons
 export function ReviewSummary() {
   const summary = useReview((s) => s.summary)!;
   const pool = useReview((s) => s.pool);
+  const file = useReview((s) => s.file);
   const notes = useVault((s) => s.notes);
   const [showMastered, setShowMastered] = useState(false);
   const meta = (id: string) => pool.find((p) => p.id === id);
@@ -42,15 +44,23 @@ export function ReviewSummary() {
     const n = m && notes[m.noteId];
     return n ? (conceptsOf(n).find((c) => c.id === id)?.facts[0]?.text ?? '') : '';
   };
-  const learning = useMemo(
-    () =>
-      [...new Set([...summary.needsStudy, ...summary.misconceptions.map((m) => m.conceptId)])].map((id) => {
+  // The same "still learning" the counts use: answered, not mastered — what needs study and the mix-ups first.
+  const learning = useMemo(() => {
+    const now = Date.now();
+    const still = pool.filter((p) => {
+      const st = statusOf(file.states[p.id], p.cap, summary.needsStudy.includes(p.id), p.needs);
+      return st === 'learning' || st === 'needs-study';
+    });
+    const rank = (id: string) => (summary.needsStudy.includes(id) ? 0 : summary.misconceptions.some((m) => m.conceptId === id) ? 1 : 2);
+    return still
+      .map((p) => p.id)
+      .sort((a, b) => rank(a) - rank(b) || percent(file.states[a], now) - percent(file.states[b], now))
+      .map((id) => {
         const mix = summary.misconceptions.find((m) => m.conceptId === id);
         return { id, wrote: mix?.wrote, says: mix?.notesSay ?? fact(id) };
-      }),
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [summary, notes],
-  );
+  }, [summary, pool, notes]);
   const missedNotes = useMemo(
     () => [...new Set(learning.map((x) => meta(x.id)?.noteId))].filter((x): x is string => !!x && !!notes[x] && isReviewable(notes[x])),
     // eslint-disable-next-line react-hooks/exhaustive-deps

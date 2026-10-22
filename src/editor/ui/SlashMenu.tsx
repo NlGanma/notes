@@ -135,20 +135,26 @@ export function SlashMenu() {
   const { open, items, index, rect, pick, set, query, matched } = useSlash();
   const ref = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   const [preview, setPreview] = useState<{ id: string; top: number; left: number } | null>(null);
   // Notion gives up once a few characters in a row match nothing.
   const gaveUp = !items.length && query.length - matched >= 4;
   const shown = open && !gaveUp;
 
+  // Below the line, unless there is clearly more room above; the list shortens to fit rather than cover the toolbar.
   useLayoutEffect(() => {
     if (!shown || !rect || !ref.current) return;
-    const h = ref.current.offsetHeight;
     const w = ref.current.offsetWidth;
-    let top = rect.bottom + 4;
-    if (top + h > window.innerHeight - 12) top = Math.max(12, rect.top - h - 4);
+    const below = window.innerHeight - rect.bottom - 16;
+    const above = rect.top - 16 - 64;
+    // The list plus the 37px footer: what the menu needs at most.
+    const full = Math.min(400, (listRef.current?.scrollHeight ?? 400) + 37);
+    const down = below >= full || below >= above;
+    const maxHeight = Math.max(160, Math.min(400, down ? below : above));
+    const h = Math.min(full, maxHeight);
+    const top = down ? rect.bottom + 4 : rect.top - 4 - h;
     const left = Math.min(window.innerWidth - w - 12, Math.max(12, rect.left - 4));
-    setPos({ left, top });
+    setPos({ left, top, maxHeight });
   }, [shown, rect, items.length]);
 
   useEffect(() => {
@@ -179,7 +185,7 @@ export function SlashMenu() {
 
   return createPortal(
     <>
-      <div ref={ref} className="slash-menu" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }} data-ui onMouseDown={(e) => e.preventDefault()}>
+      <div ref={ref} className="slash-menu" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight }} data-ui onMouseDown={(e) => e.preventDefault()}>
         <div className="slash-list" ref={listRef}>
           {!items.length && <div className="slash-empty">No results</div>}
           {grouped.map(({ g, list }) => (

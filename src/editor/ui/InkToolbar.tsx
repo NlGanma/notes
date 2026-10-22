@@ -108,8 +108,8 @@ function isLight(color: string): boolean {
 }
 
 /**
- * The tool row: GoodNotes 6's contents (undo/redo at the left, the tools centred, presets hanging off them,
- * page controls at the right) in Google Docs' GM3 toolbar shape.
+ * The tool row: GoodNotes 6's contents (undo/redo, the tools, the current tool's presets right after them, page
+ * controls pinned right) in Google Docs' GM3 toolbar shape and left-to-right layout.
  */
 export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) {
   const t = useTools();

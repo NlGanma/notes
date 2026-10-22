@@ -192,8 +192,21 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
           {item(<Type size={20} />, 'Convert to typed text', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'text' }))}
           {item(<Sigma size={20} />, 'Convert to typeset math', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'math' }))}
           <div className="menu-sep" />
-          {item(<FoldVertical size={20} />, 'Remove empty space', () => trimInkBlock(editor, id, line()))}
-          {item(<Trash2 size={20} />, 'Delete', () => deleteBlock(editor, id), undefined, true)}
+          {item(<FoldVertical size={20} />, 'Remove empty space', () => {
+            trimInkBlock(editor, id, line());
+            if (useTools.getState().tool === 'text') editor.commands.focus();
+          })}
+          {item(
+            <Trash2 size={20} />,
+            'Delete',
+            () => {
+              deleteBlock(editor, id);
+              // Back in the editor, so ⌘Z undoes it straight away.
+              if (useTools.getState().tool === 'text') editor.commands.focus();
+            },
+            undefined,
+            true,
+          )}
         </div>
       </Popover>
 

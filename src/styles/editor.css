@@ -39,8 +39,8 @@
   position: relative;
 }
 
-/* GoodNotes and Docs paper: square corners and a hairline shadow. */
-.page {
+/* GoodNotes and Docs paper: square corners and a hairline shadow. (Scoped: classroom.css has a .page too.) */
+.page-scaler > .page {
   position: absolute;
   left: 0;
   top: 0;
@@ -62,6 +62,7 @@
 /* Apple Notes: a centred date line, the title, then hashtags. The band is unruled, like real paper's top margin. */
 .page-header {
   padding: 32px var(--page-pad-x) 16px;
+  font-family: var(--font-ui);
   user-select: none;
 }
 .page-header.is-homework {
@@ -114,7 +115,8 @@
   flex: none;
 }
 
-.page-title {
+/* Docs' Title style. (Scoped: classroom.css has a .page-title for page heads.) */
+.page-header .page-title {
   display: block;
   width: 100%;
   border: 0;
@@ -132,10 +134,10 @@
   color: var(--text);
   user-select: text;
 }
-.font-serif .page-title {
+.font-serif .page-header .page-title {
   font-family: var(--font-serif);
 }
-.page-title::placeholder {
+.page-header .page-title::placeholder {
   color: var(--outline-variant);
 }
 
@@ -716,11 +718,12 @@
 
 /* --------------------------------------------------------------- tool row */
 
-/* GoodNotes 6's tool row in Google Docs' GM3 toolbar shape: a 44px pill on the tinted surface. Undo/redo at the
-   left, the tools centred, the current tool's presets hanging off their right edge, page controls at the right. */
+/* GoodNotes 6's tool row laid out like Google Docs' GM3 toolbar: a 40px pill on the tinted surface, filled from
+   the left. Undo/redo, then the tools (they never move: nothing before them changes width), then the current
+   tool's presets; page controls are pinned right. */
 .ink-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   height: 40px;
   padding: 0 4px;
@@ -736,12 +739,6 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
-}
-.tb-start {
-  justify-self: start;
-}
-.tb-tools {
-  justify-self: center;
 }
 .tb-context {
   gap: 6px;
@@ -2131,12 +2128,6 @@
 
 /* --------------------------------------------------------------- narrow windows */
 
-/* Under ~1080px the tools follow undo/redo instead of centring, so the presets keep their room. */
-@container toolbar (max-width: 1080px) {
-  .ink-toolbar {
-    grid-template-columns: auto auto minmax(0, 1fr);
-  }
-}
 @container toolbar (max-width: 820px) {
   .tb-x1 {
     display: none;
@@ -2149,6 +2140,9 @@
   }
 }
 @container toolbar (max-width: 620px) {
+  .ink-toolbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
   .tb-start,
   .tb-x2 {
     display: none;
@@ -2161,15 +2155,5 @@
   }
   .tb-end > .tb-sep {
     margin: 0 4px;
-  }
-}
-/* Very narrow (the assistant open on a small screen): the row scrolls rather than overlapping. */
-@container toolbar (max-width: 480px) {
-  .ink-toolbar {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tb-tools {
-    gap: 0;
   }
 }

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
@@ -81,6 +81,16 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const dueIds = useMemo(() => (loaded ? dueNotes().ids : []), [notes, file, loaded]);
 
   const set = (ids: Set<string>) => useReview.getState().setSelection([...ids]);
+  // Stacked under the list (a narrow pane), the card's Start can be out of view: a bottom bar stands in for it.
+  const startRef = useRef<HTMLButtonElement>(null);
+  const [startInView, setStartInView] = useState(true);
+  useEffect(() => {
+    const el = startRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setStartInView(e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   // A progress row narrows the selection to the notes with ideas in that bucket (Quizlet: "Select Not studied
   // or Still learning to start studying that group").
   const narrow = (bucket: 'fresh' | 'learning') => {
@@ -196,12 +206,20 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
               )}
 
               {helper && <div className="rv-helper">{helper}</div>}
-              <button className="btn is-primary rv-start" disabled={!canStart} onClick={() => useReview.getState().start([...selected])}>
+              <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={() => useReview.getState().start([...selected])}>
                 Start review
               </button>
               {!online && <div className="rv-promise">Your local model is offline — questions are built straight from your notes.</div>}
             </aside>
           </div>
+          {!startInView && (
+            <div className="rv-startbar">
+              <span className="rv-startbar-label">{selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet'}</span>
+              <button className="btn is-primary" disabled={!canStart} onClick={() => useReview.getState().start([...selected])}>
+                Start review
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

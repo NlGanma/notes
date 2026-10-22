@@ -4,6 +4,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Copy, GraduationCap, MessageCircleQuestion, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { renderMath } from '../../lib/katex';
+import { useTools } from '../../state/tools';
 import { editorBus } from '../bus';
 import { cx } from '../../lib/util';
 import { Popover } from '../../components/common/Popover';
@@ -329,7 +330,16 @@ function MathBlockView({ node, updateAttributes, selected, editor, getPos, delet
               navigator.clipboard?.writeText(latex).catch(() => undefined);
             })}
           <div className="menu-sep" />
-          {item(<Trash2 size={20} />, 'Delete', () => deleteNode(), undefined, true)}
+          {item(
+            <Trash2 size={20} />,
+            'Delete',
+            () => {
+              deleteNode();
+              if (useTools.getState().tool === 'text') editor.commands.focus();
+            },
+            undefined,
+            true,
+          )}
         </div>
       </Popover>
       {editing && <MathEditor initial={latex} onDone={finish} />}

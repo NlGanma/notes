@@ -91,6 +91,10 @@ export function ReviewSession() {
   // The sheet docks over the bottom of the pane: the stage keeps that much room free below the card, and scrolls
   // the card's answers into view above it.
   const feedback = current?.phase === 'feedback';
+  // Each question starts at the top, with the progress row in view.
+  useLayoutEffect(() => {
+    stage.current?.scrollTo({ top: 0 });
+  }, [current?.shownAt]);
   useLayoutEffect(() => {
     const st = stage.current;
     const c = card.current;
@@ -470,7 +474,20 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
   const src = current.item.source;
   return (
     <div className="rv-notes-say">
-      <div className="rv-notes-say-head">{label}</div>
+      <div className="rv-notes-say-head">
+        <span>{label}</span>
+        <button
+          className="rv-source-chip"
+          onClick={() => useUI.getState().openNote(src.noteId, { newTab: true, blockId: src.blockId ?? undefined })}
+          title="Open this part of your notes"
+        >
+          <span>
+            {src.title}
+            {src.section ? ` › ${src.section}` : ''}
+          </span>
+          <ExternalLink size={14} />
+        </button>
+      </div>
       {points?.length ? (
         <ul className="rv-points">
           {points.map((p, i) => (
@@ -480,15 +497,6 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
       ) : (
         <div className="md rv-notes-say-text" dangerouslySetInnerHTML={{ __html: md(current.item.fact) }} />
       )}
-      <button
-        className="rv-source-chip"
-        onClick={() => useUI.getState().openNote(src.noteId, { newTab: true, blockId: src.blockId ?? undefined })}
-        title="Open this part of your notes"
-      >
-        {src.title}
-        {src.section ? ` › ${src.section}` : ''}
-        <ExternalLink size={14} />
-      </button>
     </div>
   );
 }
@@ -631,14 +639,6 @@ function FeedbackSheet({ current, onHeight }: { current: Current; onHeight(h: nu
           {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} label={adds.length ? 'What your notes add' : 'Your notes say'} points={adds} />}
 
           <div className="rv-sheet-foot">
-            <div className="rv-mastery-change" title="How well you know this idea">
-              <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
-              <MasteryBar before={fb.before} after={fb.after} />
-              <span className="rv-pct">
-                {fb.before}% → {fb.after}%
-              </span>
-              {fb.mastered && <span className="rv-badge">Mastered</span>}
-            </div>
             <div className="rv-links">
               <button className="rv-link" onClick={explain} title="Ask your notes why — answered only from your notes">
                 <MessageCircleQuestion size={16} /> Explain this answer
@@ -660,6 +660,14 @@ function FeedbackSheet({ current, onHeight }: { current: Current; onHeight(h: nu
               <button className="rv-link" onClick={report} title="This question is wrong or unclear — skip it and don’t ask it again">
                 <Flag size={16} /> Report
               </button>
+            </div>
+            <div className="rv-mastery-change" title="How well you know this idea">
+              <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
+              <MasteryBar before={fb.before} after={fb.after} />
+              <span className="rv-pct">
+                {fb.before}% → {fb.after}%
+              </span>
+              {fb.mastered && <span className="rv-badge">Mastered</span>}
             </div>
           </div>
         </div>

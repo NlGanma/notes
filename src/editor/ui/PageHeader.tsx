@@ -62,11 +62,25 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
 
   useEffect(() => setTitle(note.meta.title), [note.meta.id, note.meta.title]);
 
+  // The title grows with its text. A note opened in a background tab has no size yet, so measure again once it shows.
   useLayoutEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    el.style.height = '0px';
-    el.style.height = `${el.scrollHeight}px`;
+    const fit = () => {
+      if (!el.offsetWidth) return;
+      el.style.height = '0px';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    let width = el.offsetWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.offsetWidth !== width) {
+        width = el.offsetWidth;
+        fit();
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [title]);
 
   useEffect(() => {
