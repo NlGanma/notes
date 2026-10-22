@@ -144,5 +144,6 @@ await page.click('.ai-status');
 await page.waitForSelector('.status-card.is-online');
 await shot(page, 'ai-11-settings');
 
+check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.join('\n') || 'no page errors');
 await browser.close();

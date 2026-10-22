@@ -183,5 +183,6 @@ doc = await docJSON();
 check((JSON.stringify(doc).match(/inkInline/g) ?? []).length >= 2, 'inline sketch inserted at the caret');
 await shot(page, 'ink-09-final');
 
+check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
 await browser.close();

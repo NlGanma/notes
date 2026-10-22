@@ -177,5 +177,6 @@ check(/don.t include an example/i.test(await bot().locator('.coverage-banner').t
 check(await bot().locator('.outside-notes').count(), '…and the example it gives is boxed as the AI’s own knowledge');
 check(after.kinds.slice(before.kinds.length).join(',') === 'general', '…without sending a notes prompt');
 
+check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.join('\n') || 'no page errors');
 await browser.close();

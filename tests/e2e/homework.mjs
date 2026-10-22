@@ -271,6 +271,7 @@ check((await page.locator('.class-view .hw-row-item').count()) === 2, 'renaming 
 await page.click('.class-view .hw-row-item:has-text("Problem Set 5")');
 check(/All Orgo notes/.test(await page.textContent(`${V} .hw-source-chip`)), 'homework links follow the renamed class');
 
+check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.
 console.log(errors.filter((e) => !/favicon|status of 503/.test(e)).join('\n') || 'no page errors');
 await browser.close();

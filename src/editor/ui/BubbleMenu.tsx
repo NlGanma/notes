@@ -87,11 +87,14 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
 
   const show = st.hasSel && (st.focused || inside);
 
+  // Only when the bubble hides: this must not set state on every caret move while typing,
+  // or React counts one nested update per keystroke and warns after 50.
   useEffect(() => {
-    if (!show) {
-      setPanel(null);
-      return;
-    }
+    if (!show) setPanel(null);
+  }, [show]);
+
+  useEffect(() => {
+    if (!show) return;
     const r = posToDOMRect(editor.view, st.from, st.to);
     const el = ref.current;
     const w = el?.offsetWidth ?? 420;
