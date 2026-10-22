@@ -485,6 +485,10 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Esc', 'Back to the pen'],
       ['Hold', 'Snap a stroke into a shape'],
       [`${MOD}D`, 'Sketch inline (while typing)'],
+      [`${MOD} + drag`, 'Move handwriting with the pen'],
+      [`${ALT} + drag`, 'Move handwriting without snapping'],
+      ['← → ↑ ↓', 'Nudge selected handwriting'],
+      [`${ALT}↑ ↓`, 'Move it a ruled line'],
     ],
   ],
   [

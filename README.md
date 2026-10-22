@@ -21,6 +21,7 @@ This doesn't rely on the model behaving. Nib's harness enforces it in code:
 - **Any pen, anywhere.** Fountain pen, ballpoint, brush pen, pencil, felt marker and highlighter, each with its own colours and sizes. Ink snaps to the same baseline grid as typed text, so the two line up.
 - **Switching is seamless.** Write a few lines, then just start typing: the text lands on the next ruled line under your handwriting. Press <kbd>Esc</kbd> to pick the pen back up.
 - **Symbols inline.** Draw a symbol at the end of a typed line and it joins the sentence as an inline glyph. You can also press <kbd>⌘D</kbd> to sketch one at the cursor.
+- **Move it like paper.** With the lasso (or <kbd>⌘</kbd> and the pen), press on a handwritten word or drawing and drag: it comes as a whole and snaps onto the ruled lines and the margin, with guides as you go. Drop it onto a line of text and it joins the sentence; drag a sketch out of the text to make it handwriting again. Hold <kbd>⌥</kbd> to place it freely.
 - **Shapes and editing.** Hold at the end of a stroke to snap a circle, box, line or arrow. Lasso a selection to move, scale, recolour, copy or ask about it. The precise eraser cuts through strokes instead of deleting them.
 - **Formatting that looks good without effort.** Markdown shortcuts, a `/` menu for every block, LaTeX math (`$x^2$`, `$$…$$`), callouts and checklists.
 - **Polish.** One button suggests cleanups: a title and tags, tidier spacing, matching ink colours, typeset handwritten math, and a summary at the top.
@@ -108,6 +109,7 @@ The app keeps its vault in `~/Documents/Nib Vault` (*Settings → Vault* to chan
 | <kbd>⌥P</kbd> <kbd>⌥H</kbd> <kbd>⌥E</kbd> <kbd>⌥L</kbd> <kbd>⌥T</kbd> | Pen, highlighter, eraser, lasso, text |
 | <kbd>Esc</kbd> | Back to the last pen after typing |
 | <kbd>⌘D</kbd> | Sketch a symbol inline |
+| <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> / <kbd>⌥↑</kbd> <kbd>⌥↓</kbd> | Nudge selected ink / move it a ruled line |
 | <kbd>/</kbd> | Insert any block |
 | <kbd>⌘P</kbd> | Export as PDF |
 
