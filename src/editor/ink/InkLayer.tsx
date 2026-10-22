@@ -24,7 +24,8 @@ import { recognizeShape, shapeFromDrag, straightenIfLinear } from '../../lib/ink
 import { HIGHLIGHT_COLORS, INK_COLORS } from '../../lib/ink/brushes';
 import { useInkHint, useTools } from '../../state/tools';
 import { rhythmKey } from '../extensions/rhythm';
-import { appendInkBlock, appendStrokes, applyInkEdits, inkOf } from './ops';
+import type { Transaction } from '@tiptap/pm/state';
+import { appendInkBlock, appendStrokes, applyInkEdits, inkOf, removeInlineNode } from './ops';
 import {
   autoscrollSpeed,
   clusterBlob,
@@ -40,7 +41,7 @@ import {
   type SnapResult,
   type SnapTarget,
 } from './snap';
-import { findTextDropTarget, inlineSketchAttrs, insertInlineSketch, textLineEnd, type TextDropTarget } from './typeFlow';
+import { findTextDropTarget, inlineSketchAttrs, inlineSketchStrokes, insertInlineSketch, textLineEnd, type TextDropTarget } from './typeFlow';
 import { cx, uid } from '../../lib/util';
 import { SnipAsk, type AskMode } from './SnipAsk';
 
@@ -95,6 +96,8 @@ export interface InkLayerHandle {
   layout(): InkLayout;
   clearSelection(): void;
   hasSelection(): boolean;
+  /** Turns the inline sketch at `pos` back into handwriting where it is, selected. */
+  popOut(pos: number): void;
 }
 
 interface Props {
@@ -132,7 +135,20 @@ type Gesture =
   | { kind: 'draw'; id: number; stroke: Stroke; anchor: { x: number; y: number; t: number }; snapped: boolean; timer: number }
   | { kind: 'erase'; id: number; last: { x: number; y: number } | null }
   | { kind: 'lasso'; id: number; poly: number[]; client: Pt }
-  | { kind: 'move'; id: number; sx: number; sy: number; dx: number; dy: number; moved: boolean; client: Pt; alt: boolean; carried: Carried }
+  | {
+      kind: 'move';
+      id: number;
+      sx: number;
+      sy: number;
+      dx: number;
+      dy: number;
+      moved: boolean;
+      client: Pt;
+      alt: boolean;
+      carried: Carried;
+      /** A sketch being pulled out of the text (its strokes in layer coordinates) rather than the selection. */
+      popped?: { pos: number; dom: HTMLElement; strokes: Stroke[] };
+    }
   | { kind: 'scale'; id: number; ax: number; ay: number; d0: number; s: number; moved: boolean; client: Pt }
   | { kind: 'shape'; id: number; x0: number; y0: number; x1: number; y1: number; shift: boolean }
   | { kind: 'snip'; id: number; x0: number; y0: number; x1: number; y1: number };
@@ -246,6 +262,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   const erasingRef = useRef<Map<string, Stroke[]> | null>(null);
   /** A press on the selection ('press': hide the menu) or a drag that is moving it ('drag'). */
   const [held, setHeld] = useState<'press' | 'drag' | null>(null);
+  /** Strokes of a sketch being dragged out of the text. */
+  const [popped, setPopped] = useState<Stroke[] | null>(null);
   const [overlay, setOverlay] = useState<{ lasso?: number[]; shape?: Stroke; snip?: Bounds } | null>(null);
   const [snip, setSnip] = useState<{ bounds: Bounds; capturing: boolean } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -322,6 +340,13 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     clearSelection: () => setSelection(null),
     // (ink picked up with ⌘ and the pen doesn't stop you from typing)
     hasSelection: () => !!selectionRef.current && useTools.getState().tool === 'lasso',
+    popOut: (pos: number) => {
+      const out = wrapRef.current && inlineSketchStrokes(propsRef.current.editor, wrapRef.current, propsRef.current.scale || 1, pos);
+      if (!out) return;
+      useTools.getState().setTool('lasso');
+      (propsRef.current.editor.view.dom as HTMLElement).blur();
+      place(out.strokes, new Set(), undefined, (tr) => removeInlineNode(tr, pos));
+    },
   }));
 
   // ---------------------------------------------------------------- helpers
@@ -492,7 +517,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
    * then selects them. Reads the page fresh rather than from the last layout,
    * so a layout a frame behind can't write back old ink.
    */
-  function place(strokes: Stroke[], remove: Set<string>, nudge?: 'first' | 'more') {
+  function place(strokes: Stroke[], remove: Set<string>, nudge?: 'first' | 'more', before?: (tr: Transaction) => void) {
     const { editor: ed, line: l } = propsRef.current;
     if (!strokes.length) return;
     const lay = measureLayout(ed);
@@ -506,7 +531,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       for (const s of strokes) list.push(translateStroke(s, 0, -target.top));
       edits.set(target.id, list);
     } else tail = strokes.map((s) => translateStroke(s, 0, -lay.contentBottom));
-    const created = applyInkEdits(ed, edits, l, tail, { nudge });
+    const created = applyInkEdits(ed, edits, l, tail, { nudge, before });
     const blockId = target?.id ?? created;
     // Measure the updated page now, not next frame, so the selection never flickers back.
     const next = measureLayout(ed);
@@ -526,27 +551,29 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     place(moved, ids, nudge);
   }
 
-  /** Drops the dragged selection into a line of text as an inline sketch. */
-  function dropIntoText(t: TextDropTarget, dx: number, dy: number, carried: Carried) {
-    const sel = selectionRef.current;
-    if (!sel) return;
+  /** Drops the dragged ink (the selection, or a sketch pulled out of the text) into a line of text. */
+  function dropIntoText(t: TextDropTarget, g: MoveGesture, dx: number, dy: number) {
     const ed = propsRef.current.editor;
-    const ids = new Set(sel.items.map((i) => i.strokeId));
     const strokes: Stroke[] = [];
     const remove = new Map<string, Set<string>>();
-    for (const b of measureLayout(ed).blocks)
-      for (const s of b.ink) {
-        if (!ids.has(s.id)) continue;
-        strokes.push(translateStroke(s, dx, b.top + dy));
-        if (!remove.has(b.id)) remove.set(b.id, new Set());
-        remove.get(b.id)!.add(s.id);
-      }
+    if (g.popped) strokes.push(...g.popped.strokes.map((s) => translateStroke(s, dx, dy)));
+    else {
+      const ids = new Set(selectionRef.current?.items.map((i) => i.strokeId));
+      for (const b of measureLayout(ed).blocks)
+        for (const s of b.ink) {
+          if (!ids.has(s.id)) continue;
+          strokes.push(translateStroke(s, dx, b.top + dy));
+          if (!remove.has(b.id)) remove.set(b.id, new Set());
+          remove.get(b.id)!.add(s.id);
+        }
+    }
     if (!strokes.length) return;
     const bb = unionBounds(strokes.map(strokeBounds))!;
     // It sits on the text's baseline, shrunk if needed so the line doesn't grow.
-    const baseline = (carried.baseline ?? carried.box.maxY) + dy;
+    const baseline = (g.carried.baseline ?? g.carried.box.maxY) + dy;
     const fit = fitInline(baseline - bb.minY, bb.maxY - baseline, t.roomAbove, t.roomBelow);
-    const at = insertInlineSketch(ed, { pos: t.pos, attrs: inlineSketchAttrs(strokes, baseline, t.fontPx, fit), remove, lead: t.lead, trail: t.trail });
+    const attrs = inlineSketchAttrs(strokes, baseline, t.fontPx, fit);
+    const at = insertInlineSketch(ed, { pos: t.pos, attrs, remove, removeNode: g.popped?.pos });
     setSelection(null);
     const dom = ed.view.nodeDOM(at);
     if (dom instanceof HTMLElement) {
@@ -598,9 +625,11 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   function resolveDrag(g: MoveGesture): { snap: SnapResult; text: TextDropTarget | null } {
     const { editor: ed, line: l } = propsRef.current;
     const s = propsRef.current.scale || 1;
-    const free: SnapResult = { dx: g.dx, dy: g.dy, rule: null, x: null };
-    if (g.alt || !wrapRef.current) return { snap: free, text: null };
     const { box, baseline, inline } = g.carried;
+    // Ink stays on the page: above the first line it would sit over the title, out of reach.
+    const onPage = (r: SnapResult): SnapResult => (box.minY + r.dy < 0 ? { ...r, dy: -box.minY, rule: null } : r);
+    const free = onPage({ dx: g.dx, dy: g.dy, rule: null, x: null });
+    if (g.alt || !wrapRef.current) return { snap: free, text: null };
     if (inline && baseline !== null) {
       const text = findTextDropTarget(ed, wrapRef.current, s, { x: box.minX + g.dx, y: baseline + g.dy - l * 0.25 });
       if (text) return { snap: free, text };
@@ -611,7 +640,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const xTargets: SnapTarget[] = [{ x: 0, kind: 'margin' }];
     const end = textLineEnd(ed, wrapRef.current, s, (baseline ?? box.maxY) + dy - l * 0.25);
     if (end !== null) xTargets.push({ x: end, kind: 'text' });
-    return { snap: snapMove({ box, baseline, dx: g.dx, dy: g.dy, line: l, tol, xTargets }), text: null };
+    return { snap: onPage(snapMove({ box, baseline, dx: g.dx, dy: g.dy, line: l, tol, xTargets })), text: null };
   }
 
   function requestPaint() {
@@ -626,7 +655,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const g = gesture.current;
     if (!g || (g.kind !== 'move' && g.kind !== 'scale') || !g.moved) return;
     const sel = selectionRef.current;
-    if (!sel) return;
+    if (!sel && !(g.kind === 'move' && g.popped)) return;
     const inv = 1 / (propsRef.current.scale || 1);
     const show = (el: SVGElement | null, on: boolean) => el?.setAttribute('display', on ? 'inline' : 'none');
     let transform: string;
@@ -639,7 +668,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       box = offsetBounds(g.carried.box, snap.dx, snap.dy);
     } else {
       transform = `translate(${g.ax} ${g.ay}) scale(${g.s}) translate(${-g.ax} ${-g.ay})`;
-      const b = sel.bounds;
+      const b = sel!.bounds;
       const xs = [g.ax + (b.minX - g.ax) * g.s, g.ax + (b.maxX - g.ax) * g.s];
       const ys = [g.ay + (b.minY - g.ay) * g.s, g.ay + (b.maxY - g.ay) * g.s];
       box = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
@@ -693,12 +722,16 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     if (hint.hint !== want) hint.setHint(want);
   }
 
-  function endDragVisuals() {
+  function endDragVisuals(g: Gesture) {
     if (paintRaf.current) cancelAnimationFrame(paintRaf.current);
     paintRaf.current = 0;
     for (const el of [dragPenRef.current, dragHlRef.current]) {
       el?.removeAttribute('transform');
       el?.removeAttribute('opacity');
+    }
+    if (g.kind === 'move' && g.popped) {
+      g.popped.dom.style.visibility = '';
+      setPopped(null);
     }
     if (useInkHint.getState().hint) useInkHint.getState().setHint(null);
   }
@@ -710,7 +743,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     gesture.current = null;
     if (autoRaf.current) cancelAnimationFrame(autoRaf.current);
     autoRaf.current = 0;
-    endDragVisuals();
+    endDragVisuals(g);
     setHeld(null);
   }
 
@@ -817,6 +850,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       const t = useTools.getState().tool;
       const penGrab = (t === 'pen' || t === 'highlighter') && e.metaKey;
       if (t !== 'lasso' && !penGrab) return null;
+      if (t === 'lasso' && (e.target as Element | null)?.closest?.('.ink-inline-node')) return 'grab';
       const sel = selectionRef.current;
       const hit = sel ? hitSelection(sel.bounds, p, 1 / (propsRef.current.scale || 1)) : null;
       if (hit?.kind === 'handle' && t === 'lasso') return hit.corner === 0 || hit.corner === 3 ? 'nwse-resize' : 'nesw-resize';
@@ -851,6 +885,34 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       setHeld('press');
     };
 
+    /** Pressing on a sketch in the text with the lasso pulls it back out as handwriting. */
+    const startPopOut = (e: PointerEvent, p: Pt, dom: HTMLElement): boolean => {
+      const ed = propsRef.current.editor;
+      let pos = -1;
+      ed.state.doc.descendants((node, at) => {
+        if (pos < 0 && node.type.name === 'inkInline' && ed.view.nodeDOM(at) === dom) pos = at;
+        return pos < 0;
+      });
+      const out = pos >= 0 && wrapRef.current ? inlineSketchStrokes(ed, wrapRef.current, propsRef.current.scale || 1, pos) : null;
+      if (!out) return false;
+      setSelection(null);
+      gesture.current = {
+        kind: 'move',
+        id: e.pointerId,
+        sx: p.x,
+        sy: p.y,
+        dx: 0,
+        dy: 0,
+        moved: false,
+        client: { x: e.clientX, y: e.clientY },
+        alt: e.altKey,
+        carried: { box: unionBounds(out.strokes.map(strokeBounds))!, baseline: out.baseline, inline: true },
+        popped: { pos, dom, strokes: out.strokes },
+      };
+      setHeld('press');
+      return true;
+    };
+
     const onDown = (e: PointerEvent) => {
       if (isUi(e.target)) return;
       const t = effectiveTool(e);
@@ -875,6 +937,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       // With the lasso — or ⌘ with the pen — a press on ink picks up the whole word or drawing.
       const penGrab = (t === 'pen' || t === 'highlighter') && e.metaKey;
       if (t === 'lasso' || penGrab) {
+        const sketch = t === 'lasso' ? (e.target as Element | null)?.closest?.('.ink-inline-node') : null;
+        if (sketch instanceof HTMLElement && startPopOut(e, p, sketch)) return;
         const sel = selectionRef.current;
         const inv = 1 / (propsRef.current.scale || 1);
         const hit = sel ? hitSelection(sel.bounds, p, inv) : null;
@@ -964,7 +1028,13 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         if (!g.moved) {
           if (Math.hypot(dx, dy) < DRAG_START / (propsRef.current.scale || 1)) return;
           g.moved = true;
-          flushSync(() => setHeld('drag'));
+          const popped = g.popped;
+          flushSync(() => {
+            setHeld('drag');
+            if (popped) setPopped(popped.strokes);
+          });
+          // The sketch leaves its place in the text while it is carried.
+          if (popped) popped.dom.style.visibility = 'hidden';
           setCursor('grabbing');
           startAutoscroll();
         }
@@ -1099,12 +1169,21 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
           g.alt = e.altKey;
           // The same answer the preview showed.
           const { snap, text } = resolveDrag(g);
-          if (text) dropIntoText(text, snap.dx, snap.dy, g.carried);
-          else if (Math.abs(snap.dx) > 0.5 || Math.abs(snap.dy) > 0.5) moveSelection((s) => translateStroke(s, snap.dx, snap.dy));
+          if (text) dropIntoText(text, g, snap.dx, snap.dy);
+          else if (g.popped) {
+            // Out of the text and onto the page, in one undo step.
+            const { pos, strokes } = g.popped;
+            place(
+              strokes.map((s) => translateStroke(s, snap.dx, snap.dy)),
+              new Set(),
+              undefined,
+              (tr) => removeInlineNode(tr, pos),
+            );
+          } else if (Math.abs(snap.dx) > 0.5 || Math.abs(snap.dy) > 0.5) moveSelection((s) => translateStroke(s, snap.dx, snap.dy));
         } else if (g.kind === 'scale' && g.moved && !cancelled && Math.abs(g.s - 1) > 0.01) {
           moveSelection((s) => scaleStroke(s, g.ax, g.ay, g.s));
         }
-        endDragVisuals();
+        endDragVisuals(g);
         setHeld(null);
         setCursor(hoverCursor(e, toLocal(e)));
       } else if (g.kind === 'shape') {
@@ -1201,6 +1280,11 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
             selParts
               .filter(({ stroke }) => stroke.brush === 'highlighter')
               .map(({ stroke, top }) => <path key={stroke.id} transform={`translate(0 ${top})`} d={strokePath(stroke)} {...strokeSvgAttrs(stroke)} />)}
+          {popped
+            ?.filter((s) => s.brush === 'highlighter')
+            .map((s) => (
+              <path key={s.id} d={strokePath(s)} {...strokeSvgAttrs(s)} />
+            ))}
         </g>
         <path ref={liveHlRef} />
       </svg>
@@ -1229,6 +1313,16 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
                 .filter(({ stroke }) => stroke.brush !== 'highlighter')
                 .map(({ stroke, top }) => (
                   <path key={stroke.id} transform={`translate(0 ${top})`} d={strokePath(stroke)} {...strokeSvgAttrs(stroke)} />
+                ))}
+            </g>
+          )}
+          {popped && (
+            <g filter={`url(#${ids.lifted})`}>
+              {popped
+                .filter((s) => s.brush !== 'highlighter')
+                .map((s) => (
+                  // Sketches drawn to match the text colour follow it here too.
+                  <path key={s.id} d={strokePath(s)} {...strokeSvgAttrs(s)} style={{ color: 'var(--text)' }} />
                 ))}
             </g>
           )}

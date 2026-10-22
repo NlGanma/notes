@@ -535,7 +535,16 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         </div>
       </div>
       {active && <BubbleMenu editor={editor} onAsk={onAskText} />}
-      {pad && <InkPad state={pad} onClose={() => setPad(null)} />}
+      {pad && (
+        <InkPad
+          state={pad}
+          onClose={() => setPad(null)}
+          onPopOut={(pos) => {
+            setPad(null);
+            inkRef.current?.popOut(pos);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -2,9 +2,10 @@ import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { closeHistory } from '@tiptap/pm/history';
 import type { InlineInkAttrs, Stroke } from '../../lib/ink/types';
-import { strokeBounds, translateStroke, unionBounds } from '../../lib/ink/geometry';
-import { findBlock, gridCeil, inkOf, insertParagraphAfter, insertParagraphInInk, removeStrokes } from './ops';
+import { scaleStroke, strokeBounds, translateStroke, unionBounds } from '../../lib/ink/geometry';
+import { findBlock, gridCeil, inkOf, insertParagraphAfter, insertParagraphInInk, removeInlineNode, removeStrokes } from './ops';
 import { inlineSpacing, wordBoundary } from './snap';
+import { uid } from '../../lib/util';
 import type { InkLayout, InkSession } from './InkLayer';
 import { useTools } from '../../state/tools';
 
@@ -51,26 +52,61 @@ export function inlineSketchAttrs(strokes: Stroke[], baseline: number, fontPx: n
 }
 
 /**
- * Puts an inline sketch into the text at `pos` and takes its strokes off the
- * page — one undo step. Returns the sketch's position.
+ * Puts an inline sketch into the text at `pos`, taking its strokes off the
+ * page (or the sketch out of its old place in the text) — one undo step.
+ * Adds a space either side where a word would otherwise touch it, unless
+ * `lead` / `trail` say otherwise. Returns the sketch's position.
  */
 export function insertInlineSketch(
   editor: Editor,
-  opts: { pos: number; attrs: InlineInkAttrs; remove?: Map<string, Set<string>>; lead?: boolean; trail?: boolean; select?: boolean },
+  opts: {
+    pos: number;
+    attrs: InlineInkAttrs;
+    remove?: Map<string, Set<string>>;
+    removeNode?: number;
+    lead?: boolean;
+    trail?: boolean;
+    select?: boolean;
+  },
 ): number {
   const tr = editor.state.tr;
   if (opts.remove) removeStrokes(tr, opts.remove);
+  if (opts.removeNode !== undefined) removeInlineNode(tr, opts.removeNode);
   let at = tr.mapping.map(opts.pos);
-  if (opts.lead) {
+  const $at = tr.doc.resolve(at);
+  const before = $at.parent.textBetween(0, $at.parentOffset, undefined, '￼');
+  const after = $at.parent.textBetween($at.parentOffset, $at.parent.content.size, undefined, '￼');
+  const spacing = inlineSpacing(before, after);
+  if (opts.lead ?? spacing.lead) {
     tr.insertText(' ', at);
     at += 1;
   }
   tr.insert(at, editor.schema.nodes.inkInline.create(opts.attrs));
-  if (opts.trail) tr.insertText(' ', at + 1);
+  if (opts.trail ?? spacing.trail) tr.insertText(' ', at + 1);
   if (opts.select) tr.setSelection(TextSelection.create(tr.doc, at + 1));
   closeHistory(tr);
   editor.view.dispatch(tr);
   return at;
+}
+
+/**
+ * The strokes of the inline sketch at `pos`, where they are drawn on the
+ * page (layer coordinates), and the baseline they sit on.
+ */
+export function inlineSketchStrokes(editor: Editor, wrap: HTMLElement, scale: number, pos: number): { strokes: Stroke[]; baseline: number } | null {
+  const node = editor.state.doc.nodeAt(pos);
+  const dom = editor.view.nodeDOM(pos);
+  const svg = dom instanceof Element ? dom.querySelector('svg') : null;
+  if (!node || node.type.name !== 'inkInline' || !svg) return null;
+  const a = node.attrs as InlineInkAttrs;
+  const pad = 2; // inlineInkBox's padding
+  const r = svg.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  const k = r.width / ((Number(a.w) || 0) + pad * 2) / scale; // layer px per sketch px
+  const x0 = (r.left - wr.left) / scale + pad * k;
+  const y0 = (r.top - wr.top) / scale + pad * k;
+  const strokes = (a.strokes as Stroke[]).map((s) => ({ ...translateStroke(scaleStroke(s, 0, 0, k), x0, y0), id: uid('s') }));
+  return { strokes, baseline: y0 + ((Number(a.h) || 0) - (Number(a.drop) || 0)) * k };
 }
 
 /** Returns true if recent strokes were folded into the text as an inline sketch. */
@@ -145,8 +181,6 @@ export interface TextDropTarget {
   /** Room in the line above and below the baseline, so the sketch doesn't make the line taller. */
   roomAbove: number;
   roomBelow: number;
-  lead: boolean;
-  trail: boolean;
 }
 
 const metricsCache = new Map<string, { ascent: number; descent: number }>();
@@ -206,7 +240,6 @@ export function findTextDropTarget(editor: Editor, wrap: HTMLElement, scale: num
   const mid = ((r.top + r.bottom) / 2 - wr.top) / scale;
   const baseline = mid + (m.ascent - m.descent) / 2;
   const lineTop = mid - lineHeight / 2;
-  const { lead, trail } = inlineSpacing(text.slice(0, off), text.slice(off));
   return {
     pos,
     x: (r.left - wr.left) / scale,
@@ -216,8 +249,6 @@ export function findTextDropTarget(editor: Editor, wrap: HTMLElement, scale: num
     fontPx: m.size,
     roomAbove: baseline - lineTop - 0.5,
     roomBelow: lineTop + lineHeight - baseline - 0.5,
-    lead,
-    trail,
   };
 }
 

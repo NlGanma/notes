@@ -102,11 +102,12 @@ export function applyInkEdits(
   edits: Map<string, Stroke[]>,
   line: number,
   newBlockStrokes?: Stroke[],
-  opts: { nudge?: 'first' | 'more' } = {},
+  opts: { nudge?: 'first' | 'more'; before?: (tr: Transaction) => void } = {},
 ): string | null {
-  const { state } = editor;
-  const tr = state.tr;
-  state.doc.forEach((node, pos) => {
+  const tr = editor.state.tr;
+  // (e.g. taking a sketch out of the text in the same undo step)
+  opts.before?.(tr);
+  tr.doc.forEach((node, pos) => {
     const id = node.attrs.id as string;
     if (!id || !edits.has(id)) return;
     const ink = edits.get(id)!;
@@ -130,6 +131,23 @@ export function applyInkEdits(
   }
   if (tr.docChanged) dispatch(editor, tr, opts.nudge !== 'more');
   return created;
+}
+
+/** Takes an inline sketch out of the text, with the extra space it would leave behind. */
+export function removeInlineNode(tr: Transaction, pos: number) {
+  const node = tr.doc.nodeAt(pos);
+  if (!node || node.type.name !== 'inkInline') return;
+  const $pos = tr.doc.resolve(pos);
+  const parent = $pos.parent;
+  const at = $pos.parentOffset;
+  const end = at + node.nodeSize;
+  const before = parent.textBetween(Math.max(0, at - 1), at, undefined, '￼');
+  const after = parent.textBetween(end, Math.min(parent.content.size, end + 1), undefined, '￼');
+  let from = pos;
+  let to = pos + node.nodeSize;
+  if (after === ' ' && (before === ' ' || before === '')) to += 1;
+  else if (before === ' ' && after === '') from -= 1;
+  tr.delete(from, to);
 }
 
 /** Takes strokes out of their blocks within a transaction (attribute steps, so positions don't move). */

@@ -350,6 +350,41 @@ doc = await docJSON();
 now = byId(await inkNow());
 check(!JSON.stringify(doc.content.find((b) => b.type === 'paragraph')).includes('inkInline') && symIds.every((id) => now.has(id)), `one ${MOD}+Z turns it back into free handwriting`);
 
+// 11g. With the lasso, a sketch in the text can be pulled back out onto the page.
+await drag(symFrom, symFrom[0] + textAt.x + 1 - symLeft - symFrom[0], textAt.base - (wrap.y + R(13)));
+const sketchBox = await page.locator(`${V} .ProseMirror > p .ink-inline-node`).first().boundingBox();
+check(!!sketchBox, 'the sketch is back in the sentence');
+was = await inkNow();
+await drag([sketchBox.x + sketchBox.width / 2, sketchBox.y + sketchBox.height / 2], 0, 32 * 14);
+doc = await docJSON();
+now = await inkNow();
+const popped = now.filter((s) => !was.some((w) => w.id === s.id));
+check(
+  !JSON.stringify(doc.content.find((b) => b.type === 'paragraph')).includes('inkInline') && doc.content.find((b) => b.type === 'paragraph').content[0].text === 'Energy is conserved in a closed system.',
+  'dragging the sketch out of the sentence leaves the text as it was',
+);
+check(popped.length === sym.length && new Set(popped.map((s) => s.block)).size === 1, `and puts it on the page as handwriting again (${popped.length} strokes)`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(300);
+doc = await docJSON();
+check(JSON.stringify(doc.content.find((b) => b.type === 'paragraph')).includes('inkInline') && (await inkNow()).length === was.length, `one ${MOD}+Z puts it back in the sentence`);
+
+// 11h. Dragging past the first line keeps the ink at the top of the note (it used to jump to the end).
+await page.keyboard.press('Escape');
+const kNow = byId(await inkNow());
+const kFirst = kNow.get(was.find((s) => Math.abs(s.pts[0][0] - (kinetic[0][0][0] - wrap.x)) < 0.6 && Math.abs(s.pts[0][1] - (kinetic[0][0][1] - wrap.y)) < 0.6)?.id);
+const kFrom = [wrap.x + kFirst.pts[3][0], wrap.y + kFirst.pts[3][1]];
+await drag(kFrom, 0, -(R(3) + 60));
+doc = await docJSON();
+now = byId(await inkNow());
+const kMoved = now.get(kFirst.id);
+const kTop = Math.min(...[...now.values()].filter((s) => s.block === kMoved.block && s.type === 'paragraph').flatMap((s) => s.pts.map((q) => q[1])));
+check(kMoved.block === doc.content[0].attrs.id && kTop >= 0 && kTop < 6, `a word dragged above the first line stays at the top of the note (block ${kMoved.type}, top ${kTop.toFixed(1)})`);
+// and can be picked up again from there
+const kDy = kMoved.pts[0][1] - kFirst.pts[0][1];
+await drag([kFrom[0], kFrom[1] + kDy], 0, -kDy);
+check(Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 1, 'and dragged back to its line');
+
 // 11g. Arrow keys nudge (a burst is one undo step); ⌥↓ moves a whole line.
 const energy = handPaths('energy', wrap.x + 10 + handPaths('kinetic ', 0, 0, 18).width, wrap.y + R(3), 18).paths;
 await page.mouse.click(...mid(energy[0]));
@@ -429,6 +464,15 @@ check(
 );
 check(!!f1 && farIds.every((id) => now.get(id)?.block === f1.block), 'and arrives whole, in one block');
 await shot(page, 'ink-14-autoscrolled');
+
+// 11j. Up against the toolbar, the selection menu opens below the selection instead of hiding under it.
+const selRect = await page.locator(`${V} .sel-box rect`).boundingBox();
+await scroller.evaluate((el, dy) => (el.scrollTop += dy), selRect.y - (dockBottom + 4));
+await page.waitForTimeout(250);
+const selNow = await page.locator(`${V} .sel-box rect`).boundingBox();
+const menuBox = await page.locator(`${V} .ink-sel-menu`).boundingBox();
+check(!!menuBox && !!selNow && menuBox.y > selNow.y + selNow.height - 1, `near the toolbar the selection menu opens below the selection (menu at ${menuBox?.y.toFixed(0)}, selection ends ${(selNow.y + selNow.height).toFixed(0)})`);
+await shot(page, 'ink-15-menu-below');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
