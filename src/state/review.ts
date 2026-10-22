@@ -9,8 +9,8 @@ import { classForFolder, classInfo } from '../lib/classes';
 import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
 import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
 import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
-import { gradeShort, isDontKnow, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
-import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type Level } from '../lib/review/mastery';
+import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
+import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
 import { conceptsTask, gradeTask, LEVEL_HINT, MASTERY_ENGINE_PROMPT, nudgeTask, questionTask, SCHEMAS } from '../lib/review/prompts';
 import { debounce, hashString, uid } from '../lib/util';
@@ -77,8 +77,8 @@ export interface Current {
   hint?: string;
   hintUsed: boolean;
   feedback?: Feedback;
-  /** A second try after a miss (not counted). */
-  retry?: { answer: string; s: number };
+  /** A second try after a miss (not counted): its score — none when only the student can tell — or being checked. */
+  retry?: { answer: string; s?: number; checking?: boolean };
   revealed: boolean;
   firstInSession: boolean;
   wasDue: boolean;
@@ -118,7 +118,7 @@ interface ReviewState {
   dontKnow(): void;
   selfGrade(s: number): void;
   showHint(): void;
-  retry(answer: string): void;
+  retry(answer: string): Promise<void>;
   reveal(): void;
   next(): void;
   override(): void;
@@ -419,12 +419,42 @@ export const useReview = create<ReviewState>((set, get) => {
         (v) => (Array.isArray((v as GraderReply)?.points) ? (v as GraderReply) : null),
         parseJSONLoose,
       );
-      return scoreRubric(value, item.points ?? [item.fact], answer, item.fact);
+      return scoreRubric(value, item.points ?? [item.fact], answer, item.fact, item.prompt);
     } catch {
       return null;
     } finally {
       if (control === ctrl) control = null;
     }
+  };
+
+  /**
+   * An answer graded the way its item asks: by code first, by the model when
+   * code can't tell — null when neither can (the student compares with the
+   * notes). `waiting` shows that the model is being asked.
+   */
+  const gradeAnswer = async (
+    item: Item,
+    c: Concept,
+    answer: string,
+    waiting: (ask: () => Promise<Grade | null>) => Promise<Grade | null>,
+  ): Promise<{ g: Grade; graded: GradedBy } | null> => {
+    if (item.format === 'cloze' || item.format === 'recall') {
+      const note = noteOf(c.noteId);
+      const g = gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false });
+      // A longer typed answer that isn't the exact words may still say it: check it like a free answer — if the
+      // hidden words are in it (the line it was shown, typed back, says nothing).
+      const keys = [item.expected ?? '', ...(item.accept ?? [])].filter(Boolean);
+      if (g.s < 0.8 && contentWords(answer).length > 3 && keys.some((k) => hasKey(answer, k))) {
+        const free = quickRubric(answer, [item.fact]) ?? (online() ? await waiting(() => gradeWithModel({ ...item, points: [item.fact] }, answer)) : null);
+        if (free && free.s > g.s) return { g: free, graded: 'rubric' };
+      }
+      return { g, graded: 'typed' };
+    }
+    // Free answers: code first, the model only when code can't tell.
+    const quick = quickRubric(answer, item.points ?? [item.fact]);
+    if (quick) return { g: quick, graded: 'rubric' };
+    const g = online() ? await waiting(() => gradeWithModel(item, answer)) : null;
+    return g ? { g, graded: 'rubric' } : null;
   };
 
   /** A guiding question after a miss: code's cue at once, the model's (if it passes the checks) a moment later. */
@@ -621,14 +651,16 @@ export const useReview = create<ReviewState>((set, get) => {
     const meta = get().pool.find((p) => p.id === c.id);
     if (!meta) return;
     const conf = cur.conf ?? null;
-    const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: cur.answer, firstInSession: cur.firstInSession };
+    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception.
+    const named = !!cur.answer && namesPoint(cur.answer, cur.item.points ?? []);
+    const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: named ? undefined : cur.answer, firstInSession: cur.firstInSession };
     const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
     const mastered = isMastered(after, meta.cap, meta.needs);
     const file = get().file;
     save({ ...file, states: { ...file.states, [c.id]: after } });
     const verdict = verdictOf(g.s);
-    const missed = cur.item.points?.filter((p) => verdict !== 'right' && !(cur.answer && quickRubric(cur.answer, [p])?.s));
-    const hypercorrect = verdict === 'wrong' && conf === 'sure';
+    const missed = cur.item.points?.filter((p) => verdict !== 'right' && !(cur.answer && covers(cur.answer, p)));
+    const hypercorrect = verdict === 'wrong' && conf === 'sure' && !named;
     if (hypercorrect && cur.answer) set({ misconceptions: [...get().misconceptions, { conceptId: c.id, wrote: cur.answer.slice(0, 80), notesSay: cur.item.fact }] });
     // Right after a hint counts as partly known: it comes back later in the session, without one.
     const hinted = cur.hintUsed && verdict === 'right';
@@ -743,41 +775,25 @@ export const useReview = create<ReviewState>((set, get) => {
     async submit(answer, conf) {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      set({ current: { ...cur, answer, conf } });
       const item = cur.item;
+      // A self-check has no written answer: the student compares the one in their head.
+      if (item.format === 'rate') {
+        set({ current: { ...cur, answer: undefined, conf, phase: 'self', revealed: true } });
+        return;
+      }
+      set({ current: { ...cur, answer, conf } });
       if (isDontKnow(answer)) {
         apply({ s: 0 }, item.graded);
         get().reveal();
         return;
       }
-      if (item.format === 'rate') {
-        set({ current: { ...get().current!, phase: 'self', revealed: true } });
-        return;
-      }
-      if (item.format === 'cloze' || item.format === 'recall') {
-        const note = noteOf(cur.concept.noteId);
-        const g = gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false });
-        // A longer typed answer that isn't the exact words may still say it: check it like a free answer.
-        if (g.s < 0.8 && contentWords(answer).length > 3) {
-          const free = quickRubric(answer, [item.fact]) ?? (await withGrading(() => gradeWithModel({ ...item, points: [item.fact] }, answer)));
-          if (free && free.s > g.s) {
-            apply(free, 'rubric');
-            return;
-          }
-        }
-        apply(g, 'typed');
-        return;
-      }
-      // Free answers: code first, the model only when code can't tell.
-      const quick = quickRubric(answer, item.points ?? [item.fact]);
-      if (quick) {
-        apply(quick, 'rubric');
-        return;
-      }
-      const g = await withGrading(() => gradeWithModel(item, answer));
-      if (g) apply(g, 'rubric');
+      const r = await gradeAnswer(item, cur.concept, answer, withGrading);
+      // Moved on (or the session ended) while the model was checking.
+      const now = get().current;
+      if (!now || now.shownAt !== cur.shownAt) return;
+      if (r) apply(r.g, r.graded);
       // No model (or no valid verdict): the student compares with the notes.
-      else set({ current: { ...get().current!, phase: 'self', revealed: true } });
+      else set({ current: { ...now, phase: 'self', revealed: true } });
     },
 
     choose(index, conf) {
@@ -812,20 +828,28 @@ export const useReview = create<ReviewState>((set, get) => {
       set({ current: { ...cur, hintUsed: true, hint: `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}${start ? ` — it starts “${start}…”` : ''}.` } });
     },
 
-    retry(answer) {
+    async retry(answer) {
       const cur = get().current;
-      if (!cur || cur.phase !== 'feedback' || cur.retry) return;
-      const item = cur.item;
-      const note = noteOf(cur.concept.noteId);
-      const g =
-        item.format === 'cloze' || item.format === 'recall'
-          ? gradeShort(answer, item.expected ?? '', { accept: item.accept, language: note ? groupOf(note).language : false })
-          : (quickRubric(answer, item.points ?? [item.fact]) ?? { s: 0 });
-      // Not counted, but the next update learns more for having been re-taught.
+      if (!cur || cur.phase !== 'feedback' || cur.retry || cur.item.format === 'mcq' || cur.item.format === 'rate') return;
+      // Still this question (the student may move on while the model checks).
+      const same = () => {
+        const now = get().current;
+        return now && now.shownAt === cur.shownAt && now.item.key === cur.item.key ? now : null;
+      };
+      // Graded like a first answer, but not counted.
+      const r = await gradeAnswer(cur.item, cur.concept, answer, (ask) => {
+        const now = same();
+        if (now) set({ current: { ...now, retry: { answer, checking: true } } });
+        return ask();
+      });
+      const now = same();
+      if (!now) return;
+      // The next update learns more for having been re-taught.
       const file = get().file;
       const st = file.states[cur.concept.id];
       if (st) save({ ...file, states: { ...file.states, [cur.concept.id]: { ...st, retaught: true } } });
-      set({ current: { ...cur, retry: { answer, s: g.s }, revealed: true } });
+      // Undecided (no model): the notes are shown to compare with.
+      set({ current: { ...now, retry: { answer, s: r?.g.s }, revealed: true } });
     },
 
     reveal() {

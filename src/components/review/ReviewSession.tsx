@@ -111,7 +111,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   const submit = () => {
     if (grading) return;
     if (item.format === 'rate') {
-      void useReview.getState().submit('(self-check)', conf);
+      void useReview.getState().submit('', conf);
       return;
     }
     if (!text.trim()) return;
@@ -255,7 +255,8 @@ function FeedbackView({ current }: { current: Current }) {
   const [again, setAgain] = useState('');
   const overrides = useReview((s) => s.overrides);
   const wrong = fb.verdict !== 'right';
-  const canRetry = wrong && !current.revealed && current.item.format !== 'mcq' && current.item.format !== 'rate';
+  const canRetry = wrong && !current.revealed && !current.retry && current.item.format !== 'mcq' && current.item.format !== 'rate';
+  const retry = current.retry;
   const title = fb.verdict === 'right' ? (current.overridden ? 'Counted as right' : 'Right') : fb.verdict === 'partial' ? 'Partly right' : 'Not quite';
   const ask = () => {
     const src = current.item.source;
@@ -304,11 +305,11 @@ function FeedbackView({ current }: { current: Current }) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && again.trim()) {
                   e.preventDefault();
-                  useReview.getState().retry(again);
+                  void useReview.getState().retry(again);
                 }
               }}
             />
-            <button className="btn is-secondary is-small" disabled={!again.trim()} onClick={() => useReview.getState().retry(again)}>
+            <button className="btn is-secondary is-small" disabled={!again.trim()} onClick={() => void useReview.getState().retry(again)}>
               Try
             </button>
             <button className="btn is-ghost is-small rv-show" onClick={() => useReview.getState().reveal()}>
@@ -317,8 +318,16 @@ function FeedbackView({ current }: { current: Current }) {
           </div>
         </div>
       )}
-      {current.retry && <div className={cx('rv-retry-result', current.retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>{current.retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet — here’s what your notes say.'}</div>}
-      {(!canRetry || current.revealed) && <NotesSay current={current} />}
+      {retry?.checking ? (
+        <span className="rv-grading">
+          <span className="spinner" /> Checking your answer against your notes…
+        </span>
+      ) : retry && retry.s === undefined ? (
+        <div className="rv-retry-result">Compare it with what your notes say.</div>
+      ) : retry && retry.s !== undefined ? (
+        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>{retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet — here’s what your notes say.'}</div>
+      ) : null}
+      {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} />}
       <div className="rv-mastery-change">
         <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
         <span className="rv-bar">

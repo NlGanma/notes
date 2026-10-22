@@ -5,7 +5,9 @@ import { useAI } from '../../src/state/ai';
 import { conceptsOf, useReview } from '../../src/state/review';
 import { buildSeedNotes, SEED_CLASSES } from '../../src/lib/vault/seed';
 import { isReviewable } from '../../src/lib/review/tree';
-import { DAY, freshState, isMastered, type Confidence } from '../../src/lib/review/mastery';
+import { buildItem, mulberry32, type Item } from '../../src/lib/review/items';
+import { chunkNote } from '../../src/lib/ai/rag';
+import { DAY, freshState, isMastered, type Confidence, type Level } from '../../src/lib/review/mastery';
 import type { NoteDoc, VaultBackend } from '../../src/lib/vault/types';
 
 /** The Review store driven the way a student would, on the demo notes, with the model offline. */
@@ -212,4 +214,122 @@ test('a right answer after a hint comes back later in the session, without the h
   assert.match(fb.note ?? '', /hint/);
   assert.ok(review().session!.reask.some((r) => r.c === c.id), 'it is asked again later');
   assert.ok(review().session!.history.at(-1)!.s < 0.8, 'and counted as partly known');
+});
+
+/** Puts one question about an idea on screen: the first item `want` accepts among those its notes allow at `level`. */
+function ask(title: string, name: string, level: Level, want: (it: Item) => boolean = () => true): Item {
+  const note = byTitle(title);
+  review().start([note.meta.id]);
+  const cs = conceptsOf(note);
+  const c = cs.find((x) => x.name === name)!;
+  const chunkText = chunkNote(note).find((ch) => ch.hash === c.chunkHash)!.text;
+  const avoid: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const item = buildItem(c, level, { title: note.meta.title, siblings: cs.filter((x) => x !== c), avoid, rng: mulberry32(1), firstExposure: false, chunkText });
+    if (want(item)) {
+      const current = { item, concept: c, phase: 'ask' as const, hintUsed: false, revealed: false, firstInSession: true, wasDue: false, stateBefore: freshState(clock.now), shownAt: clock.now };
+      useReview.setState({ current, misconceptions: [] });
+      return item;
+    }
+    avoid.push(item.key);
+  }
+  throw new Error(`no such question about ${name}`);
+}
+
+const lastGraded = (item: Item) => review().file.states[item.conceptId]?.recent.at(-1)?.graded;
+const preterite = (it: Item) => it.format === 'cloze' && it.expected === 'preterite';
+
+test('a typed answer that only repeats what the question shows is wrong, however long', async () => {
+  for (const [answer, verdict] of [
+    ['Use the _____ for completed actions with a clear beginning or end', 'wrong'],
+    ['completed actions with a clear beginning or end', 'wrong'],
+    ['the imperfect for completed actions with a clear beginning or end', 'wrong'],
+    ['The preterite is for completed actions with a clear beginning or end', 'right'],
+  ] as const) {
+    const item = ask('Pretérito', 'El pretérito', 0, preterite);
+    await review().submit(answer, 'sure');
+    assert.equal(review().current!.feedback!.verdict, verdict, answer);
+    if (verdict === 'wrong') assert.equal(lastGraded(item), 'typed', 'graded as the typed answer it is');
+  }
+  for (const [title, name, answer, verdict] of [
+    ['Cell Structure', 'Mitochondria', 'site of cellular respiration; make ATP. Have their own DNA (endosymbiotic theory).', 'wrong'],
+    ['Cell Structure', 'Mitochondria', 'Ribosomes — site of cellular respiration; make ATP. Have their own DNA (endosymbiotic theory).', 'wrong'],
+    ['French Revolution', 'June 1789', 'Tennis Court Oath; National Assembly formed.', 'wrong'],
+    ['French Revolution', 'June 1789', 'It was June 1789: the Tennis Court Oath, when the National Assembly formed.', 'right'],
+  ] as const) {
+    ask(title, name, 0, (it) => it.format === 'recall');
+    await review().submit(answer, 'unsure');
+    assert.equal(review().current!.feedback!.verdict, verdict, `${name}: ${answer}`);
+  }
+});
+
+test('a second try is graded the way the first one is', async () => {
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('perfect', 'unsure');
+  await review().retry('The preterite is for completed actions with a clear beginning or end');
+  assert.equal(review().current!.retry!.s, 1, 'the line with the right word in it');
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('perfect', 'unsure');
+  await review().retry('Use the _____ for completed actions with a clear beginning or end');
+  assert.equal(review().current!.retry!.s, 0, 'the line it shows');
+  // Code can't tell and there's no model: the notes are shown to compare with, with no verdict.
+  ask('French Revolution', 'Tax system', 1);
+  await review().submit('taxes', 'unsure');
+  await review().retry('The clergy and the nobles were mostly exempt from taxes, so the burden fell on the commoners of the Third Estate.');
+  assert.equal(review().current!.retry!.s, undefined);
+  assert.ok(review().current!.revealed);
+});
+
+test('a second try the code can’t decide is checked by the model', async () => {
+  const tasks: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: { content: string }[] };
+    const task = /^Task: (\w+)/.exec(body.messages?.at(-1)?.content ?? '')?.[1] ?? '?';
+    tasks.push(task);
+    const reply =
+      task === 'grade' ? { points: [{ n: 1, hit: 'yes', quote: 'the burden fell on the commoners of the Third Estate' }] } : task === 'nudge' ? { nudge: 'Who paid?' } : { skip: true };
+    const nd = `${JSON.stringify({ message: { content: JSON.stringify(reply) }, done: false })}\n${JSON.stringify({ done: true, done_reason: 'stop' })}\n`;
+    return new Response(nd, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } });
+  }) as typeof fetch;
+  try {
+    useAI.setState({ status: 'online', chatModel: 'stub', provider: 'ollama', baseUrl: 'http://stub.invalid', models: [] });
+    ask('French Revolution', 'Tax system', 1);
+    await review().submit('taxes', 'unsure');
+    assert.equal(review().current!.feedback!.verdict, 'wrong');
+    await review().retry('The clergy and the nobles were mostly exempt from taxes, so the burden fell on the commoners of the Third Estate.');
+    assert.ok(tasks.includes('grade'), `the model was asked (${tasks.join(', ')})`);
+    assert.equal(review().current!.retry!.s, 1);
+    assert.equal(review().current!.phase, 'feedback', 'the feedback stays on screen while it checks');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('a self-check has no written answer: none is shown or kept', async () => {
+  const item = ask('Lecture 4', 'Limit laws', 0, (it) => it.format === 'rate');
+  await review().submit('(self-check)', 'sure');
+  assert.equal(review().current!.phase, 'self');
+  review().selfGrade(0);
+  assert.equal(review().current!.answer, undefined);
+  assert.deepEqual(review().misconceptions, []);
+  assert.equal(review().file.states[item.conceptId].misconception, undefined);
+});
+
+test('naming the idea an example shows, and being sure of it, is not a misconception', async () => {
+  for (const answer of ['El pretérito', 'the preterite']) {
+    const item = ask('Pretérito', 'El pretérito', 2, (it) => it.format === 'apply');
+    await review().submit(answer, 'sure');
+    // No model: the student compares with the notes.
+    assert.equal(review().current!.phase, 'self', answer);
+    review().selfGrade(0);
+    assert.ok(!review().current!.feedback!.hypercorrect, answer);
+    assert.deepEqual(review().misconceptions, [], answer);
+    assert.equal(review().file.states[item.conceptId].misconception, undefined, answer);
+  }
+  // A wrong idea, sure, still is one.
+  const item = ask('Pretérito', 'El pretérito', 2, (it) => it.format === 'apply');
+  await review().submit('banana', 'sure');
+  assert.equal(review().misconceptions.length, 1);
+  assert.equal(review().file.states[item.conceptId].misconception, 'banana');
 });
