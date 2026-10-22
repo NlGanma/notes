@@ -17,8 +17,15 @@ const crypto = require('node:crypto');
 const isMac = process.platform === 'darwin';
 const DEV_URL = process.env.NIB_DEV_URL || '';
 const E2E_EXPORT_DIR = process.env.NIB_E2E_EXPORT_DIR || '';
+const E2E_HOME = process.env.NIB_E2E_HOME || '';
 
 app.setName('Nib');
+// Tests run against a throwaway home. On macOS, Documents and app data come from the system, not
+// $HOME, so without this a test run would write into the real ~/Documents/Nib Vault.
+if (E2E_HOME) {
+  app.setPath('userData', path.join(E2E_HOME, 'userData'));
+  app.setPath('documents', path.join(E2E_HOME, 'Documents'));
+}
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;

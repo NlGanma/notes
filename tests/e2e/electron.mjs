@@ -24,7 +24,7 @@ const check = (cond, msg) => {
 const app = await electron.launch({
   executablePath: electronPath,
   args: ['--no-sandbox', root],
-  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), NIB_E2E_EXPORT_DIR: exportDir },
+  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), NIB_E2E_HOME: home, NIB_E2E_EXPORT_DIR: exportDir },
 });
 const win = await app.firstWindow();
 const errors = [];
