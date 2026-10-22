@@ -69,6 +69,19 @@ export function modeQuestion(mode: AskMode, label: string): string {
 }
 
 /**
+ * Starter questions about the whole open note (the assistant's starters, the
+ * slash menu's "Summarize note"). They are about that note by definition, so
+ * no coverage check runs first; the answer is still checked sentence by sentence.
+ */
+export const NOTE_STARTERS: Record<string, string> = {
+  explain: 'Explain the key ideas in this note, in plain language.',
+  quiz: 'Quiz me on this note: ask me 3 short questions, one at a time, and wait for my answer.',
+  exam: 'Based on this note, what are the most important things to review before an exam? Be specific.',
+  bullets: 'Summarise this note in 5 bullet points.',
+  summary: 'Summarize this note in a few bullet points.',
+};
+
+/**
  * Actions on selected text. Grounded ones answer from the notes; transforms
  * (rewrite, translate) only reword the passage and are checked for anything added.
  */

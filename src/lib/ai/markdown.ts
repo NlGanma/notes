@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import type StateInline from 'markdown-it/lib/rules_inline/state_inline.mjs';
 import type StateBlock from 'markdown-it/lib/rules_block/state_block.mjs';
+import type Token from 'markdown-it/lib/token.mjs';
 import { renderMath } from '../katex';
 
 /**
@@ -161,6 +162,8 @@ export const OWN_OPEN = '\uE000';
 export const OWN_CLOSE = '\uE001';
 export const WEAK_OPEN = '\uE002';
 export const WEAK_CLOSE = '\uE003';
+/** Closes an own-knowledge mark without its "not in your notes" tag: a table row's cells but the last (one tag per row). */
+export const OWN_END = '\uE004';
 const FENCE_CLOSE = /^\s*:{3,}\s*$/;
 
 /**
@@ -263,6 +266,67 @@ export function citedInAnswer(src: string, maxCite?: number): Set<number> {
 }
 
 /**
+ * A reply still being written, or cut off, can end inside a formula ("…and
+ * $\lim g = \lim"), which shows as raw TeX until it closes: the formula is left
+ * out until then. Only the last paragraph is looked at; what Nib wrote after
+ * it stays: the box it closes, citations it added, the end of a mark.
+ */
+export function withoutOpenMath(md: string): string {
+  const fence = /\n:::[ \t]*$/.exec(md)?.[0] ?? '';
+  const body = md.slice(0, md.length - fence.length);
+  let start = 0;
+  for (const m of body.matchAll(/\n[ \t]*\n/g)) start = m.index! + m[0].length;
+  const at = openMathAt(body.slice(start));
+  if (at < 0) return md;
+  const cut = body.slice(start + at);
+  const marks = cut.match(MARKS)?.join('') ?? '';
+  const cites = /(?:\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\())+\s*$/.exec(cut.replace(MARKS, ''))?.[0].trim();
+  return `${body.slice(0, start + at).trimEnd()}${cites ? ` ${cites}` : ''}${marks}${fence}`;
+}
+
+/** Any of the inline markers. */
+const MARKS = new RegExp(`[${OWN_OPEN}-${OWN_END}]`, 'g');
+
+/** Where a formula opens without closing in `s` (-1 if none). A lone "$5" is a price, not a formula. */
+function openMathAt(s: string): number {
+  let at = -1;
+  let close = '';
+  for (let i = 0; i < s.length; i++) {
+    if (at >= 0) {
+      if (s.startsWith(close, i) && !(close === '$' && s[i - 1] === '\\')) {
+        i += close.length - 1;
+        at = -1;
+      }
+      continue;
+    }
+    const c = s[i];
+    if (c === '\\') {
+      if (s[i + 1] === '(' || s[i + 1] === '[') {
+        at = i;
+        close = s[i + 1] === '(' ? '\\)' : '\\]';
+      }
+      i++;
+    } else if (c === '`') {
+      // Code spans can hold a "$".
+      const run = /^`+/.exec(s.slice(i))![0];
+      const end = s.indexOf(run, i + run.length);
+      if (end < 0) break;
+      i = end + run.length - 1;
+    } else if (c === '$') {
+      const display = s[i + 1] === '$';
+      // As in mathInline: a "$" after a digit or before a space opens nothing.
+      if (!display && (/\d/.test(s[i - 1] ?? '') || /\s/.test(s[i + 1] ?? ' '))) continue;
+      at = i;
+      close = display ? '$$' : '$';
+      i += close.length - 1;
+    }
+  }
+  if (at < 0 || close !== '$') return at;
+  const rest = s.slice(at + 1);
+  return /^[\p{L}\\({]/u.test(rest) || /[\\^_{}=]/.test(rest) ? at : -1;
+}
+
+/**
  * Renders model output. With `citations`, "[n]" becomes a chip; pass
  * `maxCite` (the number of excerpts) so only real excerpt numbers do.
  */
@@ -272,10 +336,11 @@ export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite
 
 /** Statements the notes-only check marked inside lists, quotes and tables. */
 function inlineMarkers(html: string): string {
-  if (!/[\uE000-\uE003]/.test(html)) return html;
+  if (!/[\uE000-\uE004]/.test(html)) return html;
   return html
     .replace(/\uE000/g, `<span class="own-inline" title="${OWN_HEAD}">`)
     .replace(/\uE001/g, `</span><span class="own-tag" title="${OWN_HEAD}">${OWN_TAG}</span>`)
+    .replace(/\uE004/g, '</span>')
     .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note — check it">')
     .replace(/\uE003/g, '</span>');
 }
@@ -297,11 +362,26 @@ export function markdownToEditorHTML(src: string, opts: { stripCitations?: boole
   md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
   md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
   md.renderer.rules.outside_close = () => '</div></div>\n';
+  // The editor has no tables: each row becomes a bullet, its cells joined by " · " (the header row in bold).
+  const blank = (t: Token[], i: number) => !t[i]?.content.trim();
+  const cell = (t: Token[], i: number) => {
+    if (blank(t, i + 1)) return '';
+    for (let j = i - 1; j >= 0 && t[j].type !== 'tr_open'; j--) if (t[j].type === 'inline' && !blank(t, j)) return ' · ';
+    return '';
+  };
+  md.renderer.rules.table_open = () => '<ul>\n';
+  md.renderer.rules.table_close = () => '</ul>\n';
+  for (const rule of ['thead_open', 'thead_close', 'tbody_open', 'tbody_close', 'td_close']) md.renderer.rules[rule] = () => '';
+  md.renderer.rules.tr_open = () => '<li><p>';
+  md.renderer.rules.tr_close = () => '</p></li>\n';
+  md.renderer.rules.th_open = (t, i) => (blank(t, i + 1) ? '' : `${cell(t, i)}<strong>`);
+  md.renderer.rules.th_close = (t, i) => (blank(t, i - 1) ? '' : '</strong>');
+  md.renderer.rules.td_open = (t, i) => cell(t, i);
   if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
-  // Inline own-knowledge marks stay visible in the note as words.
+  // Inline own-knowledge marks stay visible in the note as words (once per table row).
   return md
     .render(normalizeOutside(src), { maxCite: opts.maxCite })
-    .replace(/\uE000/g, '')
+    .replace(/[\uE000\uE004]/g, '')
     .replace(/\uE001/g, ' <em>(not from your notes — the AI’s own knowledge)</em>')
     .replace(/[\uE002\uE003]/g, '');
 }

@@ -82,12 +82,13 @@ export function TopBar() {
               <span>Export</span>
               <ChevronDown size={12} />
             </button>
+            {/* Like the panel itself, only with a note open. */}
+            <button className={cx('top-btn is-ai', assistant && 'is-on')} onClick={() => toggleAssistant()} title={`Assistant  ${MOD}J`}>
+              <Sparkles size={15} />
+              <span>Assistant</span>
+            </button>
           </>
         )}
-        <button className={cx('top-btn is-ai', assistant && 'is-on')} onClick={() => toggleAssistant()} title={`Assistant  ${MOD}J`}>
-          <Sparkles size={15} />
-          <span>Assistant</span>
-        </button>
       </div>
 
       <Popover anchor={exportBtn.current} open={menu === 'export'} onClose={() => setMenu(null)} align="end" className="menu-pop">

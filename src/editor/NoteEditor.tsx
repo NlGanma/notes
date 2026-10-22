@@ -283,10 +283,10 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
 
   // ------------------------------------------------------------ AI hooks
   const assistantAsk = useCallback(
-    (opts: { prompt?: string; mode?: InkAskRequest['mode']; attachments: Omit<Attachment, 'id'>[]; anchor?: string }) => {
+    (opts: { prompt?: string; label?: string; mode?: InkAskRequest['mode']; attachments: Omit<Attachment, 'id'>[]; anchor?: string }) => {
       useUI.getState().setAssistant(true);
       const attachments = opts.attachments.map((a, i) => ({ ...a, id: `att${Date.now()}${i}` }));
-      void useAssistant.getState().ask(noteId, { prompt: opts.prompt, mode: opts.mode, attachments, anchor: opts.anchor });
+      void useAssistant.getState().ask(noteId, { prompt: opts.prompt, label: opts.label, mode: opts.mode, attachments, anchor: opts.anchor });
     },
     [noteId],
   );
@@ -457,6 +457,8 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     const anchor = ($to.depth > 0 ? $to.node(1) : null)?.attrs.id as string | undefined;
     assistantAsk({
       prompt,
+      // The student's bubble names the action they picked, not the instructions the model gets.
+      label: req.action === 'custom' ? undefined : req.label,
       mode: req.action === 'explain' ? 'explain' : 'custom',
       attachments: [{ kind: 'text', label: 'Selected text', text: req.text }],
       anchor,

@@ -97,10 +97,12 @@ export function App() {
   }
 
   const activeNote = view.kind === 'note' ? view.id : null;
+  // The assistant answers about the open note; elsewhere it could only say "Open a note" (Ask your notes has its own).
+  const showAssistant = assistant && !!activeNote;
 
   return (
     <div
-      className={cx('app', !sidebar && 'no-sidebar', assistant && 'has-assistant', dropping && 'is-dropping')}
+      className={cx('app', !sidebar && 'no-sidebar', showAssistant && 'has-assistant', dropping && 'is-dropping')}
       onDragOver={(e) => {
         // Dialogs handle (or refuse) their own drops; never import behind an open dialog, and never
         // let the browser open the file instead.
@@ -153,7 +155,7 @@ export function App() {
             ))}
         </div>
       </main>
-      {assistant && <AssistantPanel />}
+      {showAssistant && <AssistantPanel />}
       <SlashMenu />
       <CommandPalette />
       <SettingsModal />

@@ -66,7 +66,8 @@
 
   /* Layout */
   --sidebar-w: 262px;
-  --assistant-w: 392px;
+  /* Narrower on small windows, so the page isn't squeezed to half size. */
+  --assistant-w: clamp(320px, 30vw, 392px);
   --topbar-h: 46px;
   --page-pad-x: 80px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);

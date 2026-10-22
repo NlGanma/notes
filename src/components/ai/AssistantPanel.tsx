@@ -31,23 +31,16 @@ import { isReviewable } from '../../lib/review/tree';
 import { ClipboardList, Compass, Link2, SearchCheck, Wand2 } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
+import { NOTE_STARTERS } from '../../lib/ai/prompts';
 import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
 const STARTERS = [
-  { icon: <Lightbulb size={14} />, label: 'Explain the key ideas on this page', prompt: 'Explain the key ideas in this note, in plain language.' },
-  {
-    icon: <ListChecks size={14} />,
-    label: 'Quiz me on this note',
-    prompt: 'Quiz me on this note: ask me 3 short questions, one at a time, and wait for my answer.',
-  },
-  {
-    icon: <BookOpenCheck size={14} />,
-    label: 'What should I review before the exam?',
-    prompt: 'Based on this note, what are the most important things to review before an exam? Be specific.',
-  },
-  { icon: <Quote size={14} />, label: 'Summarise in 5 bullets', prompt: 'Summarise this note in 5 bullet points.' },
+  { icon: <Lightbulb size={14} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain },
+  { icon: <ListChecks size={14} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz },
+  { icon: <BookOpenCheck size={14} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam },
+  { icon: <Quote size={14} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets },
 ];
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
@@ -232,8 +225,8 @@ export function AssistantPanel() {
                 <ClipboardList size={15} /> Strictly from your notes
               </div>
               <div className="hw-helper-text">
-                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in a box
-                marked <b>Not from your notes</b>.
+                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in an
+                amber box marked as <b>the AI’s own knowledge</b>.
               </div>
               <div className="hw-helper-sources">
                 {linked.slice(0, 4).map((n) => (
@@ -298,6 +291,7 @@ export function AssistantPanel() {
             onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
             onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
             onForce={m === lastBot && noteId ? () => useAssistant.getState().forceNotes(noteId) : undefined}
+            onLink={m === lastBot && isHomework && noteId ? () => linkNotes(noteId) : undefined}
           >
             {(m.grounding === 'homework' || m.grounding === 'note') && m.status !== 'streaming' && !m.ownOnly && m.sources && m.sources.length > 0 && (
               <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />

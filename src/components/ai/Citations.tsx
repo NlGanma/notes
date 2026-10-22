@@ -11,7 +11,11 @@ export function openSource(src: SourceRef) {
 
 /** First ~420 characters of a passage, without its heading line, ending on a word. */
 export function trimExcerpt(text: string): string {
-  const body = text.replace(/^#{1,6} .*\n?/, '').trim();
+  // A highlight in the notes reads "==like this==" as text: the preview shows just the words.
+  const body = text
+    .replace(/^#{1,6} .*\n?/, '')
+    .replace(/==(?=\S)([^\n]*?\S)==/g, '$1')
+    .trim();
   if (body.length <= 420) return body;
   return body.slice(0, 420).replace(/\s+\S*$/, '') + ' …';
 }

@@ -1,5 +1,5 @@
 import { tokenize } from './rag';
-import { AUTO_HEAD, boxBody, isCitation, normalizeOutside, OWN_CLOSE, OWN_HEAD, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
+import { AUTO_HEAD, boxBody, isCitation, normalizeOutside, OWN_CLOSE, OWN_END, OWN_HEAD, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
 import { needsCitation } from './grounding';
 import { findQuote, isSpanOf, unitsOf } from './quote';
 
@@ -148,7 +148,7 @@ const canon = (t: string) => SYNONYMS[t] ?? t;
 export function plainText(s: string): string {
   return s
     .replace(CITE_G, '')
-    .replace(/[\uE000-\uE003]/g, '')
+    .replace(/[\uE000-\uE004]/g, '')
     .replace(/\*\*|__|==|`/g, '')
     .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$|[.,;:!?])/g, '$1')
     .replace(/^\s*(?:[-*+]|\d{1,3}[.)])\s+(?:\[[ xX]\]\s+)?/, '')
@@ -743,10 +743,15 @@ function cellsOf(row: string): string[] {
     .filter(Boolean);
 }
 
-/** The row with each cell's text between marks. */
-function markCells(row: string, open: string, close: string): string {
+/**
+ * The row with each cell's text between marks. `last` closes the row's last
+ * marked cell, so a row gets its "not in your notes" tag once, not per cell.
+ */
+function markCells(row: string, open: string, close: string, last = close): string {
   const { lead, cells, trail } = rowParts(row);
-  return lead + cells.map((c) => (c.trim() ? c.replace(/^(\s*)([\s\S]*?)(\s*)$/, `$1${open}$2${close}$3`) : c)).join('|') + trail;
+  let end = cells.length - 1;
+  while (end >= 0 && !cells[end].trim()) end--;
+  return lead + cells.map((c, i) => (c.trim() ? c.replace(/^(\s*)([\s\S]*?)(\s*)$/, `$1${open}$2${i === end ? last : close}$3`) : c)).join('|') + trail;
 }
 
 /** The row with the repaired citation in its last cell. */
@@ -881,7 +886,7 @@ export function verifyAnswer(raw: string, ctx: VerifyCtx): VerifyReport {
         count(c);
         lastVerdict = c.verdict;
         // Each cell is marked on its own: one mark around the whole row would shift its cells.
-        if (c.verdict === 'unsupported') out.push(markCells(stripCites(row, maxCite), OWN_OPEN, OWN_CLOSE));
+        if (c.verdict === 'unsupported') out.push(markCells(stripCites(row, maxCite), OWN_OPEN, OWN_END, OWN_CLOSE));
         else if (c.verdict === 'weak') out.push(markCells(row, WEAK_OPEN, WEAK_CLOSE));
         else out.push(c.repaired ? citeRow(stripCites(row, maxCite), c.repaired) : row);
         break;
@@ -958,7 +963,7 @@ export function markersToText(md: string): string {
     .replace(/^:::outside( auto)?\n([\s\S]*?)\n:::[ \t]*$/gm, (_m, auto: string | undefined, body: string) =>
       [`> **${auto ? AUTO_HEAD : OWN_HEAD}**`, ...body.split('\n').map((l) => (l ? `> ${l}` : '>'))].join('\n'),
     )
-    .replace(new RegExp(OWN_OPEN, 'g'), '')
+    .replace(new RegExp(`[${OWN_OPEN}${OWN_END}]`, 'g'), '')
     .replace(new RegExp(OWN_CLOSE, 'g'), ' _(not from your notes)_')
     .replace(/\uE002/g, '')
     .replace(/\uE003/g, ' _(loosely matched \u2014 check your notes)_');
@@ -971,7 +976,9 @@ export function markersToText(md: string): string {
 export function historyForModel(md: string): string {
   return normalizeOutside(md)
     .replace(/^:::outside[^\n]*\n[\s\S]*?\n:::[ \t]*$/gm, '(A part from general knowledge was left out.)')
-    .replace(/\uE000[\s\S]*?\uE001/g, '(left out — not from the notes)')
+    // A table row's cells but the last close without a tag: they go, and the row says it once (its pipes stay).
+    .replace(/\uE000[^\uE000\uE001\uE004]*\uE004/g, '')
+    .replace(/\uE000[^\uE000\uE001]*\uE001/g, '(left out — not from the notes)')
     .replace(/[\uE002\uE003]/g, '')
     .replace(/\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\()/g, '')
     .trim();

@@ -5,7 +5,7 @@ import { verifyStudy } from '../../src/lib/ai/study';
 import { unlabeled } from './fixtures';
 import { chunkNote, chunkVault, tokenize } from '../../src/lib/ai/rag';
 import { buildSeedNotes } from '../../src/lib/vault/seed';
-import { OWN_CLOSE, OWN_OPEN, renderMarkdown } from '../../src/lib/ai/markdown';
+import { markdownToEditorHTML, OWN_CLOSE, OWN_END, OWN_OPEN, renderMarkdown } from '../../src/lib/ai/markdown';
 import { finishGrounded, leaveOutOwn, shownOf } from '../../src/lib/ai/answer';
 import { parseGaps } from '../../src/lib/ai/policy';
 
@@ -341,4 +341,46 @@ test('copying keeps paragraphs apart, and citations are dropped without touching
   const copied = markersToText('Before [1].\n\n:::outside auto\nArchimedes.\n:::\n\nAfter [1].');
   assert.match(copied, /> Archimedes\.\n\nAfter/);
   assert.match(shownOf({ content: 'On $[0, 1]$ it is continuous [1].', grounding: 'library', status: 'stopped' }), /\$\[0, 1\]\$/);
+});
+
+test('a table row not in the notes: every cell stays marked, the tag shows once per row', () => {
+  const raw = [
+    '| Law | What your notes say | Example |',
+    '|---|---|---|',
+    '| Squeeze theorem | $\\lim f = L$ when $g \\le f \\le h$ [1] | $x^2 \\sin(1/x)$ |',
+    '| Archimedes | He proved the squeeze theorem in 250 BC | Syracuse |',
+    '| Newton | He used it in 1687 for the orbits of planets | Principia |',
+  ].join('\n');
+  const shown = finishGrounded(raw, ctx()).shown;
+  const rows = shown.split('\n').filter((l) => l.includes(OWN_OPEN));
+  assert.equal(rows.length, 2, shown);
+  for (const row of rows) {
+    assert.equal(row.split(OWN_CLOSE).length - 1, 1, `one tag: ${row}`);
+    assert.equal(row.split(OWN_OPEN).length - 1, 3, `every cell marked: ${row}`);
+    assert.equal(row.split(OWN_END).length - 1, 2);
+  }
+  const html = renderMarkdown(shown, { citations: true, maxCite: EX.length });
+  assert.equal((html.match(/class="own-tag"/g) ?? []).length, 2, 'one tag per row, not per cell');
+  assert.equal((html.match(/class="own-inline"/g) ?? []).length, 6, 'each cell keeps its marking');
+  assert.ok(!/Archimedes|Syracuse|Newton|Principia|1687/.test(unlabeled(html)), unlabeled(html));
+  // Copied, sent back as history, or left out (strict mode): the rows keep their cells, and say it once.
+  const copied = markersToText(shown);
+  assert.equal((copied.match(/not from your notes/g) ?? []).length, 2, copied);
+  for (const md of [historyForModel(shown), leaveOutOwn(shown)]) {
+    const lines = md.split('\n').filter((l) => l.startsWith('|'));
+    assert.ok(lines.every((l) => l.split('|').length === 5), md);
+    assert.ok(!/Archimedes|Newton/.test(md), md);
+    assert.equal((md.match(/left out/g) ?? []).length, 2, md);
+  }
+});
+
+test('inserted into a note, a table becomes one bullet per row (the editor has no tables), still marked', () => {
+  const ok = 'If $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [1].';
+  const shown = finishGrounded(`${ok}\n\n| Law | Example |\n|---|---|\n| Archimedes proved the squeeze theorem | in 250 BC |`, ctx()).shown;
+  const html = markdownToEditorHTML(shown, { stripCitations: true, maxCite: EX.length });
+  assert.ok(!/<table|<td|<th/.test(html), html);
+  assert.match(html, /<ul>\s*<li><p><strong>Law<\/strong> · <strong>Example<\/strong><\/p><\/li>/);
+  assert.match(html, /<li><p>Archimedes proved the squeeze theorem · in 250 BC <em>\(not from your notes — the AI’s own knowledge\)<\/em><\/p><\/li>/);
+  // Empty cells add no stray separators.
+  assert.match(markdownToEditorHTML('| | A |\n|---|---|\n| x | |'), /<li><p><strong>A<\/strong><\/p><\/li>\s*<li><p>x<\/p><\/li>/);
 });
