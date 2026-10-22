@@ -1,5 +1,19 @@
 import { useUI } from '../state/ui';
-import { closeCurrentTab, currentNoteId, newFolder, newNote, openLibrary, openVaultFolder, redo, revealCurrent, toggleAssistant, undo, zoom } from './commands';
+import {
+  closeCurrentTab,
+  currentNoteId,
+  newClass,
+  newFolder,
+  newHomework,
+  newNote,
+  openLibrary,
+  openVaultFolder,
+  redo,
+  revealCurrent,
+  toggleAssistant,
+  undo,
+  zoom,
+} from './commands';
 import { exportNote, type ExportKind } from './export';
 import { importFiles } from './import';
 import { isElectron } from './platform';
@@ -13,6 +27,12 @@ export function runCommand(cmd: string, arg?: string) {
       break;
     case 'new-folder':
       void newFolder();
+      break;
+    case 'new-homework':
+      newHomework();
+      break;
+    case 'new-class':
+      newClass();
       break;
     case 'palette':
       ui.setPalette(!ui.palette);
@@ -90,6 +110,7 @@ export function handleGlobalKey(e: KeyboardEvent) {
     map['-'] = () => runCommand('zoom', 'out');
     map['0'] = () => runCommand('zoom', 'reset');
     if (e.shiftKey) map['l'] = () => runCommand('library');
+    if (e.shiftKey) map['h'] = () => runCommand('new-homework');
   }
   const fn = map[key];
   if (fn && !(key === 'l' && !e.shiftKey)) {

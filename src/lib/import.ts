@@ -16,7 +16,7 @@ import { currentFolder } from './commands';
  * so the assistant and search can use it.
  */
 
-interface InFile {
+export interface InFile {
   name: string;
   bytes: Uint8Array;
 }
@@ -31,7 +31,7 @@ function stripExt(name: string) {
   return name.replace(/\.[^.]+$/, '');
 }
 
-async function pdfToDoc(bytes: Uint8Array, onProgress?: (p: number, n: number) => void): Promise<JSONContent> {
+export async function pdfToDoc(bytes: Uint8Array, onProgress?: (p: number, n: number) => void): Promise<JSONContent> {
   const pdfjs = await import('pdfjs-dist');
   const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
@@ -111,19 +111,33 @@ async function importOne(file: InFile, folder: string): Promise<string | null> {
   throw new Error(`Unsupported file type: .${ext}`);
 }
 
-async function pickFiles(): Promise<InFile[]> {
+export const SCAN_TYPES = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
+
+/** Turns a scanned worksheet (PDF or photo) into page images to write on. */
+export async function scanToBlocks(file: InFile): Promise<JSONContent[]> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return (await pdfToDoc(file.bytes)).content ?? [];
+  if (!SCAN_TYPES.includes(ext)) throw new Error(`Unsupported file type: .${ext}`);
+  const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+  let bin = '';
+  for (let i = 0; i < file.bytes.length; i += 0x8000) bin += String.fromCharCode(...file.bytes.subarray(i, i + 0x8000));
+  return [{ type: 'image', attrs: { src: `data:${mime};base64,${btoa(bin)}`, alt: 'Page 1', title: file.name } }, { type: 'paragraph' }];
+}
+
+export async function pickFiles(opts: { accept?: string[]; multiple?: boolean; title?: string } = {}): Promise<InFile[]> {
+  const accept = opts.accept ?? ACCEPT;
   if (bridge) {
     const files = await bridge.openFiles({
-      title: 'Import into Nib',
-      filters: [{ name: 'Notes, PDFs and images', extensions: ACCEPT }],
+      title: opts.title ?? 'Import into Nib',
+      filters: [{ name: opts.accept ? 'PDFs and images' : 'Notes, PDFs and images', extensions: accept }],
     });
     return files.map((f) => ({ name: f.name, bytes: base64ToBytes(f.base64) }));
   }
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.multiple = true;
-    input.accept = ACCEPT.map((e) => `.${e}`).join(',');
+    input.multiple = opts.multiple ?? true;
+    input.accept = accept.map((e) => `.${e}`).join(',');
     input.onchange = async () => {
       const out: InFile[] = [];
       for (const f of Array.from(input.files ?? [])) out.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });

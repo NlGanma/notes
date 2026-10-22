@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_URLS, detectServers, listModels, pickDefaults, type ModelInfo, type ProviderConfig, type ProviderKind } from '../lib/ai/providers';
+import { DEFAULT_URLS, detectServers, listModels, pickDefaults, pingServer, type ModelInfo, type ProviderConfig, type ProviderKind } from '../lib/ai/providers';
 
 export interface AISettings {
   provider: ProviderKind;
@@ -31,6 +31,12 @@ interface AIState extends AISettings {
   refresh(): Promise<void>;
   /** Scans the usual ports for Ollama / LM Studio / llama.cpp and configures the first one found. */
   autodetect(): Promise<boolean>;
+  /**
+   * Quiet health check (no "checking" flicker): notices when the server goes
+   * away or comes back, and when models are pulled or removed.
+   * Returns the transition, if any.
+   */
+  heartbeat(): Promise<'lost' | 'restored' | null>;
 }
 
 export const useAI = create<AIState>()(
@@ -70,6 +76,26 @@ export const useAI = create<AIState>()(
           set(patch);
         } catch (e) {
           set({ status: 'offline', models: [], lastError: String((e as Error).message ?? e) });
+        }
+      },
+      heartbeat: async () => {
+        const was = get().status;
+        if (was === 'checking') return null;
+        try {
+          const names = await pingServer(providerConfig(get()));
+          const known = get().models.map((m) => m.name);
+          if (was !== 'online') {
+            await get().refresh();
+            return get().status === 'online' && was === 'offline' ? 'restored' : null;
+          }
+          if (names.length !== known.length || names.some((n) => !known.includes(n))) await get().refresh();
+          return null;
+        } catch (e) {
+          if (was === 'online') {
+            set({ status: 'offline', lastError: String((e as Error).message ?? e) });
+            return 'lost';
+          }
+          return null;
         }
       },
       autodetect: async () => {

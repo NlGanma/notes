@@ -22,6 +22,7 @@ import { useAssistant, type Attachment } from '../state/assistant';
 import { TEXT_ACTIONS } from '../lib/ai/prompts';
 import { blockToText, inkTranscriptText } from '../lib/ai/context';
 import { transcribeImage, transcribeStrokes } from '../lib/ai/actions';
+import { PreemptedError } from '../lib/ai/engine';
 import { captureRegion } from '../lib/ai/vision';
 import { rasterizeStrokes } from '../lib/ink/raster';
 import type { InkTranscript, Stroke, Tool } from '../lib/ink/types';
@@ -561,17 +562,20 @@ function useAutoTranscribe(editor: Editor | null, active: boolean) {
       if (!target) return;
       const { id, strokes } = target as { id: string; strokes: Stroke[] };
       busy = true;
+      let retryIn = 1500;
       try {
         const image = rasterizeStrokes(strokes, null, { maxSide: 1280, minScale: 1.5 });
         if (image) {
-          const t = await transcribeImage(image);
+          // Background priority: a question from the student pre-empts this and it simply retries later.
+          const t = await transcribeImage(image, undefined, 'background');
           if (!cancelled && !editor.isDestroyed) setTranscript(editor, id, t);
         }
-      } catch {
-        failed.add(id);
+      } catch (e) {
+        if (e instanceof PreemptedError) retryIn = 8000;
+        else failed.add(id);
       } finally {
         busy = false;
-        if (!cancelled) timer = setTimeout(check, 1500);
+        if (!cancelled) timer = setTimeout(check, retryIn);
       }
     };
     const onUpdate = () => {

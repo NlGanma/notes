@@ -2,10 +2,10 @@
 
 export type AskMode = 'explain' | 'tutor' | 'solve' | 'check' | 'summarize' | 'custom';
 
-export function noteSystemPrompt(title: string, noteText: string, opts: { hasImage: boolean; visionAvailable: boolean }) {
+export function noteSystemPrompt(title: string, noteText: string, opts: { hasImage: boolean; visionAvailable: boolean; className?: string }) {
   return `You are Nib, a patient, precise study assistant built into a student's notebook. You run entirely on the student's own computer.
 
-Below is the student's current note: typed text, LaTeX math, and transcripts of their handwriting (transcripts can contain recognition mistakes).${
+Below is the student's current note${opts.className ? ` from their class "${opts.className.replace(/"/g, "'")}"` : ''}: typed text, LaTeX math, and transcripts of their handwriting (transcripts can contain recognition mistakes).${
     opts.hasImage ? ' Attached images show exactly what is on the student’s screen — trust the image over any transcript.' : ''
   }${!opts.hasImage && !opts.visionAvailable ? ' You cannot see images; if the question depends on handwriting that has no transcript, say so briefly.' : ''}
 
@@ -75,8 +75,8 @@ export const OUTSIDE_BLOCK_RULE = `If something needed is NOT in the notes, firs
 :::
 Never cite [n] inside that block. If the notes are enough, do not write the block at all.`;
 
-export function librarySystemPrompt(excerpts: string, strict: boolean) {
-  return `You are Nib's library assistant. You answer questions using the student's own notes, which record what was taught in class.
+export function librarySystemPrompt(excerpts: string, strict: boolean, scopeLabel?: string) {
+  return `You are Nib's library assistant. You answer questions using the student's own notes${scopeLabel ? ` for ${scopeLabel}` : ''}, which record what was taught in class.
 
 Rules:
 - Use the information in the excerpts below. Cite every claim with the excerpt number in square brackets, like [2]. Several are fine: [1][3].
@@ -99,8 +99,8 @@ ${excerpts || '(no matching excerpts)'}`;
 const NO_LINKED_NOTES =
   'NOTE: The student has not linked any notes yet, so nothing can be cited. Say so in one sentence, and put any help inside the :::outside block.\n\n';
 
-export function homeworkSystemPrompt(homeworkTitle: string, homeworkText: string, excerpts: string, linkedCount: number) {
-  return `You are Nib's homework helper. The student is doing homework and linked the class notes that cover it. Help them using THOSE NOTES exactly as written — they need answers that match what their teacher taught.
+export function homeworkSystemPrompt(homeworkTitle: string, homeworkText: string, excerpts: string, linkedCount: number, className?: string) {
+  return `You are Nib's homework helper. The student is doing homework${className ? ` for their class "${className.replace(/"/g, "'")}"` : ''} and linked the class notes that cover it. Help them using THOSE NOTES exactly as written — they need answers that match what their teacher taught.
 
 STRICT RULES — follow every one:
 1. Use only the facts, definitions, formulas, methods, notation and wording found in the notes below. Follow the notes' method 1:1: the same steps in the same order with the same symbols. Do not add steps, shortcuts, extra theorems or alternative methods the notes don't show.
@@ -119,8 +119,7 @@ ${excerpts || '(no notes linked)'}`;
 }
 
 export const HOMEWORK_MODES: Record<AskMode, string> = {
-  explain:
-    'Explain how to approach this problem using the method from the notes. Point to the exact excerpt for each idea. Do not give the final answer.',
+  explain: 'Explain how to approach this problem using the method from the notes. Point to the exact excerpt for each idea. Do not give the final answer.',
   tutor: `Act as a tutor, not a solver. Name the part of the notes that applies [n], say which of the student's steps match the notes' method, and give exactly ONE hint for the next step in the notes' method. Do not reveal the final answer.`,
   check: `Check the student's work against the method in the notes, step by step. For each step write "✓" or "✗" with a one-line reason citing the notes [n]. Do not finish the problem for them.`,
   solve: `Solve it step by step using exactly the method in the notes, citing the excerpt for each step [n]. Use the notes' notation. If a step needs something the notes don't contain, say so and put that part in the :::outside block. End with the final answer.`,
@@ -174,3 +173,6 @@ export const SUMMARY_PROMPT = (text: string) =>
 
 export const BULLETS_PROMPT = (text: string) =>
   `Rewrite this paragraph as a clean bulleted list. Keep every fact and all LaTeX. Reply with the Markdown list only.\n\n${text}`;
+
+export const PAGE_OCR_PROMPT = `Transcribe ALL the text on this page exactly as printed or written, in reading order.
+Keep problem numbers and labels. Write math as LaTeX inside $...$. Reply with the transcription only — no commentary, do not solve anything.`;

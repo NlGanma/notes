@@ -27,7 +27,9 @@ import { MessageView } from '../ai/Message';
 import { Popover } from '../common/Popover';
 import { Flashcards, Quiz, parseStudyJSON } from './StudyTools';
 import { cx, plural } from '../../lib/util';
-import { renderMarkdown } from '../../lib/ai/markdown';
+import { openSource, SourcesList, useCitePreview } from '../ai/Citations';
+import { ClassBadge } from '../classes/ClassIcon';
+import { classForFolder, classInfo, listClasses } from '../../lib/classes';
 import { Toggle } from '../../editor/ui/InkToolbar';
 
 const TOOL_ICONS: Record<StudyTool, React.ReactNode> = {
@@ -46,16 +48,20 @@ const TOOL_HINTS: Record<StudyTool, string> = {
   summary: 'What these notes cover, in bullets',
 };
 
-function scopeLabel(s: Scope) {
+export function scopeLabel(s: Scope): string {
   switch (s.kind) {
     case 'all':
       return 'All notes';
-    case 'folder':
-      return s.path.split('/').pop()!;
+    case 'folder': {
+      const fm = useVault.getState().folderMeta;
+      return fm[s.path]?.kind === 'class' ? classInfo(s.path, fm[s.path]).name : s.path.split('/').pop()!;
+    }
     case 'tag':
       return `#${s.tag}`;
     case 'note':
       return useVault.getState().notes[s.id]?.meta.title || 'Untitled';
+    case 'notes':
+      return plural(s.ids.length, 'note');
   }
 }
 
@@ -66,10 +72,15 @@ export function LibraryView() {
   const lib = useLibrary();
   const thread = useAssistant((s) => s.threads[LIBRARY_KEY]);
   const streaming = useAssistant((s) => s.streaming === LIBRARY_KEY);
-  const [scope, setScope] = useState<Scope>({ kind: 'all' });
+  const folderMeta = useVault((s) => s.folderMeta);
+  const scope = useUI((s) => s.libraryScope);
+  const setScope = (sc: Scope) => useUI.getState().set({ libraryScope: sc });
+  const classes = useMemo(() => listClasses(folders, folderMeta), [folders, folderMeta]);
+  const scopeClass = scope.kind === 'folder' && folderMeta[scope.path]?.kind === 'class' ? classInfo(scope.path, folderMeta[scope.path]) : null;
+  const plainFolders = folders.filter((f) => !classForFolder(f, folderMeta));
   const [text, setText] = useState('');
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [preview, setPreview] = useState<{ el: HTMLElement; src: SourceRef } | null>(null);
+  const cite = useCitePreview();
   const scopeBtn = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -92,7 +103,7 @@ export function LibraryView() {
   useEffect(() => {
     const on = (e: Event) => {
       const q = (e as CustomEvent<string>).detail;
-      if (q) void useAssistant.getState().askLibrary({ prompt: q, scope });
+      if (q) void useAssistant.getState().askLibrary({ prompt: q, scope, scopeLabel: scope.kind === 'all' ? undefined : scopeLabel(scope) });
     };
     window.addEventListener('nib:library-ask', on);
     return () => window.removeEventListener('nib:library-ask', on);
@@ -134,11 +145,7 @@ export function LibraryView() {
     const prompt = (q ?? text).trim();
     if (!prompt && !tool) return;
     setText('');
-    void useAssistant.getState().askLibrary({ prompt, scope, tool });
-  };
-
-  const openSource = (src: SourceRef) => {
-    useUI.getState().openNote(src.noteId, { newTab: true, blockId: src.blockId ?? undefined });
+    void useAssistant.getState().askLibrary({ prompt, scope, tool, scopeLabel: scope.kind === 'all' ? undefined : scopeLabel(scope) });
   };
 
   const indexLabel =
@@ -156,13 +163,25 @@ export function LibraryView() {
             <LibraryBig size={20} />
           </span>
           <div>
-            <h1>Ask your notes</h1>
-            <div className="library-sub">Answers come from your own notes — with sources, so you know it’s what was taught in class.</div>
+            <h1>{scopeClass ? `Ask ${scopeClass.name}` : 'Ask your notes'}</h1>
+            <div className="library-sub">
+              {scopeClass
+                ? `Answers come only from your ${scopeClass.name} notes — with sources, so you know it’s what was taught in class.`
+                : 'Answers come from your own notes — with sources, so you know it’s what was taught in class.'}
+            </div>
           </div>
         </div>
         <div className="library-controls">
           <button ref={scopeBtn} className="btn is-ghost" onClick={() => setScopeOpen((v) => !v)}>
-            {scope.kind === 'folder' ? <Folder size={14} /> : scope.kind === 'tag' ? <Hash size={14} /> : <Library size={14} />}
+            {scopeClass ? (
+              <ClassBadge cls={scopeClass} size={18} />
+            ) : scope.kind === 'folder' ? (
+              <Folder size={14} />
+            ) : scope.kind === 'tag' ? (
+              <Hash size={14} />
+            ) : (
+              <Library size={14} />
+            )}
             {scopeLabel(scope)}
             <span className="muted">· {plural(noteCount, 'note')}</span>
             <ChevronDown size={13} />
@@ -210,10 +229,7 @@ export function LibraryView() {
             <LibraryMessage
               key={m.id}
               msg={m}
-              onCite={(n, el) => {
-                const src = m.sources?.find((s) => s.n === n);
-                if (src) setPreview({ el, src });
-              }}
+              onCite={(n, el) => cite.show(n, el, m.sources)}
               onOpen={openSource}
               onRetry={m.role === 'assistant' && m === messages[messages.length - 1] ? () => useAssistant.getState().regenerate(LIBRARY_KEY) : undefined}
             />
@@ -266,8 +282,20 @@ export function LibraryView() {
             <Library size={15} />
             <span className="menu-label">All notes</span>
           </button>
-          {folders.length > 0 && <div className="menu-title">Folders</div>}
-          {folders.map((f) => (
+          {classes.length > 0 && <div className="menu-title">Classes</div>}
+          {classes.map((c) => (
+            <button
+              key={c.path}
+              className={cx('menu-item', scope.kind === 'folder' && scope.path === c.path && 'is-checked')}
+              onClick={() => (setScope({ kind: 'folder', path: c.path }), setScopeOpen(false))}
+            >
+              <ClassBadge cls={c} size={18} />
+              <span className="menu-label">{c.name}</span>
+              {c.code && <span className="menu-hint">{c.code}</span>}
+            </button>
+          ))}
+          {plainFolders.length > 0 && <div className="menu-title">Folders</div>}
+          {plainFolders.map((f) => (
             <button
               key={f}
               className={cx('menu-item', scope.kind === 'folder' && scope.path === f && 'is-checked')}
@@ -292,36 +320,9 @@ export function LibraryView() {
         </div>
       </Popover>
 
-      <Popover anchor={preview?.el ?? null} open={!!preview} onClose={() => setPreview(null)} placement="top" className="cite-pop">
-        {preview && (
-          <div className="cite-preview">
-            <div className="cite-preview-head">
-              <span className="cite-n">{preview.src.n}</span>
-              <span className="cite-preview-title">{preview.src.title}</span>
-              {preview.src.section && <span className="cite-preview-sec">› {preview.src.section}</span>}
-            </div>
-            <div className="cite-preview-text md" dangerouslySetInnerHTML={{ __html: renderMarkdown(trimExcerpt(preview.src.text)) }} />
-            <button
-              className="btn is-small is-secondary"
-              onClick={() => {
-                setPreview(null);
-                openSource(preview.src);
-              }}
-            >
-              Open in note
-            </button>
-          </div>
-        )}
-      </Popover>
+      {cite.popover}
     </div>
   );
-}
-
-/** First ~420 characters of a passage, without its heading line, ending on a word. */
-function trimExcerpt(text: string): string {
-  const body = text.replace(/^#{1,6} .*\n?/, '').trim();
-  if (body.length <= 420) return body;
-  return body.slice(0, 420).replace(/\s+\S*$/, '') + ' …';
 }
 
 /** Turns a section heading into a natural question ("Limit laws" → "What are the limit laws?"). */
@@ -380,25 +381,8 @@ function LibraryMessage({
   }
 
   return (
-    <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry}>
-      {msg.status !== 'streaming' && msg.sources && msg.sources.length > 0 && (
-        <div className="sources">
-          <div className="sources-label">Sources from your notes</div>
-          <div className="sources-list">
-            {msg.sources
-              .filter((s) => new RegExp(`\\[(?:[\\d,\\s]*\\b)?${s.n}\\b`).test(msg.content) || msg.sources!.length <= 3)
-              .map((s) => (
-                <button key={s.n} className="source" onClick={() => onOpen(s)}>
-                  <span className="cite-n">{s.n}</span>
-                  <span className="source-text">
-                    <span className="source-title">{s.title}</span>
-                    <span className="source-sec">{[s.folder, s.section].filter(Boolean).join(' › ') || 'Note'}</span>
-                  </span>
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
+    <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry} onContinue={() => useAssistant.getState().continueReply(LIBRARY_KEY, msg.id)}>
+      {msg.status !== 'streaming' && msg.sources && msg.sources.length > 0 && <SourcesList content={msg.content} sources={msg.sources} />}
     </MessageView>
   );
 }

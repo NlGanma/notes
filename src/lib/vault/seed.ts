@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import type { NoteDoc } from './types';
+import type { FolderMeta, NoteDoc } from './types';
 import type { Stroke } from '../ink/types';
 import seedInk from './seedInk.json';
 import { uid } from '../util';
@@ -62,6 +62,14 @@ function fixInline(): JSONContent {
   }));
   return { ...inlineApprox, attrs: { ...inlineApprox.attrs, strokes: moved, w: maxX - minX, h: maxY - minY, drop: maxY - 74 } };
 }
+
+/** The demo notebooks are set up as classes. */
+export const SEED_CLASSES: Record<string, FolderMeta> = {
+  'Calculus I': { kind: 'class', code: 'MATH 1A', instructor: 'Prof. Alvarez', term: 'Fall 2026', color: '#2160e8', icon: 'sigma' },
+  Biology: { kind: 'class', code: 'BIO 110', instructor: 'Dr. Chen', term: 'Fall 2026', color: '#1f9d4c', icon: 'dna' },
+  Physics: { kind: 'class', code: 'PHYS 7A', instructor: 'Dr. Okafor', term: 'Fall 2026', color: '#7346e6', icon: 'atom' },
+  History: { kind: 'class', code: 'HIST 12', instructor: 'Ms. Patel', term: 'Fall 2026', color: '#e35d14', icon: 'landmark' },
+};
 
 export function buildSeedNotes(): NoteDoc[] {
   const now = Date.now();
@@ -304,5 +312,32 @@ export function buildSeedNotes(): NoteDoc[] {
     { color: '#c98a04' },
   );
 
-  return [welcome, calc, bio, phys, hist];
+  // Homework linked to the lecture it practises. Question 4 needs a rule the
+  // lecture never covered — the helper must say so and mark its answer.
+  const hw = note(
+    'Problem Set 4 — Limits & Continuity',
+    'Calculus I/Homework',
+    ['calculus'],
+    doc(
+      p(i('Show all work. Use the methods from Lecture 4.')),
+      ol(
+        ['Use the squeeze theorem to find ', m('\\lim_{x \\to 0} x^2 \\sin(1/x)'), '.'],
+        ['Where is ', m('f(x) = \\frac{x^2-9}{x-3}'), ' discontinuous? What kind of discontinuity is it?'],
+        ['Show that ', m('x^3 + x - 1 = 0'), ' has a root between ', m('0'), ' and ', m('1'), '.'],
+        ['Use L’Hôpital’s rule to evaluate ', m('\\lim_{x \\to 0} \\frac{1 - \\cos x}{x^2}'), '.'],
+      ),
+      h(2, 'My work'),
+      inkBlock([], 192),
+    ),
+    30 * 60_000,
+    { homework: { sources: [calc.meta.id], folders: [], due: startOfDay(now) + 2 * day + 23 * 3_600_000 + 59 * 60_000 } },
+  );
+
+  return [welcome, calc, bio, phys, hist, hw];
+}
+
+function startOfDay(t: number) {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }

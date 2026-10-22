@@ -17,6 +17,11 @@ const MODELS = [
   { name: 'nomic-embed-text:latest', family: 'nomic-bert', params: '137M', caps: ['embedding'] },
 ];
 
+// Fault injection for the test harness: POST /__mock {fail, status, truncate, firstTokenMs}
+// makes the next chat requests fail, stop early (done_reason "length") or start slowly.
+const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0 };
+const stats = { chat: 0, failed: 0 };
+
 // ------------------------------------------------------------------ helpers
 
 const STOP = new Set(
@@ -91,6 +96,41 @@ function reply(messages) {
   if (/Write a 2–3 sentence summary/i.test(q))
     return 'This note covers the formal definition of a limit, the limit laws and the squeeze theorem, then works through factoring to remove a $0/0$ form. It ends with the three conditions for continuity and the Intermediate Value Theorem.';
   if (/Rewrite this paragraph as a clean bulleted list/i.test(q)) return '- First key point\n- Second key point\n- Third key point';
+
+  if (/Transcribe ALL the text on this page/i.test(q)) {
+    return '**Problem Set 5**\n1. Use the squeeze theorem to find $\\lim_{x \\to 0} x^2 \\cos(1/x)$.\n2. Is $f(x) = \\frac{x^2-4}{x-2}$ continuous at $x = 2$? Explain.';
+  }
+
+  // Homework helper: answers strictly from the linked notes, with an :::outside block for the rest.
+  if (/homework helper/i.test(system)) {
+    const notesPart = system.split("THE STUDENT'S NOTES")[1] ?? '';
+    const ex = parseExcerpts(notesPart);
+    const find = (re) => ex.find((e) => re.test(e.text) || re.test(e.where));
+    const sq = find(/squeeze/i);
+    const laws = find(/limit laws|Sum:|Product:/i);
+    const cont = find(/continuous at|Removable discontinuity/i);
+    const ivt = find(/Intermediate Value/i);
+    const c = (e) => (e ? ` [${e.n}]` : '');
+    if (/has not linked any notes/i.test(system)) {
+      return "You haven't linked any notes to this homework yet, so nothing here can come from your class notes.\n\n:::outside\nIn general, a limit describes the value a function approaches as $x$ gets close to a point. Link the lecture that covers this problem and I'll answer from it instead.\n:::";
+    }
+    if (/h[oô]pital|1 - \\\\?cos|problem 4/i.test(q)) {
+      return `Your notes don't cover L'Hôpital's rule — Lecture 4 only covers limit laws, the squeeze theorem and continuity.\n\nWhat your notes do give you here: the limit laws${c(laws)} and the squeeze theorem${c(sq)}.\n\n:::outside\n**L'Hôpital's rule:** if $\\lim f = \\lim g = 0$, then $\\lim \\frac{f}{g} = \\lim \\frac{f'}{g'}$. Here $\\lim_{x \\to 0} \\frac{1-\\cos x}{x^2} = \\lim_{x \\to 0} \\frac{\\sin x}{2x} = \\frac{1}{2}$.\n:::\n\nAsk your teacher whether you're expected to use it yet.`;
+    }
+    if (/continuous|discontinu|x\^2-9|problem 2/i.test(q)) {
+      return `Your notes define continuity at $a$ by three conditions: $f(a)$ is defined, $\\lim_{x\\to a} f(x)$ exists, and the two are equal${c(cont)}.\n\nThey also name this exact example: $\\frac{x^2-9}{x-3}$ has a removable discontinuity at $x=3$ — a hole that can be filled${c(cont)}.`;
+    }
+    if (/root|x\^3|intermediate|problem 3/i.test(q)) {
+      return `Use the Intermediate Value Theorem from your notes: if $f$ is continuous on $[a,b]$ and $N$ is between $f(a)$ and $f(b)$, there is a $c \\in (a,b)$ with $f(c) = N$${c(ivt)}.\n\nYour notes say it is used to prove equations have roots${c(ivt)}.`;
+    }
+    if (/Act as a tutor/i.test(q)) {
+      return `This is the squeeze theorem from your notes${c(sq)}.\n\n**One hint:** your notes say to trap $f$ between $g(x) \\le f(x) \\le h(x)$ with $\\lim g = \\lim h = L$${c(sq)}. Since $-1 \\le \\sin(1/x) \\le 1$, what two functions could $x^2 \\sin(1/x)$ sit between?`;
+    }
+    if (/Check the student's work against the method/i.test(q)) {
+      return `1. Bounding the function between two others ✓ — that is the first step of the squeeze theorem in your notes${c(sq)}.\n2. Both bounds must have the same limit $L$ ✓${c(sq)}.\n\nMost students forget to say why the bounds hold near $a$.`;
+    }
+    return `Use the squeeze theorem exactly as your notes state it: if $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$${c(sq)}.\n\n1. Bound it: $-x^2 \\le x^2 \\sin(1/x) \\le x^2$, the $g \\le f \\le h$ step in your notes${c(sq)}.\n2. Both bounds go to $0$, so by the squeeze theorem the limit is $0$${c(sq)}.\n\n$$\\boxed{0}$$`;
+  }
 
   // Library (retrieval-augmented) answers cite the excerpts they were given.
   if (/library assistant/i.test(system)) {
@@ -209,6 +249,11 @@ const server = http.createServer(async (req, res) => {
   }
   const log = (extra = '') => process.env.MOCK_QUIET || console.log(`${req.method} ${url.pathname} ${extra}`);
 
+  if (url.pathname === '/__mock') {
+    if (req.method === 'POST') Object.assign(faults, await readBody(req));
+    return json(res, { faults, stats });
+  }
+
   // --- Ollama
   if (url.pathname === '/api/tags') {
     log();
@@ -242,9 +287,25 @@ const server = http.createServer(async (req, res) => {
     log(`${body.model} ${body.messages?.length} msgs${body.messages?.some((x) => x.images?.length) ? ' +image' : ''}`);
     if (!m) return json(res, { error: `model "${body.model}" not found, try pulling it first` }, 404);
     if (body.messages?.some((x) => x.images?.length) && !m.caps.includes('vision')) return json(res, { error: 'model does not support images' }, 400);
-    const text = reply(body.messages ?? []);
+    stats.chat++;
+    if (faults.fail > 0) {
+      faults.fail--;
+      stats.failed++;
+      return json(res, { error: 'server busy, try again' }, faults.status);
+    }
+    let text = reply(body.messages ?? []);
+    let reason = 'stop';
+    if (faults.truncate > 0) {
+      faults.truncate--;
+      text = text.slice(0, Math.max(40, Math.floor(text.length / 2)));
+      reason = 'length';
+    }
     cors(res);
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+    if (faults.firstTokenMs) {
+      await sleep(faults.firstTokenMs);
+      faults.firstTokenMs = 0;
+    }
     if (m.caps.includes('thinking')) {
       for (const t of tokens('The student wants a grounded answer. Let me look at the relevant part of the notes first.')) {
         res.write(JSON.stringify({ model: m.name, message: { role: 'assistant', content: '', thinking: t }, done: false }) + '\n');
@@ -255,7 +316,16 @@ const server = http.createServer(async (req, res) => {
       res.write(JSON.stringify({ model: m.name, message: { role: 'assistant', content: t }, done: false }) + '\n');
       await sleep(DELAY);
     }
-    res.end(JSON.stringify({ model: m.name, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop' }) + '\n');
+    res.end(
+      JSON.stringify({
+        model: m.name,
+        message: { role: 'assistant', content: '' },
+        done: true,
+        done_reason: reason,
+        eval_count: tokens(text).length,
+        eval_duration: tokens(text).length * DELAY * 1e6,
+      }) + '\n',
+    );
     return;
   }
 
@@ -286,13 +356,26 @@ const server = http.createServer(async (req, res) => {
       images: Array.isArray(m.content) ? m.content.filter((p) => p.type === 'image_url').map((p) => p.image_url.url.split(',')[1]) : undefined,
     }));
     log(`${body.model} ${msgs.length} msgs`);
-    const text = reply(msgs);
+    stats.chat++;
+    if (faults.fail > 0) {
+      faults.fail--;
+      stats.failed++;
+      return json(res, { error: { message: 'server busy, try again' } }, faults.status);
+    }
+    let text = reply(msgs);
+    let reason = 'stop';
+    if (faults.truncate > 0) {
+      faults.truncate--;
+      text = text.slice(0, Math.max(40, Math.floor(text.length / 2)));
+      reason = 'length';
+    }
     cors(res);
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     for (const t of tokens(text)) {
       res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: t } }] })}\n\n`);
       await sleep(DELAY);
     }
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\n`);
     res.write('data: [DONE]\n\n');
     return res.end();
   }

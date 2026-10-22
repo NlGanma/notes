@@ -134,6 +134,8 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'New Note', accelerator: 'CmdOrCtrl+N', click: () => send('new-note') },
+        { label: 'New Homework…', accelerator: 'CmdOrCtrl+Shift+H', click: () => send('new-homework') },
+        { label: 'New Class…', click: () => send('new-class') },
         { label: 'New Folder', accelerator: 'CmdOrCtrl+Alt+N', click: () => send('new-folder') },
         { type: 'separator' },
         { label: 'Quick Open…', accelerator: 'CmdOrCtrl+K', click: () => send('palette') },

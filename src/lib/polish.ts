@@ -100,7 +100,9 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       async apply(_e, n) {
         let title = guess;
         if (!title && opts.ai)
-          title = (await complete([{ role: 'user', content: TITLE_PROMPT(text.slice(0, 4000)) }])).text.trim().replace(/^["'#\s]+|["'\s.]+$/g, '');
+          title = (await complete([{ role: 'user', content: TITLE_PROMPT(text.slice(0, 4000)) }], { label: 'Polish · title', maxTokens: 40 })).text
+            .trim()
+            .replace(/^["'#\s]+|["'\s.]+$/g, '');
         if (!title)
           title = text
             .replace(/[#*=>$`[\]]/g, '')
@@ -370,7 +372,8 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       async apply(editor) {
         const at = blockPos(editor, String(longPara.attrs?.id));
         if (!at) return;
-        const md = (await complete([{ role: 'user', content: BULLETS_PROMPT(docToText({ type: 'doc', content: [longPara] })) }])).text;
+        const md = (await complete([{ role: 'user', content: BULLETS_PROMPT(docToText({ type: 'doc', content: [longPara] })) }], { label: 'Polish · bullets' }))
+          .text;
         const nodes = htmlToNodes(editor, markdownToEditorHTML(md));
         if (nodes.length) editor.view.dispatch(editor.state.tr.replaceWith(at.pos, at.pos + at.size, nodes));
       },
@@ -387,7 +390,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       action: 'Suggest',
       ai: 'chat',
       async apply(_e, n) {
-        const res = await complete([{ role: 'user', content: TAGS_PROMPT(text.slice(0, 4000)) }]);
+        const res = await complete([{ role: 'user', content: TAGS_PROMPT(text.slice(0, 4000)) }], { label: 'Polish · tags', json: false, maxTokens: 60 });
         const tags = (parseJSONLoose<string[]>(res.text) ?? res.text.split(/[,\n]/))
           .map((t) => String(t).toLowerCase().replace(/^#/, '').trim().replace(/\s+/g, '-'))
           .filter((t) => t && t.length < 30)
@@ -408,7 +411,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       action: 'Write',
       ai: 'chat',
       async apply(editor) {
-        const md = (await complete([{ role: 'user', content: SUMMARY_PROMPT(text.slice(0, 9000)) }])).text;
+        const md = (await complete([{ role: 'user', content: SUMMARY_PROMPT(text.slice(0, 9000)) }], { label: 'Polish · summary' })).text;
         const nodes = htmlToNodes(editor, markdownToEditorHTML(`**Summary.** ${md.trim()}`));
         const callout = editor.schema.nodes.callout.create({ variant: 'ai' }, nodes.length ? nodes : [editor.schema.nodes.paragraph.create()]);
         editor.view.dispatch(editor.state.tr.insert(0, callout));

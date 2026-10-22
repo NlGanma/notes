@@ -37,6 +37,15 @@ export interface NoteDoc {
 export interface FolderMeta {
   color?: string;
   icon?: string;
+  /** 'class' turns a top-level folder into a class: its notes, homework and Q&A are grouped together. */
+  kind?: 'class';
+  /** Course code, e.g. "MATH 1A". */
+  code?: string;
+  instructor?: string;
+  /** e.g. "Fall 2026". */
+  term?: string;
+  archived?: boolean;
+  created?: number;
 }
 
 export interface VaultSnapshot {

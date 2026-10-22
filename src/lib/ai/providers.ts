@@ -78,6 +78,17 @@ function authHeaders(cfg: ProviderConfig): Record<string, string> {
   return cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {};
 }
 
+/** Cheap liveness check: the model names the server reports, without per-model details. */
+export async function pingServer(cfg: ProviderConfig): Promise<string[]> {
+  const base = normalizeBase(cfg);
+  if (cfg.provider === 'ollama') {
+    const res = await httpJSON<{ models?: { name: string }[] }>(`${base}/api/tags`, { timeout: 3000 });
+    return (res.models ?? []).map((m) => m.name);
+  }
+  const res = await httpJSON<{ data?: { id: string }[] }>(`${base}/models`, { headers: authHeaders(cfg), timeout: 3000 });
+  return (res.data ?? []).map((m) => m.id);
+}
+
 export async function listModels(cfg: ProviderConfig): Promise<ModelInfo[]> {
   const base = normalizeBase(cfg);
   if (cfg.provider === 'ollama') {

@@ -58,7 +58,7 @@ export function blockToText(n: JSONContent, depth = 0): string {
       return (n.content ?? []).map((c) => '> ' + blockToText(c, depth)).join('\n');
     case 'callout': {
       const v = String(n.attrs?.variant ?? 'note');
-      const label = v === 'ai' ? 'AI note' : v[0].toUpperCase() + v.slice(1);
+      const label = v === 'ai' ? 'AI note' : v === 'outside' ? 'General knowledge (not from class)' : v[0].toUpperCase() + v.slice(1);
       return `> **${label}:** ` + (n.content ?? []).map((c) => blockToText(c, depth)).join('\n> ');
     }
     case 'codeBlock':
@@ -96,10 +96,19 @@ export interface DocBlock {
   section: string;
 }
 
-export function docBlocks(doc: JSONContent | undefined): DocBlock[] {
+/** Callouts written by the assistant — not something the student or teacher wrote. */
+export const isAssistantBlock = (b: JSONContent) => b.type === 'callout' && (b.attrs?.variant === 'ai' || b.attrs?.variant === 'outside');
+
+/**
+ * Top-level blocks with their section path. `sourcesOnly` leaves out the
+ * assistant's own callouts, so answers pasted into a note are never cited
+ * back as if they were class material.
+ */
+export function docBlocks(doc: JSONContent | undefined, opts: { sourcesOnly?: boolean } = {}): DocBlock[] {
   const out: DocBlock[] = [];
   const stack: string[] = [];
   for (const b of doc?.content ?? []) {
+    if (opts.sourcesOnly && isAssistantBlock(b)) continue;
     if (b.type === 'heading') {
       const level = Number(b.attrs?.level ?? 1);
       stack.length = Math.max(0, level - 1);

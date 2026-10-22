@@ -6,3 +6,4 @@ release/
 test-results/
 tests/e2e/out/
 .vite/
+*.tsbuildinfo

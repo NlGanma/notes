@@ -9,6 +9,7 @@ import './styles/doc.css';
 import './styles/editor.css';
 import './styles/components.css';
 import './styles/ai.css';
+import './styles/school.css';
 import './styles/print.css';
 import { App } from './App';
 

@@ -114,7 +114,9 @@ export async function searchLibrary(query: string, scope: Scope = { kind: 'all' 
 
 /** Synchronous keyword-only search (instant results while typing). */
 export function keywordSearch(query: string, k = 8): Hit[] {
-  const chunks = chunkVault(Object.values(useVault.getState().notes));
+  // Quick Open searches everything, homework included.
+  const notes = Object.values(useVault.getState().notes);
+  const chunks = chunkVault(notes, { kind: 'notes', ids: notes.map((n) => n.meta.id) });
   return rankChunks(chunks, query, { k });
 }
 

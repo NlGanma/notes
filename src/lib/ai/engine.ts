@@ -157,11 +157,16 @@ export interface RobustRequest extends Omit<ChatRequest, 'model' | 'numCtx'> {
   onStatus?(status: 'loading' | 'retrying' | null): void;
 }
 
+/** The context window actually available: the user's setting capped by what the model supports. */
+export function effectiveCtx(model: string, requested?: number): number {
+  const ai = useAI.getState();
+  const info = ai.models.find((m) => m.name === model);
+  return Math.max(2048, Math.min(requested ?? ai.numCtx, info?.contextLength ?? Infinity));
+}
+
 /** A completion with scheduling, retries, metrics and logging. */
 export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
-  const ai = useAI.getState();
-  const info = ai.models.find((m) => m.name === req.model);
-  const numCtx = Math.min(req.numCtx ?? ai.numCtx, info?.contextLength ?? Infinity);
+  const numCtx = effectiveCtx(req.model, req.numCtx);
   const priority = req.priority ?? 'interactive';
   const entry: ActivityEntry = { id: uid('r'), label: req.label, model: req.model, priority, at: Date.now(), status: 'queued', attempts: 0 };
   useActivity.getState().push(entry);
@@ -187,7 +192,7 @@ export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
           };
           return rawChat(providerConfig(), {
             ...req,
-            numCtx: Number.isFinite(numCtx) ? numCtx : undefined,
+            numCtx,
             signal,
             onToken: (t) => {
               onFirst();
@@ -235,7 +240,11 @@ export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
  * Asks for JSON, validates it, and makes one repair attempt if the model
  * returned something unusable (common with small local models).
  */
-export async function chatJSON<T>(req: RobustRequest, validate: (raw: unknown) => T | null, parse: (text: string) => unknown): Promise<{ value: T; result: RobustResult }> {
+export async function chatJSON<T>(
+  req: RobustRequest,
+  validate: (raw: unknown) => T | null,
+  parse: (text: string) => unknown,
+): Promise<{ value: T; result: RobustResult }> {
   const first = await chatRobust({ ...req, json: true });
   const v1 = validate(parse(first.text));
   if (v1 !== null) return { value: v1, result: first };

@@ -42,6 +42,17 @@ const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e
 const files = walk(vault).map((f) => path.relative(vault, f));
 console.log('     vault files:', files.filter((f) => f.endsWith('.nib')).join(', '));
 check(files.includes(path.join('Calculus I', 'Lecture 4 — Limits & Continuity.nib')), 'notes are plain .nib files inside folders');
+check(
+  files.includes(path.join('Calculus I', 'Homework', 'Problem Set 4 — Limits & Continuity.nib')),
+  'homework is filed in the class’s Homework folder on disk',
+);
+const folderMeta = JSON.parse(fs.readFileSync(path.join(vault, '.nib', 'folders.json'), 'utf8'));
+check(
+  folderMeta['Calculus I']?.kind === 'class' && folderMeta['Calculus I']?.code === 'MATH 1A',
+  'class details are stored with the vault (.nib/folders.json)',
+);
+const hwFile = JSON.parse(fs.readFileSync(path.join(vault, 'Calculus I', 'Homework', 'Problem Set 4 — Limits & Continuity.nib'), 'utf8'));
+check(hwFile.meta.homework?.sources?.length === 1, 'homework links are saved in the note file');
 
 // Local model through the main-process proxy (no CORS involved).
 await win.waitForSelector('.ai-status.is-online', { timeout: 15000 }).catch(() => undefined);
@@ -55,17 +66,30 @@ await win.locator('.note-view:not(.is-hidden) .page-title').press('Enter');
 await win.keyboard.type('Saved straight to disk. ');
 await win.waitForTimeout(1500);
 const renamed = path.join(vault, 'Welcome to Nib (edited).nib');
-if (!fs.existsSync(renamed)) {
-  console.log('     files now:', walk(vault).map((f) => path.relative(vault, f)).join(' | '));
-  for (const f of walk(vault).filter((f) => f.includes('Welcome'))) console.log('     ', path.basename(f), JSON.parse(fs.readFileSync(f, 'utf8')).meta.title);
-  console.log('     ui title:', await win.locator('.note-view:not(.is-hidden) .page-title').inputValue());
-}
 check(fs.existsSync(renamed), 'renaming a note renames its file');
 check(fs.existsSync(renamed) && fs.readFileSync(renamed, 'utf8').includes('Saved straight to disk'), 'typing is saved to the file');
 
 // Real screen capture for "ask about this area".
 const b64 = await win.evaluate(() => window.nib.captureRect({ x: 300, y: 200, width: 300, height: 120 }));
 check(typeof b64 === 'string' && b64.length > 1000, `screen capture returns a PNG (${b64?.length ?? 0} bytes b64)`);
+
+// A new class is a folder on disk; renaming it renames the folder.
+await win.click('.side-section-head button[title="New class"]');
+await win.fill('.class-name-input', 'Statistics');
+await win.click('.class-form button[type="submit"]');
+await win.waitForSelector('.class-hero h1:has-text("Statistics")');
+await win.click('.class-hero .btn.is-primary');
+await win.locator('.note-view:not(.is-hidden) .page-title').fill('Week 1');
+await win.locator('.note-view:not(.is-hidden) .page-title').press('Enter');
+await win.keyboard.type('Mean, median and mode.');
+await win.waitForTimeout(1200);
+check(fs.existsSync(path.join(vault, 'Statistics', 'Week 1.nib')), 'a note made in a class is saved inside the class folder');
+await win.click('.tree-row.is-class:has-text("Statistics")');
+await win.click('.class-edit');
+await win.fill('.class-name-input', 'Stats 101');
+await win.click('.class-form button[type="submit"]');
+await win.waitForTimeout(1200);
+check(fs.existsSync(path.join(vault, 'Stats 101', 'Week 1.nib')) && !fs.existsSync(path.join(vault, 'Statistics')), 'renaming a class renames its folder');
 
 // PDF export of the calculus note.
 await win.click('.tree-row:has-text("Calculus I")');

@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
+  ClipboardList,
+  ClipboardCheck,
   Copy,
+  GraduationCap,
+  Settings2,
   Download,
   FilePlus,
   FileText,
@@ -20,7 +24,9 @@ import { useVault } from '../state/vault';
 import { useUI } from '../state/ui';
 import { openContextMenu, type MenuItem } from './common/ContextMenu';
 import { confirmDialog, pickFolder } from './common/dialogs';
-import { newFolder, newNote } from '../lib/commands';
+import { editClass, newFolder, newHomework, newNote, openClass } from '../lib/commands';
+import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, listClasses } from '../lib/classes';
+import { ClassBadge } from './classes/ClassIcon';
 import { cx } from '../lib/util';
 import type { NoteDoc } from '../lib/vault/types';
 import { exportNote } from '../lib/export';
@@ -39,8 +45,12 @@ function sortNotes(list: NoteDoc[]) {
   return [...list].sort((a, b) => noteTitle(a).localeCompare(noteTitle(b), undefined, { numeric: true }));
 }
 
-/** Obsidian-style folder tree with notes, drag & drop and inline rename. */
-export function FileTree() {
+/**
+ * Obsidian-style folder tree with notes, drag & drop and inline rename.
+ * `roots` limits it to some top-level folders (the sidebar shows classes and
+ * other folders in separate sections); `rootNotes` adds notes at the top level.
+ */
+export function FileTree({ roots, rootNotes = true }: { roots?: string[]; rootNotes?: boolean } = {}) {
   const folders = useVault((s) => s.folders);
   const notes = useVault((s) => s.notes);
   const [rootDrop, setRootDrop] = useState(false);
@@ -56,7 +66,7 @@ export function FileTree() {
     return map;
   }, [notes]);
 
-  const top = folders.filter((f) => !f.includes('/'));
+  const top = roots ?? folders.filter((f) => !f.includes('/'));
 
   return (
     <div
@@ -79,9 +89,7 @@ export function FileTree() {
       {top.map((f) => (
         <FolderRow key={f} path={f} depth={0} folders={folders} byFolder={byFolder} />
       ))}
-      {sortNotes(byFolder.get('') ?? []).map((n) => (
-        <NoteRow key={n.meta.id} note={n} depth={0} />
-      ))}
+      {rootNotes && sortNotes(byFolder.get('') ?? []).map((n) => <NoteRow key={n.meta.id} note={n} depth={0} />)}
     </div>
   );
 }
@@ -91,6 +99,9 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
   const renaming = useUI((s) => s.renaming === `folder:${path}`);
   const view = useUI((s) => s.view);
   const meta = useVault((s) => s.folderMeta[path]);
+  const isClass = meta?.kind === 'class';
+  const isHomeworkDir = useVault((s) => path.endsWith('/' + HOMEWORK_SUBFOLDER) && !!classForFolder(path, s.folderMeta));
+  const cls = isClass ? classInfo(path, meta) : null;
   const [drop, setDrop] = useState(false);
   const name = path.split('/').pop()!;
   const children = folders.filter((f) => f.startsWith(path + '/') && !f.slice(path.length + 1).includes('/'));
@@ -100,31 +111,48 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
     for (const [f, list] of byFolder) if (f === path || f.startsWith(path + '/')) c += list.length;
     return c;
   }, [byFolder, path]);
-  const isActive = view.kind === 'folder' && view.path === path;
+  const isActive = (view.kind === 'folder' || view.kind === 'class') && view.path === path;
+  const homeworkTodo = useMemo(() => {
+    if (!isClass && !isHomeworkDir) return 0;
+    let c = 0;
+    for (const [f, list] of byFolder) if (f === path || f.startsWith(path + '/')) c += list.filter((n) => n.meta.homework && !n.meta.homework.done).length;
+    return c;
+  }, [byFolder, path, isClass, isHomeworkDir]);
+  const inClass = useVault((s) => classForFolder(path, s.folderMeta));
 
   const menu = (): MenuItem[] => [
     { label: 'New note', icon: <FilePlus size={15} />, run: () => newNote(path) },
+    ...(inClass ? [{ label: 'New homework', icon: <ClipboardList size={15} />, run: () => newHomework(inClass) }] : []),
     { label: 'New folder inside', icon: <FolderPlus size={15} />, run: () => void newFolder(path) },
     { separator: true },
+    ...(isClass
+      ? [{ label: 'Class details…', icon: <Settings2 size={15} />, run: () => editClass(path) }]
+      : !path.includes('/')
+        ? [{ label: 'Make this a class', icon: <GraduationCap size={15} />, run: () => (useVault.getState().setIsClass(path, true), editClass(path)) }]
+        : []),
     { label: 'Rename', icon: <Pencil size={15} />, run: () => useUI.getState().set({ renaming: `folder:${path}` }) },
-    {
-      label: 'Colour',
-      icon: <Palette size={15} />,
-      run: () => {
-        const cur = FOLDER_COLORS.indexOf(meta?.color ?? '');
-        useVault.getState().setFolderMeta(path, { color: FOLDER_COLORS[(cur + 1) % FOLDER_COLORS.length] });
-      },
-    },
+    ...(isClass
+      ? []
+      : [
+          {
+            label: 'Colour',
+            icon: <Palette size={15} />,
+            run: () => {
+              const cur = FOLDER_COLORS.indexOf(meta?.color ?? '');
+              useVault.getState().setFolderMeta(path, { color: FOLDER_COLORS[(cur + 1) % FOLDER_COLORS.length] });
+            },
+          },
+        ]),
     { separator: true },
     {
-      label: 'Delete folder',
+      label: isClass ? 'Delete class' : 'Delete folder',
       icon: <Trash2 size={15} />,
       danger: true,
       run: async () => {
         const ok = await confirmDialog({
           title: `Delete “${name}”?`,
           message: count ? `Its ${count} note${count === 1 ? '' : 's'} will move to the Trash, where you can restore them.` : 'The folder is empty.',
-          confirm: 'Delete folder',
+          confirm: isClass ? 'Delete class' : 'Delete folder',
           danger: true,
         });
         if (ok) void useVault.getState().deleteFolder(path);
@@ -135,8 +163,8 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
   return (
     <div className="tree-folder">
       <div
-        className={cx('tree-row is-folder', isActive && 'is-active', drop && 'is-drop')}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        className={cx('tree-row is-folder', isClass && 'is-class', isActive && 'is-active', drop && 'is-drop')}
+        style={{ paddingLeft: 8 + depth * 14, ...(cls ? { ['--class' as string]: cls.color } : {}) }}
         draggable={!renaming}
         onDragStart={(e) => {
           e.dataTransfer.setData(DRAG_FOLDER, path);
@@ -161,8 +189,12 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
           useUI.getState().toggleFolder(path, true);
         }}
         onClick={() => {
-          useUI.getState().setView({ kind: 'folder', path });
-          useUI.getState().toggleFolder(path, true);
+          if (isClass) openClass(path);
+          else if (isHomeworkDir) useUI.getState().setView({ kind: 'class', path: inClass! });
+          else {
+            useUI.getState().setView({ kind: 'folder', path });
+            useUI.getState().toggleFolder(path, true);
+          }
         }}
         onContextMenu={(e) => openContextMenu(e, menu())}
       >
@@ -176,9 +208,13 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
         >
           <ChevronRight size={13} />
         </button>
-        <span className="tree-icon" style={meta?.color ? { color: meta.color } : undefined}>
-          {expanded ? <FolderOpen size={15} /> : <Folder size={15} />}
-        </span>
+        {cls ? (
+          <ClassBadge cls={cls} size={18} />
+        ) : (
+          <span className={cx('tree-icon', isHomeworkDir && 'is-homework')} style={meta?.color ? { color: meta.color } : undefined}>
+            {isHomeworkDir ? <ClipboardList size={15} /> : expanded ? <FolderOpen size={15} /> : <Folder size={15} />}
+          </span>
+        )}
         {renaming ? (
           <InlineRename
             value={name}
@@ -190,7 +226,13 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
         ) : (
           <span className="tree-label">{name}</span>
         )}
-        <span className="tree-count">{count || ''}</span>
+        {homeworkTodo > 0 ? (
+          <span className="tree-due" title={`${homeworkTodo} homework to do`}>
+            {homeworkTodo}
+          </span>
+        ) : (
+          <span className="tree-count">{count || ''}</span>
+        )}
       </div>
       {expanded && (
         <div className="tree-children">
@@ -222,6 +264,28 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
         if (d) useUI.getState().openNote(d.meta.id, { newTab: true });
       },
     },
+    ...(n.meta.homework
+      ? [
+          {
+            label: n.meta.homework.done ? 'Mark as not done' : 'Mark as done',
+            icon: <ClipboardCheck size={15} />,
+            run: () => vault.updateMeta(n.meta.id, { homework: { ...n.meta.homework!, done: !n.meta.homework!.done } }),
+          },
+        ]
+      : [
+          {
+            label: 'Use as homework',
+            icon: <ClipboardList size={15} />,
+            run: () => {
+              // e.g. a worksheet PDF that was imported as a plain note.
+              const fm = useVault.getState().folderMeta;
+              const c = classForFolder(n.meta.folder, fm);
+              vault.updateMeta(n.meta.id, { homework: { sources: [], folders: c ? [c] : [], due: undefined } });
+              if (c) vault.moveNote(n.meta.id, `${c}/${HOMEWORK_SUBFOLDER}`);
+            },
+          },
+        ]),
+    ...moveToClassItems(n),
     {
       label: 'Move to…',
       icon: <FolderInput size={15} />,
@@ -235,6 +299,19 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
     { separator: true },
     { label: 'Move to Trash', icon: <Trash2 size={15} />, danger: true, run: () => trashNote(n.meta.id) },
   ];
+}
+
+/** "Move to <class>" entries, so notes made outside any class can be filed in one click. */
+function moveToClassItems(n: NoteDoc): MenuItem[] {
+  const { folders, folderMeta } = useVault.getState();
+  if (classForFolder(n.meta.folder, folderMeta)) return [];
+  const targets = listClasses(folders, folderMeta);
+  if (!targets.length || targets.length > 6) return [];
+  return targets.map((c) => ({
+    label: `Move to ${c.name}`,
+    icon: <ClassBadge cls={c} size={16} />,
+    run: () => useVault.getState().moveNote(n.meta.id, n.meta.homework ? `${c.path}/${HOMEWORK_SUBFOLDER}` : c.path),
+  }));
 }
 
 export function trashNote(id: string) {
@@ -263,8 +340,8 @@ function NoteRow({ note, depth }: { note: NoteDoc; depth: number }) {
       onAuxClick={(e) => e.button === 1 && useUI.getState().openNote(note.meta.id, { newTab: true })}
       onContextMenu={(e) => openContextMenu(e, noteMenu(note))}
     >
-      <span className="tree-icon is-note" style={note.meta.color ? { color: note.meta.color } : undefined}>
-        <FileText size={14} />
+      <span className={cx('tree-icon is-note', note.meta.homework && 'is-homework')} style={note.meta.color ? { color: note.meta.color } : undefined}>
+        {note.meta.homework ? note.meta.homework.done ? <ClipboardCheck size={14} /> : <ClipboardList size={14} /> : <FileText size={14} />}
       </span>
       {renaming ? (
         <InlineRename

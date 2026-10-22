@@ -17,11 +17,15 @@ import {
   FileDown,
   Folder,
   Cpu,
+  ClipboardList,
+  GraduationCap,
 } from 'lucide-react';
+import { listClasses } from '../lib/classes';
+import { ClassBadge } from './classes/ClassIcon';
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
 import { keywordSearch } from '../state/library';
-import { newFolder, newNote, openLibrary, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
+import { newClass, newFolder, newHomework, newNote, openClass, openLibrary, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
 import { importFiles } from '../lib/import';
 import { exportNote } from '../lib/export';
 import { snippet } from '../lib/ai/rag';
@@ -74,6 +78,7 @@ export function CommandPalette() {
 function Palette() {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
+  const folderMeta = useVault((s) => s.folderMeta);
   const [q, setQ] = useState('');
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -119,7 +124,19 @@ function Palette() {
             run: () => useUI.getState().openNote(h.chunk.noteId, { newTab: true, blockId: h.chunk.blockIds[0] }),
           });
         }
-        for (const f of folders.filter((f) => fuzzyScore(f, term) > 20).slice(0, 3)) {
+        for (const c of listClasses(folders, folderMeta)
+          .filter((c) => fuzzyScore(`${c.name} ${c.code ?? ''}`, term) > 20)
+          .slice(0, 3)) {
+          out.push({
+            id: `class:${c.path}`,
+            group: 'Classes',
+            label: c.name,
+            sub: [c.code, c.instructor].filter(Boolean).join(' · '),
+            icon: <ClassBadge cls={c} size={18} />,
+            run: () => openClass(c.path),
+          });
+        }
+        for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && fuzzyScore(f, term) > 20).slice(0, 3)) {
           out.push({
             id: `folder:${f}`,
             group: 'Folders',
@@ -143,10 +160,44 @@ function Palette() {
     }
 
     const noteId = currentNoteId();
+    const classes = listClasses(folders, folderMeta);
     const commands: Item[] = [
       { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus size={15} />, hint: `${MOD}N`, run: () => newNote() },
+      { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList size={15} />, run: () => newHomework() },
+      { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap size={15} />, run: () => newClass() },
+      {
+        id: 'c:hwlist',
+        group: 'Commands',
+        label: 'Go to Homework',
+        icon: <ClipboardList size={15} />,
+        run: () => useUI.getState().setView({ kind: 'homework' }),
+      },
+      ...classes.flatMap((c) => [
+        {
+          id: `c:note:${c.path}`,
+          group: 'Commands',
+          label: `New ${c.name} note`,
+          icon: <ClassBadge cls={c} size={18} />,
+          run: () => newNote(c.path),
+        },
+        {
+          id: `c:hw:${c.path}`,
+          group: 'Commands',
+          label: `New ${c.name} homework`,
+          icon: <ClassBadge cls={c} size={18} />,
+          run: () => newHomework(c.path),
+        },
+        {
+          id: `c:ask:${c.path}`,
+          group: 'Commands',
+          label: `Ask ${c.name}`,
+          sub: 'Answers only from this class’s notes',
+          icon: <ClassBadge cls={c} size={18} />,
+          run: () => openLibrary({ kind: 'folder', path: c.path }),
+        },
+      ]),
       { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={15} />, run: () => void newFolder() },
-      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: openLibrary },
+      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
       { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <Sparkles size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },
       { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={15} />, run: () => void importFiles() },
       ...(noteId
@@ -188,10 +239,11 @@ function Palette() {
       },
       { id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <Folder size={15} />, run: () => void openVaultFolder() },
     ];
-    const cmdMatches = commands.filter((c) => !term || fuzzyScore(c.label, term) > (isCmd ? 0 : 30));
-    out.push(...(isCmd || !term ? cmdMatches : cmdMatches.slice(0, 3)));
+    // Per-class commands only show up when searched for, so the default list stays short.
+    const cmdMatches = commands.filter((c) => (term ? fuzzyScore(c.label, term) > (isCmd ? 0 : 30) : !c.id.split(':')[2]));
+    out.push(...(isCmd || !term ? cmdMatches : cmdMatches.slice(0, 4)));
     return out;
-  }, [q, notes, folders]);
+  }, [q, notes, folders, folderMeta]);
 
   useEffect(() => setIndex(0), [q]);
   useEffect(() => {

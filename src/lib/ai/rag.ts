@@ -32,7 +32,7 @@ export type Scope =
 const MAX_CHARS = 900;
 
 export function chunkNote(note: NoteDoc): Chunk[] {
-  const blocks = docBlocks(note.content);
+  const blocks = docBlocks(note.content, { sourcesOnly: true });
   const chunks: Chunk[] = [];
   let cur: { section: string; parts: string[]; ids: string[] } | null = null;
   const title = note.meta.title || 'Untitled';
@@ -66,6 +66,8 @@ export function chunkNote(note: NoteDoc): Chunk[] {
 export function chunkVault(notes: NoteDoc[], scope: Scope = { kind: 'all' }): Chunk[] {
   const inScope = notes.filter((n) => {
     if (n.meta.trashed) return false;
+    // Homework holds the student's questions, not class material — only searched when picked explicitly.
+    if (n.meta.homework && scope.kind !== 'note' && scope.kind !== 'notes') return false;
     switch (scope.kind) {
       case 'all':
         return true;
@@ -97,8 +99,9 @@ export function tokenize(text: string): string[] {
     .replace(/\\([a-z]+)/g, ' $1 ')
     .split(/[^a-z0-9α-ωθ]+/)) {
     if (!w || STOP.has(w) || (w.length < 2 && !/\d/.test(w))) continue;
-    if (w.length > 5) w = w.replace(/(ations?|ings?|edly|ed|es|ly)$/, '');
-    else if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) w = w.slice(0, -1);
+    // Light stemming so "limits" matches "limit" and "derivatives" matches "derivative".
+    if (w.length > 5 && /(ations?|ings?|edly|ed|ly)$/.test(w)) w = w.replace(/(ations?|ings?|edly|ed|ly)$/, '');
+    else if (w.length > 3 && w.endsWith('s') && !/(ss|us|is)$/.test(w)) w = w.slice(0, -1);
     out.push(w);
   }
   return out;

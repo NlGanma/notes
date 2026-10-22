@@ -17,16 +17,21 @@ function inline(nodes: JSONContent[] | undefined): string {
   return (nodes ?? [])
     .map((n) => {
       if (n.type === 'text') {
-        let t = (n.text ?? '').replace(/([*_`[\]\\])/g, '\\$1');
-        for (const m of n.marks ?? []) {
+        const raw = n.text ?? '';
+        if (!n.marks?.length) return raw.replace(/([*_`[\]\\])/g, '\\$1');
+        // Emphasis markers must hug the text: "** bold**" is not bold in Markdown.
+        const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(raw)!;
+        if (!core) return raw;
+        let t = core.replace(/([*_`[\]\\])/g, '\\$1');
+        for (const m of n.marks) {
           if (m.type === 'bold') t = `**${t}**`;
           else if (m.type === 'italic') t = `*${t}*`;
           else if (m.type === 'strike') t = `~~${t}~~`;
-          else if (m.type === 'code') t = '`' + (n.text ?? '') + '`';
+          else if (m.type === 'code') t = '`' + core + '`';
           else if (m.type === 'highlight') t = `==${t}==`;
           else if (m.type === 'link') t = `[${t}](${m.attrs?.href ?? ''})`;
         }
-        return t;
+        return lead + t + trail;
       }
       if (n.type === 'mathInline') return `$${n.attrs?.latex ?? ''}$`;
       if (n.type === 'hardBreak') return '  \n';

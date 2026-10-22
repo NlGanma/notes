@@ -3,12 +3,17 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { NoteGrid } from './components/NoteGrid';
 import { LibraryView } from './components/library/LibraryView';
+import { ClassView } from './components/classes/ClassView';
+import { ClassDialog } from './components/classes/ClassDialog';
+import { HomeworkView } from './components/homework/HomeworkView';
+import { NewHomeworkDialog } from './components/homework/NewHomeworkDialog';
+import { LinkNotesDialog } from './components/homework/LinkNotesDialog';
 import { AssistantPanel } from './components/ai/AssistantPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { SettingsModal } from './components/SettingsModal';
 import { ContextMenuHost } from './components/common/ContextMenu';
 import { DialogHost } from './components/common/dialogs';
-import { Toasts } from './components/common/toast';
+import { Toasts, toast } from './components/common/toast';
 import { NoteEditor } from './editor/NoteEditor';
 import { SlashMenu } from './editor/ui/SlashMenu';
 import { useVault } from './state/vault';
@@ -23,6 +28,7 @@ export function App() {
   const ready = useVault((s) => s.ready);
   const error = useVault((s) => s.error);
   const notes = useVault((s) => s.notes);
+  const folderMeta = useVault((s) => s.folderMeta);
   const { view, tabs, sidebar, assistant } = useUI();
   const [dropping, setDropping] = useState(false);
 
@@ -31,6 +37,15 @@ export function App() {
     document.documentElement.classList.toggle('is-electron', isElectron);
     void useVault.getState().init();
     void useAI.getState().refresh();
+    // Keep an eye on the local model server: reconnect on its own when it comes back.
+    let beat: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      const change = await useAI.getState().heartbeat();
+      if (change === 'lost') toast.error('Local AI disconnected', 'Nib will reconnect automatically when the model server is back.');
+      if (change === 'restored') toast.success('Local AI reconnected', useAI.getState().chatModel);
+      beat = setTimeout(tick, useAI.getState().status === 'online' ? 30_000 : 10_000);
+    };
+    beat = setTimeout(tick, 10_000);
     const onUnload = () => useVault.getState().flush(true);
     window.addEventListener('beforeunload', onUnload);
     const off = bridge?.onMenu((cmd, arg) => runCommand(cmd, arg));
@@ -38,6 +53,7 @@ export function App() {
     return () => {
       window.removeEventListener('beforeunload', onUnload);
       window.removeEventListener('keydown', handleGlobalKey, true);
+      clearTimeout(beat);
       off?.();
     };
   }, []);
@@ -48,10 +64,11 @@ export function App() {
     const ui = useUI.getState();
     const valid = ui.tabs.filter((id) => notes[id] && !notes[id].meta.trashed);
     const v = ui.view;
+    if (v.kind === 'class' && folderMeta[v.path]?.kind !== 'class') ui.set({ view: { kind: 'home' } });
     if (v.kind === 'note' && (!notes[v.id] || notes[v.id].meta.trashed)) ui.set({ view: { kind: 'home' }, tabs: valid });
     else if (v.kind === 'note' && !valid.includes(v.id)) ui.set({ tabs: [...valid, v.id] });
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
-  }, [ready, notes]);
+  }, [ready, notes, folderMeta]);
 
   if (!ready) {
     return (
@@ -89,7 +106,14 @@ export function App() {
         <div className="content">
           {error && <div className="vault-error">Couldn’t open the vault: {error}</div>}
           {view.kind === 'library' && <LibraryView />}
-          {view.kind !== 'note' && view.kind !== 'library' && <NoteGrid view={view} />}
+          {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} />}
+          {view.kind === 'homework' && <HomeworkView filter={view.filter} />}
+          {(view.kind === 'home' ||
+            view.kind === 'tag' ||
+            view.kind === 'favorites' ||
+            view.kind === 'recent' ||
+            view.kind === 'trash' ||
+            (view.kind === 'folder' && folderMeta[view.path]?.kind !== 'class')) && <NoteGrid view={view} />}
           {tabs
             .filter((id) => notes[id] && !notes[id].meta.trashed)
             .map((id) => (
@@ -101,6 +125,9 @@ export function App() {
       <SlashMenu />
       <CommandPalette />
       <SettingsModal />
+      <ClassDialog />
+      <NewHomeworkDialog />
+      <LinkNotesDialog />
       <DialogHost />
       <ContextMenuHost />
       <Toasts />

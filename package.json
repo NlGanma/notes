@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tests/unit --noEmit",
     "preview": "vite preview --port 4173",
     "app": "electron .",
     "app:dev": "concurrently -k -n vite,electron \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && cross-env NIB_DEV_URL=http://localhost:5173 electron .\"",

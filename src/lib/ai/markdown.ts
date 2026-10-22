@@ -101,10 +101,60 @@ function citations(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
+const OUTSIDE_OPEN = /^\s*:{3,}\s*(?:outside|general(?:[- ]knowledge)?|not[- ]from[- ](?:your[- ]|the[- ])?notes)\b[^\n]*$/i;
+const FENCE_CLOSE = /^\s*:{3,}\s*$/;
+
+/**
+ * Tidies the "not from your notes" fences models write: accepts a few
+ * spellings, and closes a block that is still open (while streaming, or when
+ * the model forgot) so the box shows up immediately.
+ */
+export function normalizeOutside(src: string): string {
+  const lines = src.split('\n');
+  let open = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!open && OUTSIDE_OPEN.test(lines[i])) {
+      lines[i] = ':::outside';
+      open = true;
+    } else if (open && FENCE_CLOSE.test(lines[i])) {
+      lines[i] = ':::';
+      open = false;
+    }
+  }
+  return open ? `${lines.join('\n')}\n:::` : lines.join('\n');
+}
+
+/** Block rule for `:::outside … :::` containers. */
+function outsideBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+  const lineText = (l: number) => state.src.slice(state.bMarks[l] + state.tShift[l], state.eMarks[l]);
+  if (!/^:::outside\s*$/.test(lineText(startLine))) return false;
+  if (silent) return true;
+  let line = startLine + 1;
+  while (line < endLine && !/^:::\s*$/.test(lineText(line))) line++;
+  const open = state.push('outside_open', 'div', 1);
+  open.block = true;
+  open.map = [startLine, line];
+  const oldParent = state.parentType;
+  const oldMax = state.lineMax;
+  state.parentType = 'outside' as never;
+  state.lineMax = line;
+  state.md.block.tokenize(state, startLine + 1, line);
+  state.parentType = oldParent;
+  state.lineMax = oldMax;
+  const close = state.push('outside_close', 'div', -1);
+  close.block = true;
+  state.line = Math.min(line + 1, endLine);
+  return true;
+}
+
 function build(withCitations: boolean) {
   const md = new MarkdownIt({ html: false, linkify: true, breaks: true, typographer: true });
   md.inline.ruler.before('escape', 'math_inline', mathInline);
   md.block.ruler.before('fence', 'math_block', mathBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
+  md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
+  md.renderer.rules.outside_open = () =>
+    '<div class="outside-notes"><div class="outside-head"><span class="outside-icon" aria-hidden="true"></span>Not from your notes · general knowledge</div>\n';
+  md.renderer.rules.outside_close = () => '</div>\n';
   md.renderer.rules.math_inline = (tokens, idx) => renderMath(tokens[idx].content, false);
   md.renderer.rules.math_display_inline = (tokens, idx) => `<span class="md-display">${renderMath(tokens[idx].content, true)}</span>`;
   md.renderer.rules.math_block = (tokens, idx) => `<div class="md-display">${renderMath(tokens[idx].content, true)}</div>\n`;
@@ -133,7 +183,7 @@ const plain = build(false);
 const cited = build(true);
 
 export function renderMarkdown(src: string, opts: { citations?: boolean } = {}): string {
-  return (opts.citations ? cited : plain).render(src);
+  return (opts.citations ? cited : plain).render(normalizeOutside(src));
 }
 
 /** Converts model markdown into HTML the editor can parse (math → math nodes). */
@@ -145,6 +195,10 @@ export function markdownToEditorHTML(src: string): string {
   md.renderer.rules.math_inline = (t, i) => `<span data-type="math-inline" data-latex="${esc(t[i].content)}"></span>`;
   md.renderer.rules.math_display_inline = (t, i) => `<span data-type="math-inline" data-latex="${esc(t[i].content)}"></span>`;
   md.renderer.rules.math_block = (t, i) => `<div data-type="math-block" data-latex="${esc(t[i].content)}"></div>`;
+  // General-knowledge passages stay visibly marked when inserted into a note.
+  md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
+  md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
+  md.renderer.rules.outside_close = () => '</div></div>\n';
   // Strip citation markers from inserted text.
-  return md.render(src.replace(/\s?\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()/g, ''));
+  return md.render(normalizeOutside(src).replace(/\s?\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()/g, ''));
 }

@@ -134,9 +134,7 @@ export function docToHTML(doc: JSONContent | undefined, o: HtmlOptions = {}): st
       // Ink is anchored to the block's border box; headings sit below their top margin.
       const level = Number(b.attrs?.level ?? 1);
       const inkTop = b.type === 'heading' && i > 0 ? (level === 3 ? 'calc(var(--line) * 0.5)' : 'var(--line)') : '0px';
-      const svg = ink.length
-        ? `<svg class="blk-ink" width="1" height="1" aria-hidden="true" style="top:${inkTop}">${strokesToSvgMarkup(ink)}</svg>`
-        : '';
+      const svg = ink.length ? `<svg class="blk-ink" width="1" height="1" aria-hidden="true" style="top:${inkTop}">${strokesToSvgMarkup(ink)}</svg>` : '';
       const pad = o.pads?.[i];
       const style = pad && pad > 0.25 ? ` style="padding-bottom:${Math.round(pad * 100) / 100}px"` : '';
       return `<div class="blk blk-${attr(b.type)}"${style}>${block(b, o)}${svg}</div>`;

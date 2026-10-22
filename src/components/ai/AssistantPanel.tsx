@@ -23,6 +23,10 @@ import { useAI, visionModel } from '../../state/ai';
 import { useAssistant, type ChatMsg } from '../../state/assistant';
 import { useTools } from '../../state/tools';
 import { MessageView } from './Message';
+import { SourcesList, useCitePreview } from './Citations';
+import { homeworkSources } from '../../lib/homework';
+import { linkNotes } from '../../lib/commands';
+import { ClipboardList, Compass, Link2, SearchCheck, Wand2 } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
 import { cx } from '../../lib/util';
@@ -45,6 +49,19 @@ const STARTERS = [
 ];
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
+
+/** Homework quick actions — each one answers strictly from the linked notes. */
+const HOMEWORK_STARTERS: { icon: React.ReactNode; label: string; mode: 'explain' | 'tutor' | 'check' | 'solve'; prompt: string }[] = [
+  {
+    icon: <Compass size={14} />,
+    label: 'How do I approach this?',
+    mode: 'explain',
+    prompt: 'How should I approach this problem, using the method from my notes?',
+  },
+  { icon: <Lightbulb size={14} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
+  { icon: <SearchCheck size={14} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
+  { icon: <Wand2 size={14} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
+];
 
 /** Inserts a reply into the note as an "assistant" callout, right after the block it was about. */
 export function insertReply(noteId: string, md: string, anchor?: string) {
@@ -92,6 +109,10 @@ export function AssistantPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const stick = useRef(true);
+  const allNotes = useVault((s) => s.notes);
+  const isHomework = !!note?.meta.homework;
+  const linked = note && isHomework ? homeworkSources(note, allNotes) : [];
+  const cite = useCitePreview();
 
   const messages: ChatMsg[] = thread?.messages ?? [];
 
@@ -145,12 +166,18 @@ export function AssistantPanel() {
             <Sparkles size={15} />
           </span>
           <div>
-            <div className="assistant-name">Assistant</div>
+            <div className="assistant-name">{isHomework ? 'Homework helper' : 'Assistant'}</div>
             <div className="assistant-sub">
               {note ? (
-                <>
-                  Reading <b>{note.meta.title || 'Untitled'}</b>
-                </>
+                isHomework ? (
+                  <>
+                    Answers only from <b>{linked.length === 1 ? '1 linked note' : `${linked.length} linked notes`}</b>
+                  </>
+                ) : (
+                  <>
+                    Reading <b>{note.meta.title || 'Untitled'}</b>
+                  </>
+                )
               ) : (
                 'Open a note to ask about it'
               )}
@@ -192,7 +219,47 @@ export function AssistantPanel() {
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
       >
-        {!messages.length && (
+        {!messages.length && isHomework && note && (
+          <div className="assistant-empty is-homework">
+            <div className="hw-helper-card">
+              <div className="hw-helper-head">
+                <ClipboardList size={15} /> Strictly from your notes
+              </div>
+              <div className="hw-helper-text">
+                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in a box
+                marked <b>Not from your notes</b>.
+              </div>
+              <div className="hw-helper-sources">
+                {linked.slice(0, 4).map((n) => (
+                  <button key={n.meta.id} className="hw-helper-source" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
+                    <FileText size={12} /> {n.meta.title || 'Untitled'}
+                  </button>
+                ))}
+                {linked.length > 4 && <span className="hw-helper-more">+{linked.length - 4} more</span>}
+                <button className="hw-helper-link" onClick={() => linkNotes(note.meta.id)}>
+                  <Link2 size={12} /> {linked.length ? 'Change' : 'Link notes'}
+                </button>
+              </div>
+            </div>
+            <div className="assistant-empty-sub">Select a problem (or lasso your handwriting) first to point at it, then pick:</div>
+            <div className="starters">
+              {HOMEWORK_STARTERS.map((s) => (
+                <button
+                  key={s.label}
+                  className="starter"
+                  onClick={() => {
+                    stick.current = true;
+                    void useAssistant.getState().ask(note.meta.id, { prompt: s.prompt, mode: s.mode });
+                  }}
+                >
+                  {s.icon}
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!messages.length && !isHomework && (
           <div className="assistant-empty">
             <div className="assistant-empty-title">Ask anything about this page</div>
             <div className="assistant-empty-sub">
@@ -213,9 +280,16 @@ export function AssistantPanel() {
           <MessageView
             key={m.id}
             msg={m}
+            citations={m.grounding === 'homework'}
+            onCite={(n, el) => cite.show(n, el, m.sources)}
             onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, m.content, anchorFor(messages, m)) : undefined}
             onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
-          />
+            onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
+          >
+            {m.grounding === 'homework' && m.status !== 'streaming' && m.sources && m.sources.length > 0 && (
+              <SourcesList content={m.content} sources={m.sources} label="From your notes" />
+            )}
+          </MessageView>
         ))}
         {tutorActive && !streaming && lastBot && lastBot.status === 'done' && (
           <div className="followups">
@@ -265,7 +339,15 @@ export function AssistantPanel() {
           rows={1}
           value={draft.text}
           disabled={!noteId}
-          placeholder={!noteId ? 'Open a note to start' : draft.mode === 'tutor' ? 'Describe where you’re stuck…' : 'Ask about this note…'}
+          placeholder={
+            !noteId
+              ? 'Open a note to start'
+              : draft.mode === 'tutor'
+                ? 'Describe where you’re stuck…'
+                : isHomework
+                  ? 'Ask about a problem…'
+                  : 'Ask about this note…'
+          }
           onChange={(e) => useAssistant.getState().setDraft(key, { text: e.target.value })}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -303,6 +385,7 @@ export function AssistantPanel() {
           )}
         </div>
       </div>
+      {cite.popover}
     </aside>
   );
 }

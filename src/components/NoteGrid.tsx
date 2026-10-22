@@ -7,7 +7,9 @@ import type { NoteDoc } from '../lib/vault/types';
 import { docToHTML } from '../lib/doc/toHTML';
 import { docToText } from '../lib/ai/context';
 import { cx, formatRelativeTime, hashString, plural } from '../lib/util';
-import { newFolder, newNote } from '../lib/commands';
+import { newFolder, newNote, openClass } from '../lib/commands';
+import { classHomework, classInfo, classNotes } from '../lib/classes';
+import { ClassGlyph } from './classes/ClassIcon';
 import { noteMenu, noteTitle, FOLDER_COLORS } from './FileTree';
 import { openContextMenu } from './common/ContextMenu';
 import { confirmDialog } from './common/dialogs';
@@ -76,7 +78,7 @@ export function NoteGrid({ view }: { view: View }) {
     else {
       l = l.filter((n) => !n.meta.trashed);
       if (view.kind === 'folder') l = l.filter((n) => n.meta.folder === view.path);
-      if (view.kind === 'home') l = l.filter(() => true);
+      if (view.kind === 'home') l = l.filter((n) => !n.meta.homework);
       if (view.kind === 'tag') l = l.filter((n) => n.meta.tags.includes(view.tag));
       if (view.kind === 'favorites') l = l.filter((n) => n.meta.pinned);
     }
@@ -189,35 +191,39 @@ export function NoteGrid({ view }: { view: View }) {
 
       {subfolders.length > 0 && (
         <div className="notebooks">
-          {subfolders.map((f) => (
-            <button
-              key={f}
-              className="notebook"
-              onClick={() => {
-                useUI.getState().setView({ kind: 'folder', path: f });
-                useUI.getState().toggleFolder(f, true);
-              }}
-              onContextMenu={(e) =>
-                openContextMenu(e, [
-                  { label: 'New note here', icon: <Plus size={15} />, run: () => newNote(f) },
-                  {
-                    label: 'Change colour',
-                    icon: <span className="menu-dot" style={{ background: coverColor(f, folderMeta[f]?.color) }} />,
-                    run: () => {
-                      const cur = FOLDER_COLORS.indexOf(folderMeta[f]?.color ?? '');
-                      useVault.getState().setFolderMeta(f, { color: FOLDER_COLORS[(cur + 1) % FOLDER_COLORS.length] || COVER_PALETTE[0] });
+          {subfolders.map((f) =>
+            folderMeta[f]?.kind === 'class' ? (
+              <ClassCover key={f} path={f} />
+            ) : (
+              <button
+                key={f}
+                className="notebook"
+                onClick={() => {
+                  useUI.getState().setView({ kind: 'folder', path: f });
+                  useUI.getState().toggleFolder(f, true);
+                }}
+                onContextMenu={(e) =>
+                  openContextMenu(e, [
+                    { label: 'New note here', icon: <Plus size={15} />, run: () => newNote(f) },
+                    {
+                      label: 'Change colour',
+                      icon: <span className="menu-dot" style={{ background: coverColor(f, folderMeta[f]?.color) }} />,
+                      run: () => {
+                        const cur = FOLDER_COLORS.indexOf(folderMeta[f]?.color ?? '');
+                        useVault.getState().setFolderMeta(f, { color: FOLDER_COLORS[(cur + 1) % FOLDER_COLORS.length] || COVER_PALETTE[0] });
+                      },
                     },
-                  },
-                ])
-              }
-            >
-              <span className="notebook-cover" style={{ ['--cover' as string]: coverColor(f, folderMeta[f]?.color) }}>
-                <span className="notebook-spine" />
-                <span className="notebook-label">{f.split('/').pop()}</span>
-              </span>
-              <span className="notebook-meta">{plural(folderCount(f), 'note')}</span>
-            </button>
-          ))}
+                  ])
+                }
+              >
+                <span className="notebook-cover" style={{ ['--cover' as string]: coverColor(f, folderMeta[f]?.color) }}>
+                  <span className="notebook-spine" />
+                  <span className="notebook-label">{f.split('/').pop()}</span>
+                </span>
+                <span className="notebook-meta">{plural(folderCount(f), 'note')}</span>
+              </button>
+            ),
+          )}
         </div>
       )}
 
@@ -237,6 +243,34 @@ export function NoteGrid({ view }: { view: View }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** A class on the home page: a notebook cover with its icon, code and what's due. */
+function ClassCover({ path }: { path: string }) {
+  const notes = useVault((s) => s.notes);
+  const meta = useVault((s) => s.folderMeta[path]);
+  const cls = classInfo(path, meta);
+  const count = classNotes(path, notes).length;
+  const due = classHomework(path, notes).filter((n) => !n.meta.homework!.done).length;
+  return (
+    <button className="notebook is-class" onClick={() => openClass(path)}>
+      <span className="notebook-cover" style={{ ['--cover' as string]: cls.color }}>
+        <span className="notebook-spine" />
+        <span className="notebook-label">
+          {cls.name}
+          {cls.code && <span className="notebook-code">{cls.code}</span>}
+        </span>
+        <span className="notebook-glyph">
+          <ClassGlyph icon={cls.icon} size={30} />
+        </span>
+        {due > 0 && <span className="notebook-due">{due} due</span>}
+      </span>
+      <span className="notebook-meta">
+        {plural(count, 'note')}
+        {cls.instructor ? ` · ${cls.instructor}` : ''}
+      </span>
+    </button>
   );
 }
 
@@ -268,7 +302,7 @@ function trashMenu(n: NoteDoc) {
   ];
 }
 
-const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc; trash: boolean }) {
+export const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc; trash: boolean }) {
   return (
     <div
       className="note-card"
@@ -316,7 +350,7 @@ const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc; trash:
   );
 });
 
-function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) {
+export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) {
   const snippet = useMemo(
     () =>
       docToText(note.content)

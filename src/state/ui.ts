@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Scope } from '../lib/ai/rag';
 
 export type View =
   | { kind: 'home' }
@@ -9,7 +10,15 @@ export type View =
   | { kind: 'favorites' }
   | { kind: 'recent' }
   | { kind: 'trash' }
-  | { kind: 'library' };
+  | { kind: 'library' }
+  | { kind: 'class'; path: string }
+  | { kind: 'homework'; filter?: 'todo' | 'done' };
+
+/** Modal dialogs that several places can open. */
+export type Dialog =
+  | { kind: 'class'; path: string | null }
+  | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
+  | { kind: 'linkNotes'; noteId: string };
 
 export type SettingsSection = 'ai' | 'writing' | 'vault' | 'shortcuts' | 'about';
 
@@ -30,6 +39,10 @@ export interface UIState {
   reveal: { noteId: string; blockId: string; at: number } | null;
   /** Sidebar item being renamed inline ("folder:<path>" or "note:<id>"). */
   renaming: string | null;
+  /** What "Ask your notes" searches. */
+  libraryScope: Scope;
+  dialog: Dialog | null;
+  openDialog(d: Dialog | null): void;
   openNote(id: string, opts?: { newTab?: boolean; focusTitle?: boolean; blockId?: string }): void;
   closeTab(id: string): void;
   setView(v: View): void;
@@ -58,6 +71,9 @@ export const useUI = create<UIState>()(
       focusTitle: null,
       reveal: null,
       renaming: null,
+      libraryScope: { kind: 'all' },
+      dialog: null,
+      openDialog: (d) => set({ dialog: d }),
       openNote: (id, opts = {}) => {
         const { tabs, view } = get();
         let next = tabs;
@@ -107,6 +123,7 @@ export const useUI = create<UIState>()(
         expanded: s.expanded,
         gridMode: s.gridMode,
         sort: s.sort,
+        libraryScope: s.libraryScope,
       }),
     },
   ),

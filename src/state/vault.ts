@@ -36,7 +36,23 @@ export interface VaultState {
   moveFolder(path: string, parent: string): Promise<string | null>;
   deleteFolder(path: string): Promise<void>;
   setFolderMeta(path: string, meta: FolderMeta): void;
+  /** Creates a class (a top-level folder with class metadata) and returns its path. */
+  createClass(info: ClassDraft): Promise<string>;
+  /** Updates a class's details; renames its folder when the name changes. Returns the (new) path. */
+  updateClass(path: string, info: Partial<ClassDraft>): Promise<string>;
+  /** Turns an existing folder into a class, or a class back into a plain folder. */
+  setIsClass(path: string, isClass: boolean): void;
   flush(sync?: boolean): void;
+}
+
+export interface ClassDraft {
+  name: string;
+  code?: string;
+  instructor?: string;
+  term?: string;
+  color?: string;
+  icon?: string;
+  archived?: boolean;
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -218,6 +234,30 @@ export const useVault = create<VaultState>((set, get) => {
       get().backend?.saveFolderMeta(folderMeta);
     },
 
+    async createClass(info) {
+      const name = info.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'New class';
+      const path = await get().createFolder(name);
+      const { name: _n, ...rest } = info;
+      void _n;
+      get().setFolderMeta(path, { ...clean(rest), kind: 'class', created: Date.now() });
+      return path;
+    },
+
+    async updateClass(path, info) {
+      let target = path;
+      if (info.name !== undefined && info.name.trim() && info.name.trim() !== path.split('/').pop()) {
+        target = (await get().renameFolder(path, info.name)) ?? path;
+      }
+      const { name: _n, ...rest } = info;
+      void _n;
+      get().setFolderMeta(target, { ...rest, kind: 'class' });
+      return target;
+    },
+
+    setIsClass(path, isClass) {
+      get().setFolderMeta(path, isClass ? { kind: 'class', created: get().folderMeta[path]?.created ?? Date.now() } : { kind: undefined });
+    },
+
     flush(sync = false) {
       const backend = get().backend;
       for (const [id, t] of timers) {
@@ -256,7 +296,7 @@ export const useVault = create<VaultState>((set, get) => {
       const seededKey = `${SEEDED_KEY}:${backend.label}`;
       if (!snap.notes.length && !localStorage.getItem(seededKey)) {
         localStorage.setItem(seededKey, '1');
-        const { buildSeedNotes } = await import('../lib/vault/seed');
+        const { buildSeedNotes, SEED_CLASSES } = await import('../lib/vault/seed');
         const seeds = buildSeedNotes();
         for (const s of seeds) normalizeDocJSON(s.content as never);
         for (const s of seeds) {
@@ -265,11 +305,14 @@ export const useVault = create<VaultState>((set, get) => {
         }
         const all = { ...get().notes };
         for (const s of seeds) all[s.meta.id] = s;
+        const folderMeta = { ...get().folderMeta, ...SEED_CLASSES };
         set({
           notes: all,
           folders: [...new Set([...get().folders, ...seeds.flatMap((s) => parentsOf(s.meta.folder))])].sort(),
+          folderMeta,
           revision: get().revision + 1,
         });
+        await backend.saveFolderMeta(folderMeta);
         useUI.getState().openNote(seeds[0].meta.id, { newTab: true });
       }
     } catch (err) {
@@ -293,9 +336,27 @@ export const useVault = create<VaultState>((set, get) => {
     for (const [k, m] of Object.entries(get().folderMeta)) folderMeta[remap(k)] = m;
     set({ notes, folders: [...new Set(get().folders.map(remap))].sort(), folderMeta });
     get().backend?.saveFolderMeta(folderMeta);
+    // Keep the open class/folder page and Ask-your-notes scope pointing at the renamed folder.
+    const ui = useUI.getState();
+    const v = ui.view;
+    if ((v.kind === 'class' || v.kind === 'folder') && (v.path === from || v.path.startsWith(from + '/'))) ui.set({ view: { ...v, path: remap(v.path) } });
+    const sc = ui.libraryScope;
+    if (sc.kind === 'folder' && (sc.path === from || sc.path.startsWith(from + '/'))) ui.set({ libraryScope: { kind: 'folder', path: remap(sc.path) } });
+    const expanded = Object.fromEntries(Object.entries(ui.expanded).map(([k, val]) => [remap(k), val]));
+    ui.set({ expanded });
+    // Homework linked to a renamed folder follows it.
+    for (const [id, n] of Object.entries(get().notes)) {
+      const hw = n.meta.homework;
+      if (hw?.folders.some((f) => f === from || f.startsWith(from + '/')))
+        get().updateMeta(id, { homework: { ...hw, folders: hw.folders.map(remap) }, updated: n.meta.updated });
+    }
     return to;
   }
 });
+
+function clean<T extends object>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== '')) as T;
+}
 
 export const notesList = (notes: Record<string, NoteDoc>) => Object.values(notes);
 export const liveNotes = (notes: Record<string, NoteDoc>) => Object.values(notes).filter((n) => !n.meta.trashed);

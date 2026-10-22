@@ -1,6 +1,9 @@
 import { getStroke } from 'perfect-freehand';
 import { BRUSHES } from './brushes';
-import type { Stroke } from './types';
+import type { Brush, Stroke } from './types';
+
+/** Unknown brushes (from newer or hand-edited files) draw with the ballpoint. */
+const brushDef = (b: Brush) => BRUSHES[b] ?? BRUSHES.ballpoint;
 
 const pathCache = new WeakMap<Stroke, string>();
 
@@ -48,7 +51,7 @@ export function monoPath(pts: number[], closed?: boolean): string {
 }
 
 export function freehandOutline(stroke: Stroke, last = true): number[][] {
-  const def = BRUSHES[stroke.brush];
+  const def = brushDef(stroke.brush);
   const size = stroke.size * def.sizeScale;
   return getStroke(toPointTriples(stroke.pts), {
     size,
@@ -79,7 +82,7 @@ export function livePath(stroke: Stroke): string {
 }
 
 export function strokeOpacity(stroke: Stroke): number {
-  return stroke.opacity ?? BRUSHES[stroke.brush].opacity;
+  return stroke.opacity ?? brushDef(stroke.brush).opacity;
 }
 
 /** Attributes for rendering a stroke as an SVG <path>. */
