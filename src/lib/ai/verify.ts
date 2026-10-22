@@ -1,7 +1,7 @@
 import { tokenize } from './rag';
 import { AUTO_HEAD, boxBody, isCitation, normalizeOutside, OWN_CLOSE, OWN_HEAD, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
 import { needsCitation } from './grounding';
-import { findQuote, isSpanOf } from './quote';
+import { findQuote, isSpanOf, unitsOf } from './quote';
 
 /**
  * The notes-only check. Every statement in an answer that is supposed to come
@@ -147,22 +147,35 @@ function contentTokens(text: string): string[] {
   return [...new Set(tokenize(text).map(canon))].filter((w) => (w.length > 2 || /\d/.test(w)) && !NOTES_TALK.has(w));
 }
 
+const SUFFIXES = new Set(
+  ' s es e ed d ing ity ities ous ly al ally ial ion ions ation ations ition ive ative ize ise ized ised ment er ers or ic ical y ies ness ance ence ant ent able ible ate ated atory ure is'.split(' '),
+);
+
+/** Two forms of one word ("continuous"/"continuity"), not two words that start alike ("differ"/"differentiable"). */
+export function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  return p >= 5 && SUFFIXES.has(a.slice(p)) && SUFFIXES.has(b.slice(p));
+}
+
 /**
  * IDF-weighted share of a statement's content words found in the sources
- * (0–1). Word forms match on a 5-letter prefix ("continuous"/"continuity").
+ * (0–1). Forms of one word match ("continuous"/"continuity").
  */
 export function idfSupport(text: string, sources: string, idf?: (t: string) => number): { support: number; missing: string[] } {
   const words = contentTokens(text);
   if (!words.length) return { support: 1, missing: [] };
   const src = new Set(tokenize(sources).map(canon));
-  const prefixes = new Set([...src].filter((t) => t.length >= 6).map((t) => t.slice(0, 5)));
+  const byStart = new Map<string, string[]>();
+  for (const t of src) if (t.length >= 5) byStart.set(t.slice(0, 5), [...(byStart.get(t.slice(0, 5)) ?? []), t]);
   let have = 0;
   let total = 0;
   const missing: string[] = [];
   for (const w of words) {
     const weight = Math.max(0.2, idf ? idf(w) : 1);
     total += weight;
-    if (src.has(w) || (w.length >= 6 && prefixes.has(w.slice(0, 5)))) have += weight;
+    if (src.has(w) || (w.length >= 5 && (byStart.get(w.slice(0, 5)) ?? []).some((t) => sameWord(w, t)))) have += weight;
     else missing.push(w);
   }
   return { support: total ? have / total : 1, missing };
@@ -237,7 +250,8 @@ export function novelTokens(statement: string, sources: string, mode: VerifyMode
 function negatedTerms(text: string): Set<string> {
   const out = new Set<string>();
   const parts = text.split(NEGATION_SPLIT);
-  for (let i = 1; i < parts.length; i++) for (const t of contentTokens(parts[i]).slice(0, 2)) out.add(t);
+  // A negation reaches to the end of its clause ("no nucleus; their DNA …" doesn't deny the DNA).
+  for (let i = 1; i < parts.length; i++) for (const t of contentTokens(parts[i].split(/[;:.,—–]|\bbut\b/)[0]).slice(0, 2)) out.add(t);
   return out;
 }
 const NEGATION_SPLIT = /\b(?:not|no|never|none|cannot|without|nor|neither|nunca|jamás|tampoco)\b|n['’]t\b/i;
@@ -279,6 +293,30 @@ function mathConflict(statement: string, sources: string): boolean {
   return sides(statement).some(([l, r]) => known.some(([kl, kr]) => kl === l && kr !== r));
 }
 
+/** Terms the notes set in bold or use as headings: the ones a swap would confuse ("preterite"/"imperfect"). */
+function keyTerms(sources: string): Set<string> {
+  const marked = [...sources.matchAll(/\*\*([^*]+)\*\*/g), ...sources.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => m[1]);
+  return new Set(tokenize(marked.join(' ')).map(canon).filter((t) => t.length > 2));
+}
+
+/**
+ * A line of the notes with one key term traded for another the notes also
+ * use ("Use the imperfect for completed actions…" where they say the preterite):
+ * the words all match, so only this catches it.
+ */
+function termSwap(statement: string, sources: string, keys: Set<string>): boolean {
+  const s = contentTokens(statement);
+  const said = new Set(s);
+  // Sentences of the notes (bold dropped first, so "… nucleoid. **Eukaryotic** cells …" splits in two).
+  return unitsOf(sources.replace(/\*\*|==/g, '')).some((unit) => {
+    const u = contentTokens(unit);
+    const inUnit = new Set(u);
+    const shared = s.filter((w) => inUnit.has(w)).length;
+    if (shared < 3 || shared / s.length < 0.6) return false;
+    return s.some((w) => !inUnit.has(w) && keys.has(w)) && u.some((w) => !said.has(w) && keys.has(w));
+  });
+}
+
 /** The sentence without the clause that says what the notes lack ("Your notes don't mention it, but …"). */
 function withoutGap(text: string): string {
   return text
@@ -314,6 +352,7 @@ export function checkStatement(raw: string, cites: number[], ctx: VerifyCtx): St
   const settled = ctx.overrides?.get(text);
   if (settled) return result(settled.verdict, 1, [], settled.cite && !valid.includes(settled.cite) ? settled.cite : undefined);
   const everything = sourcesFor([...ctx.excerpts.keys()]);
+  const keys = keyTerms(notesFor([...ctx.excerpts.keys()]));
   // "Your notes don't cover this" needs no source — but only that clause: the rest of the sentence is checked.
   // Naming what's missing is fine ("…don't cover L'Hôpital's rule"); stating it is a claim ("…don't say that
   // Archimedes proved it in 250 BC").
@@ -332,7 +371,7 @@ export function checkStatement(raw: string, cites: number[], ctx: VerifyCtx): St
     const novel = novelTokens(claim, sourcesFor(ns), ctx.mode);
     // Words that appear nowhere in the student's notes are the clearest sign of outside knowledge.
     const rare = ctx.inVault && opts.rare !== false ? missing.filter((t) => t.length >= 4 && !ctx.inVault!(t)).length : 0;
-    const flip = (support >= 0.4 && negationFlip(claim, src)) || mathConflict(claim, src);
+    const flip = (support >= 0.4 && negationFlip(claim, src)) || mathConflict(claim, src) || (ns.length > 0 && termSwap(claim, src, keys));
     let verdict: Verdict = 'supported';
     if (novel.length || flip || support < UNSUPPORTED_BELOW || rare >= 2 || (rare && support < 0.4)) verdict = 'unsupported';
     else if (support < SUPPORTED_AT || rare) verdict = 'weak';

@@ -17,6 +17,7 @@
     "app:dev": "concurrently -k -n vite,electron \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && cross-env NIB_DEV_URL=http://localhost:5173 electron .\"",
     "dist:mac": "npm run build && electron-builder --mac",
     "test": "tsx --test tests/unit/*.test.ts",
+    "eval:grounding": "tsx scripts/eval-grounding.mts",
     "mock-llm": "node scripts/mock-llm.mjs",
     "seed": "node scripts/build-seed.mjs",
     "icon": "node scripts/build-icon.mjs",

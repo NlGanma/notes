@@ -280,3 +280,18 @@ test('a flashcard is kept only when its question is about the passage that backs
   // A true line of the notes, under a question it doesn't answer (the notes say the imperfect is for habits).
   assert.equal(v('Which tense do you use for habits and descriptions in the past?', 'Use the preterite for completed actions with a clear beginning or end.', 4), 0);
 });
+
+test('a line of the notes with two of its key terms swapped is a contradiction', () => {
+  assert.equal(verdict('Use the imperfect for completed actions with a clear beginning or end [4].', [4]), 'unsupported');
+  assert.equal(verdict('The preterite is used for habits, ongoing background and descriptions in the past [5].', [5]), 'unsupported');
+  // Naming the other term alongside is not a swap.
+  assert.notEqual(verdict('Unlike the imperfect, use the preterite for completed actions with a clear beginning or end [4].', [4]), 'unsupported');
+});
+
+test('a negation reaches only to the end of its clause; word forms match, look-alikes don’t', async () => {
+  const { idfSupport, sameWord } = await import('../../src/lib/ai/verify');
+  assert.equal(verdict('If $f$ is continuous on $[a,b]$, $N$ is between $f(a)$ and $f(b)$; there is no gap [3].', [3]), 'supported');
+  assert.ok(sameWord('continuous', 'continuity') && sameWord('defin', 'definition'));
+  assert.ok(!sameWord('differ', 'differentiable') && !sameWord('imperative', 'imperfect') && !sameWord('photograph', 'photosynthesis'));
+  assert.deepEqual(idfSupport('differentiable', 'left and right limits differ').missing, ['differentiable']);
+});

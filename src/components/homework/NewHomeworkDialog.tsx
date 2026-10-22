@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileUp, PenLine, ScanText, X } from 'lucide-react';
 import type { JSONContent } from '@tiptap/core';
 import { Modal } from '../common/Modal';
@@ -47,7 +47,8 @@ export function NewHomeworkDialog() {
   const busyRef = useRef(false);
   const [dragOver, setDragOver] = useState(false);
 
-  useEffect(() => {
+  // Before the first paint, so the dialog never shows the previous class picked for a moment.
+  useLayoutEffect(() => {
     if (!open) return;
     setClassPath(dialog.classPath ?? classes[0]?.path ?? null);
     setFile(dialog.file ?? null);
