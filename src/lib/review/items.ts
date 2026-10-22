@@ -375,6 +375,8 @@ export function validateQuestion(raw: ModelQuestion, item: Item, chunkText: stri
       .filter((p) => contentWords(p).length >= 3)
       .slice(0, 3);
   if (!points.length) points = [clean(proofSpan)];
+  // Two key points quoted from the same line of the notes are one point (graded once, listed once).
+  points = [...new Set(points.map(clean))];
   // Applying an idea, the student is shown the note's example: its words give nothing away.
   const exampleWords = item.format === 'apply' ? contentWords(item.source.text) : [];
   const example = new Set(exampleWords);

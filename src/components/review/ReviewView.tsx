@@ -3,9 +3,10 @@ import { AlertTriangle, Play, Shuffle, Target } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useAI } from '../../state/ai';
 import { conceptsOf, dueNotes, noteMastery, useReview } from '../../state/review';
-import { buildReviewTree, selectionLabel } from '../../lib/review/tree';
+import { buildReviewTree, isReviewable, selectionLabel } from '../../lib/review/tree';
 import { notReviewable } from '../../lib/review/concepts';
 import { isDue } from '../../lib/review/mastery';
+import { dayLabel } from '../../lib/review/session';
 import { ReviewPicker } from './ReviewPicker';
 import { ReviewSession } from './ReviewSession';
 import { ReviewSummary } from './ReviewSummary';
@@ -26,8 +27,14 @@ export function ReviewView({ preset }: { preset?: string[] }) {
   useEffect(() => {
     void useReview.getState().load();
   }, []);
+  // A request to review some notes (none, when nothing is due) replaces what's on screen: a session in
+  // progress ends (its answers are kept) and the picker shows those notes.
   useEffect(() => {
-    if (preset?.length) useReview.getState().setSelection(preset);
+    if (!preset) return;
+    const r = useReview.getState();
+    if (r.session) r.end();
+    if (useReview.getState().summary) r.closeSummary();
+    r.setSelection(preset);
   }, [preset]);
 
   if (session) return <ReviewSession />;
@@ -45,14 +52,16 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const file = useReview((s) => s.file);
   const online = useAI((s) => s.status === 'online');
   const tree = useMemo(() => buildReviewTree(notes, folders, folderMeta), [notes, folders, folderMeta]);
-  const selected = useMemo(() => new Set(selection.filter((id) => notes[id])), [selection, notes]);
+  // Picked notes that can still be reviewed (not trashed since).
+  const selected = useMemo(() => new Set(selection.filter((id) => notes[id] && isReviewable(notes[id]))), [selection, notes]);
 
-  // What the selection holds: ideas, how many are due, how many are new.
+  // What the selection holds: ideas, how many are due, how many are new, and when the next one is due.
   const stats = useMemo(() => {
     const now = Date.now();
     let ideas = 0;
     let due = 0;
     let fresh = 0;
+    let next: number | null = null;
     const blocked: string[] = [];
     const groups = new Set<string>();
     for (const id of selected) {
@@ -64,12 +73,15 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
         const st = file.states[c.id];
         if (!st?.attempts) fresh++;
         else if (isDue(st, now)) due++;
+        else next = Math.min(next ?? st.due, st.due);
       }
       for (const s of notReviewable(n)) blocked.push(`${n.meta.title} › ${s}`);
       groups.add(tree.find((g) => g.chapters.some((ch) => ch.notes.some((x) => x.meta.id === id)))?.key ?? '');
     }
-    return { ideas, due, fresh, blocked, groups: groups.size };
+    return { ideas, due, fresh, next, blocked, groups: groups.size };
   }, [selected, notes, file, tree]);
+  // A session asks what's due or new; with neither there's nothing to start.
+  const askable = stats.due + stats.fresh > 0;
 
   // "What's due": every note with an idea due now.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,7 +117,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
           <div className="rv-panel-label">{selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet'}</div>
           {selected.size > 0 && (
             <div className="rv-panel-stats">
-              {plural(stats.ideas, 'idea')} · {stats.due} due · {stats.fresh} new
+              {plural(stats.ideas, 'idea')} · {askable || !stats.ideas ? `${stats.due} due · ${stats.fresh} new` : `nothing due — next review ${dayLabel(stats.next)}`}
               {reading && <span className="rv-reading"> · finding more…</span>}
             </div>
           )}
@@ -136,7 +148,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
               </span>
             </div>
           )}
-          <button className="btn is-primary rv-start" disabled={!selected.size || !stats.ideas || !loaded} onClick={() => useReview.getState().start([...selected])}>
+          <button className="btn is-primary rv-start" disabled={!selected.size || !stats.ideas || !askable || !loaded} onClick={() => useReview.getState().start([...selected])}>
             <Play size={15} /> Start review
           </button>
           <div className="rv-promise">

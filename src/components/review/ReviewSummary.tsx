@@ -4,17 +4,8 @@ import { useReview } from '../../state/review';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
 import { renderMarkdown } from '../../lib/ai/markdown';
-import { calibrationMessage } from '../../lib/review/session';
-import { DAY } from '../../lib/review/mastery';
-
-function when(t: number | null): string {
-  if (!t) return '—';
-  const days = Math.round((t - Date.now()) / DAY);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  if (days < 7) return new Date(t).toLocaleDateString(undefined, { weekday: 'long' });
-  return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+import { calibrationMessage, dayLabel } from '../../lib/review/session';
+import { isReviewable } from '../../lib/review/tree';
 
 /** The end of a session: what was mastered, what to fix, when to come back. All from the learner model. */
 export function ReviewSummary() {
@@ -25,7 +16,7 @@ export function ReviewSummary() {
   const noteOf = (id: string) => pool.find((p) => p.id === id)?.noteId;
   const calib = calibrationMessage(summary.calibration);
   const missed = useMemo(
-    () => [...new Set([...summary.needsStudy, ...summary.misconceptions.map((m) => m.conceptId)])].map(noteOf).filter((x): x is string => !!x && !!notes[x]),
+    () => [...new Set([...summary.needsStudy, ...summary.misconceptions.map((m) => m.conceptId)])].map(noteOf).filter((x): x is string => !!x && !!notes[x] && isReviewable(notes[x])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [summary, notes],
   );
@@ -60,7 +51,7 @@ export function ReviewSummary() {
             </span>
             <span className="rv-pct">{c.percent}%</span>
             <span className="rv-class-meta">
-              {c.mastered}/{c.total} mastered · next review {when(c.nextDue)}
+              {c.mastered}/{c.total} mastered · next review {dayLabel(c.nextDue)}
             </span>
           </div>
         ))}
