@@ -16,6 +16,9 @@ This doesn't rely on the model behaving. Nib's harness enforces it in code:
 - **After answering**, every sentence is checked against the passage it cites: invented names, numbers, rules or quotes, contradictions ("…does **not** exist" when your notes say it does), and claims no passage backs are moved into the labelled box. Missing citations are added or corrected.
 - **Loosely matched** sentences get a second look: the model must quote the passage that says it, and Nib verifies the quote itself.
 - Parts the notes don't cover are answered in a separate call whose whole reply is boxed, so general knowledge never mixes into the cited text.
+- A reply that stops early (you press Stop, ask something else, or the connection drops) is checked the same way; unchecked text is never shown, copied or inserted outside a box.
+
+How well does that hold? The check is code, so it has blind spots: it reads words, not meaning. `npm run eval:grounding` throws 39 invented claims written to slip past it at the demo notes. On this version, 2 of the 39 still reach the student without a label after the double-check (a claim built from words of different lines, and a contradiction the notes never spell out), and 1 of 18 true sentences gets boxed. So "everything outside a box is from your notes" means everything outside a box passed this check, not that it is certain.
 
 ### Type and write on the same page
 - **Any pen, anywhere.** Fountain pen, ballpoint, brush pen, pencil, felt marker and highlighter, each with its own colours and sizes. Ink snaps to the same baseline grid as typed text, so the two line up.
@@ -133,6 +136,7 @@ npm run typecheck
 npm test               # unit tests, incl. the model engine against a mock server with injected faults
 npm run test:e2e       # browser end-to-end: ink, AI, notes-only answers, homework & classes, review
 npm run test:all       # all of the above + build + the desktop app (xvfb on Linux)
+npm run eval:grounding # how many invented claims get past the notes-only check (see above)
 ```
 
 `scripts/mock-llm.mjs` is a stand-in model server for both APIs, with streaming, thinking models, vision flags and embeddings. It answers like a careful model (citing, naming what the notes lack) and, on cue, like a careless one — a cited sentence the notes don't say — so the tests can check it gets caught. For Review it plays the Mastery Engine, slips included: an idea the notes don't have, an invented name on a real line, and (with `{"badQuestions": 1}`) a question with a false premise — all must be rejected. Tests can make it fail, cut replies short or load slowly through `POST /__mock` (`{"fail": 2, "status": 503}`, `{"truncate": 1}`, `{"firstTokenMs": 3000}`), so the retry, continue and loading paths are tested end to end.
