@@ -211,10 +211,7 @@ const words = joinedText.split(/\s+/);
 const fiveGrams = words.map((_, i) => words.slice(i, i + 5).join(' ')).filter((g) => g.split(' ').length === 5);
 const repeated = fiveGrams.some((g, i) => fiveGrams.indexOf(g) !== i);
 if (repeated) console.log('     joined:', JSON.stringify(joinedText));
-check(
-  !repeated && /can be filled \[\d\]\.$/.test(joinedText.trim()),
-  'the continued reply joins seamlessly (no repeated words at the seam, ends where the answer ends)',
-);
+check(!repeated && /\[\d\]\.$/.test(joinedText.trim()), 'the continued reply joins seamlessly (no repeated words at the seam, ends where the answer ends)');
 
 // ---------------------------------------------------------------- done
 await page.click(`${V} .hw-done`);

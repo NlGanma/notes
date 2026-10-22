@@ -10,6 +10,22 @@ fs.mkdirSync(OUT, { recursive: true });
 export async function launch({ width = 1440, height = 900, scale = 1, storage } = {}) {
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, storageState: storage });
+  // React can't name the component for "Maximum update depth" warnings; record where the update came from.
+  await context.addInitScript(() => {
+    const orig = console.error;
+    console.error = function (...args) {
+      if (/Maximum update depth/.test(String(args[0]))) {
+        const stack = (new Error().stack || '')
+          .split('\n')
+          .filter((l) => /\/src\//.test(l))
+          .slice(0, 8)
+          .map((l) => l.trim().replace(/https?:\/\/[^/]+\//, ''))
+          .join(' | ');
+        return orig.call(console, `${args[0]} AT: ${stack}`);
+      }
+      return orig.apply(console, args);
+    };
+  });
   const page = await context.newPage();
   // NIB_CPU_THROTTLE=4 slows the page down like a CI runner, to shake out timing bugs.
   if (process.env.NIB_CPU_THROTTLE) {
