@@ -1,7 +1,7 @@
 import { tokenize } from './rag';
-import { isCitation, normalizeOutside, OWN_CLOSE, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
+import { AUTO_HEAD, boxBody, isCitation, normalizeOutside, OWN_CLOSE, OWN_HEAD, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
 import { needsCitation } from './grounding';
-import { findQuote } from './quote';
+import { findQuote, isSpanOf } from './quote';
 
 /**
  * The notes-only check. Every statement in an answer that is supposed to come
@@ -94,6 +94,13 @@ const TALK_WORDS = (
 ).split(' ');
 // Matched after stemming too ("according" → "accord").
 const NOTES_TALK = new Set([...TALK_WORDS, ...tokenize(TALK_WORDS.join(' '))]);
+
+/** Words of talking with the student ("your turn — give it a try"): they make no claim. */
+const CHAT_WORDS = new Set(tokenize('try trying turn let lets know see check ask think good luck want tell help sure ready start ahead stuck hint now get got again yourself'));
+/** A question that slips a claim in ("Did you know that…?"). */
+const EMBEDDED_CLAIM = /\b(?:did you know|isn['’]t it|aren['’]t (?:they|there)|wasn['’]t it|don['’]t you think|remember that|recall that|note that|notice that)\b/i;
+/** A verdict on the student's statement ("True: …", "Yes, …"): a claim, never a restatement. */
+const VERDICT = /\b(?:true|false|yes|no|correct|incorrect|right|wrong|valid|invalid)\b|[✓✗✔✘]/i;
 
 const SYNONYMS: Record<string, string> = {
   limit: 'lim',
@@ -189,7 +196,8 @@ export function criticalTokens(statement: string, mode: VerifyMode = 'explain'):
     const w = m[2].replace(/['’]s$/, '');
     if (w.length < 2 || w === 'I') continue;
     const before = prose.slice(0, m.index! + m[1].length).trimEnd();
-    if (!before || /[.!?:;¿¡"“(\-—–*>]$/.test(before)) continue;
+    // A table cell starts a clause too ("| Idea | Detail |").
+    if (!before || /[.!?:;¿¡"“(\-—–*>|]$/.test(before)) continue;
     out.push(`w:${w}`);
   }
   for (const q of statement.match(/[“"]([^”"]{6,80})[”"]/g) ?? []) {
@@ -246,6 +254,41 @@ function negationFlip(statement: string, sources: string): boolean {
   return [...denied].some((t) => src.has(t) && !srcDenied.has(t));
 }
 
+/** A formula reduced to its symbols, so spacing, \dfrac or \left( don't matter. */
+function texKey(m: string): string {
+  return m
+    .trim()
+    .replace(/^\$\$|\$\$$|^\$|\$$|^\\\(|\\\)$|^\\\[|\\\]$/g, '')
+    .replace(/\\(?:left|right)(?![a-zA-Z])|\\[,;:!]|\\displaystyle/g, '')
+    .replace(/\\[dt]frac/g, '\\frac')
+    .replace(/\s+/g, '')
+    .replace(/\{(\w)\}/g, '$1');
+}
+
+/**
+ * An equation whose left side the notes also have, with a different right
+ * side ("$\lim_{x\to0}\frac{\sin x}{x}=0$" where the notes say 1).
+ */
+function mathConflict(statement: string, sources: string): boolean {
+  const sides = (s: string) =>
+    mathSegments(s).flatMap((m) => {
+      const parts = texKey(m).split('=');
+      return parts.length === 2 && parts[0] && parts[1] ? [parts as [string, string]] : [];
+    });
+  const known = sides(sources);
+  return sides(statement).some(([l, r]) => known.some(([kl, kr]) => kl === l && kr !== r));
+}
+
+/** The sentence without the clause that says what the notes lack ("Your notes don't mention it, but …"). */
+function withoutGap(text: string): string {
+  return text
+    .split(/(?<=[,;:—–])\s+|\s+(?=(?:but|however|though|although)\b)/i)
+    .filter((part) => !GAP_RE.test(part))
+    .join(' ')
+    .replace(/^\s*(?:but|however|though|although)\b[,\s]*/i, '')
+    .trim();
+}
+
 function excerptText(e: ExcerptRef): string {
   return [e.title, e.section, e.text].filter(Boolean).join('\n');
 }
@@ -267,48 +310,65 @@ export function checkStatement(raw: string, cites: number[], ctx: VerifyCtx): St
     repaired,
   });
 
-  if (!text || GAP_RE.test(text)) return result('exempt', 1, []);
+  if (!text) return result('exempt', 1, []);
   const settled = ctx.overrides?.get(text);
   if (settled) return result(settled.verdict, 1, [], settled.cite && !valid.includes(settled.cite) ? settled.cite : undefined);
+  const everything = sourcesFor([...ctx.excerpts.keys()]);
+  // "Your notes don't cover this" needs no source — but only that clause: the rest of the sentence is checked.
+  // Naming what's missing is fine ("…don't cover L'Hôpital's rule"); stating it is a claim ("…don't say that
+  // Archimedes proved it in 250 BC").
+  let claim = text;
+  if (GAP_RE.test(text)) {
+    const rest = withoutGap(text);
+    if (contentTokens(rest).length) claim = rest;
+    else if (!/\b(?:that|which|because|since|so|when|where)\b/i.test(text) || !novelTokens(text, everything, ctx.mode).length) return result('exempt', 1, []);
+  }
   // A picture the student attached can't be checked word for word; what it shows is their own work.
   const visualOnly = valid.length > 0 && valid.every((n) => ctx.excerpts.get(n)!.visual && !ctx.excerpts.get(n)!.text.trim());
 
   const judge = (ns: number[], opts: { rare?: boolean } = {}) => {
     const src = ns.length ? notesFor(ns) : ctx.context;
-    const { support, missing } = idfSupport(text, src, ctx.idf);
-    const novel = novelTokens(text, sourcesFor(ns), ctx.mode);
+    const { support, missing } = idfSupport(claim, src, ctx.idf);
+    const novel = novelTokens(claim, sourcesFor(ns), ctx.mode);
     // Words that appear nowhere in the student's notes are the clearest sign of outside knowledge.
     const rare = ctx.inVault && opts.rare !== false ? missing.filter((t) => t.length >= 4 && !ctx.inVault!(t)).length : 0;
-    const flip = support >= 0.4 && negationFlip(text, src);
+    const flip = (support >= 0.4 && negationFlip(claim, src)) || mathConflict(claim, src);
     let verdict: Verdict = 'supported';
     if (novel.length || flip || support < UNSUPPORTED_BELOW || rare >= 2 || (rare && support < 0.4)) verdict = 'unsupported';
     else if (support < SUPPORTED_AT || rare) verdict = 'weak';
     return { verdict, support, novel, rescuable: verdict === 'unsupported' && !novel.length && !flip && support >= 0.2 };
   };
 
-  // Hand-offs and questions to the student ("What is left if you substitute x = 3?") need no source —
-  // unless they slip in a name or number that appears in none of the excerpts.
-  if (!needsCitation(text)) {
-    const novel = novelTokens(text, sourcesFor([...ctx.excerpts.keys()]), ctx.mode);
-    if (!novel.length) return result('exempt', 1, []);
+  // Questions and hand-offs to the student ("What is left if you substitute x = 3?") and short lines need
+  // no source — unless they say something neither the notes nor the student's own text has: a name, a
+  // number, or a word ("Polynomials are continuous.", "Did you know that…?").
+  if (!needsCitation(claim)) {
+    const novel = novelTokens(claim, everything, ctx.mode);
+    const asks = /\?\s*$/.test(claim) && !EMBEDDED_CLAIM.test(claim);
+    const unknown = asks ? [] : idfSupport(claim, everything).missing.filter((w) => !CHAT_WORDS.has(w));
+    if (!novel.length && !unknown.length) return result('exempt', 1, []);
   }
   // Pure derivation lines when working a problem ($3+3=6$): the method is cited elsewhere.
   if (ctx.mode === 'compute') {
-    const prose = text.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, ' ');
-    if (contentTokens(prose).length < 3 && mathSegments(text).length && !novelTokens(text, sourcesFor(valid), ctx.mode).length)
+    const prose = claim.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, ' ');
+    if (contentTokens(prose).length < 3 && mathSegments(claim).length && !novelTokens(claim, sourcesFor(valid), ctx.mode).length)
       return { ...result('exempt', 1, []), derived: true };
   }
   if (visualOnly) {
-    const novel = novelTokens(text, ctx.context, ctx.mode);
+    const novel = novelTokens(claim, ctx.context, ctx.mode);
     return result(novel.length ? 'weak' : 'supported', 1, novel);
   }
 
   const own = valid.length ? judge(valid) : null;
   if (own && own.verdict === 'supported') return result('supported', own.support, own.novel);
-  // Restating the student's own problem ("You're finding $\\lim …$") needs no source — only when
-  // working a problem, and only if it says nothing the problem doesn't.
+  // Restating the student's own problem ("You're finding $\\lim …$") needs no source — only when working a
+  // problem, only with the problem's own math or numbers, never with a verdict ("True: …"), and only if it
+  // says nothing the problem doesn't.
   const loose = judge([], { rare: false });
-  if (!valid.length && ctx.mode === 'compute' && loose.support >= 0.8 && !loose.novel.length && ctx.context.trim())
+  const squash = (s: string) => fold(s).replace(/\$/g, '').replace(/\s+/g, '');
+  const restates =
+    mathSegments(claim).some((m) => squash(ctx.context).includes(squash(m))) || (claim.match(/\d+(?:[.,]\d+)?/g) ?? []).some((n) => ctx.context.includes(n));
+  if (!valid.length && ctx.mode === 'compute' && loose.support >= 0.8 && !loose.novel.length && ctx.context.trim() && restates && !VERDICT.test(claim))
     return result('exempt', loose.support, []);
   // Citation repair: the model cited nothing, or the wrong excerpt.
   let best: { n: number; support: number; novel: string[] } | null = null;
@@ -320,6 +380,32 @@ export function checkStatement(raw: string, cites: number[], ctx: VerifyCtx): St
   if (best) return result('supported', best.support, best.novel, best.n);
   if (own) return { ...result(own.verdict, own.support, own.novel), rescuable: own.rescuable };
   return result('unsupported', loose.support, loose.novel);
+}
+
+/**
+ * A display formula: from the notes (or the student's own problem) when one
+ * of them has it, symbol for symbol. When working the student's problem, a
+ * step that brings in nothing new is their own working (shown with "check the
+ * arithmetic"); anything else is the AI's own.
+ */
+export function checkFormula(tex: string, ctx: VerifyCtx): StatementCheck {
+  const key = texKey(tex);
+  const result = (verdict: Verdict, cites: number[] = [], derived?: boolean): StatementCheck => ({
+    text: tex.trim(),
+    verdict,
+    support: verdict === 'unsupported' ? 0 : 1,
+    novel: [],
+    cites,
+    ...(derived ? { derived } : {}),
+  });
+  if (!key) return result('exempt');
+  const has = (s: string) => mathSegments(s).some((m) => texKey(m).includes(key));
+  const from = [...ctx.excerpts.values()].find((e) => has(e.text));
+  if (from) return result('supported', [from.n]);
+  if (has(ctx.context)) return result('exempt');
+  const all = [...[...ctx.excerpts.values()].map(excerptText), ctx.context].join('\n');
+  if (ctx.mode === 'compute' && !novelTokens(tex, all, 'compute').length) return result('exempt', [], true);
+  return result('unsupported');
 }
 
 // ------------------------------------------------------------------ markdown structure
@@ -339,7 +425,7 @@ function parseBlocks(md: string): Block[] {
   let i = 0;
   const startsBlock = (l: string) =>
     !l.trim() ||
-    /^\s*```/.test(l) ||
+    /^\s*(?:```|~~~)/.test(l) ||
     /^:::/.test(l) ||
     /^\s*\$\$/.test(l) ||
     /^#{1,6}\s/.test(l) ||
@@ -353,9 +439,10 @@ function parseBlocks(md: string): Block[] {
     if (!l.trim()) {
       out.push({ kind: 'blank', lines: [l] });
       i++;
-    } else if (/^\s*```/.test(l)) {
+    } else if (/^\s*(?:```|~~~)/.test(l)) {
+      const fence = /^\s*(```|~~~)/.exec(l)![1];
       const start = i++;
-      while (i < lines.length && !/^\s*```/.test(lines[i])) i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith(fence)) i++;
       out.push({ kind: 'code', lines: lines.slice(start, Math.min(++i, lines.length)) });
     } else if (/^:::outside/.test(l)) {
       const start = i++;
@@ -469,6 +556,36 @@ function stripCites(s: string, maxCite: number): string {
   return out + s.slice(last);
 }
 
+/** A table row split around its cells: [leading pipe, cells…, trailing pipe]. */
+function rowParts(row: string): { lead: string; cells: string[]; trail: string } {
+  const lead = /^\s*\|?/.exec(row)![0];
+  const rest = row.slice(lead.length);
+  const trail = /\|?\s*$/.exec(rest)![0];
+  return { lead, cells: rest.slice(0, rest.length - trail.length).split(/(?<!\\)\|/), trail };
+}
+
+function cellsOf(row: string): string[] {
+  return rowParts(row)
+    .cells.map((c) => c.trim())
+    .filter(Boolean);
+}
+
+/** The row with each cell's text between marks. */
+function markCells(row: string, open: string, close: string): string {
+  const { lead, cells, trail } = rowParts(row);
+  return lead + cells.map((c) => (c.trim() ? c.replace(/^(\s*)([\s\S]*?)(\s*)$/, `$1${open}$2${close}$3`) : c)).join('|') + trail;
+}
+
+/** The row with the repaired citation in its last cell. */
+function citeRow(row: string, n: number): string {
+  const { lead, cells, trail } = rowParts(row);
+  let last = cells.length - 1;
+  while (last >= 0 && !cells[last].trim()) last--;
+  if (last < 0) return row;
+  cells[last] = cells[last].replace(/\s*$/, ` [${n}] `);
+  return lead + cells.join('|') + trail;
+}
+
 /** Adds (or swaps in) the repaired citation, keeping the sentence's own spacing. */
 function withCitation(s: string, n: number, maxCite: number): string {
   const body = stripCites(s, maxCite);
@@ -501,8 +618,16 @@ export function verifyAnswer(raw: string, ctx: VerifyCtx): VerifyReport {
   let lastVerdict: Verdict = 'exempt';
   const flushBox = () => {
     if (!pending.length) return;
-    out.push(':::outside auto', pending.join('').trim(), ':::', '');
+    out.push(':::outside auto', boxBody(pending.join('')), ':::', '');
     pending = [];
+  };
+  /** Moves a block into the box being built (opening one, or reopening the box just closed). */
+  const toBox = (text: string) => {
+    if (!pending.length && out[out.length - 1] === ':::') {
+      out.pop();
+      pending.push(out.pop() ?? '');
+    }
+    pending.push(`${pending.length ? '\n\n' : ''}${text}\n`);
   };
   const blocks = parseBlocks(md);
   for (let b = 0; b < blocks.length; b++) {
@@ -539,37 +664,87 @@ export function verifyAnswer(raw: string, ctx: VerifyCtx): VerifyReport {
         break;
       }
       case 'item':
-      case 'quote':
-      case 'table': {
+      case 'quote': {
+        // Marked sentence by sentence, so the list keeps its shape and a supported first sentence can't
+        // carry an unsupported second one.
         flushBox();
         const first = block.lines[0];
-        const prefix = block.kind === 'item' ? (/^(\s*(?:[-*+]|\d{1,3}[.)])\s+(?:\[[ xX]\]\s+)?)/.exec(first)?.[1] ?? '') : block.kind === 'quote' ? (/^\s*>\s?/.exec(first)?.[0] ?? '') : '';
+        const prefix = block.kind === 'item' ? (/^(\s*(?:[-*+]|\d{1,3}[.)])\s+(?:\[[ xX]\]\s+)?)/.exec(first)?.[1] ?? '') : (/^\s*>\s?/.exec(first)?.[0] ?? '');
         const body = [first.slice(prefix.length), ...block.lines.slice(1)].join('\n');
-        if (block.kind === 'table' && /^\s*\|?[\s:|-]+\|?\s*$/.test(first)) {
-          out.push(first);
-          break;
+        let marked = '';
+        for (const s of splitSentences(body)) {
+          const c = checkStatement(s, citesIn(s, maxCite), ctx);
+          count(c);
+          lastVerdict = c.verdict;
+          const lead = /^\s*/.exec(s)![0];
+          const tail = /\s*$/.exec(s)![0];
+          if (c.verdict === 'unsupported') marked += `${lead}${OWN_OPEN}${stripCites(s, maxCite).trim()}${OWN_CLOSE}${tail}`;
+          else if (c.verdict === 'weak') marked += `${lead}${WEAK_OPEN}${s.trim()}${WEAK_CLOSE}${tail}`;
+          else marked += c.repaired ? withCitation(s, c.repaired, maxCite) : s;
         }
-        const c = checkStatement(body, citesIn(body, maxCite), ctx);
-        count(c);
-        lastVerdict = c.verdict;
-        if (c.verdict === 'unsupported') out.push(`${prefix}${OWN_OPEN}${stripCites(body, maxCite).trim()}${OWN_CLOSE}`);
-        else if (c.verdict === 'weak') out.push(`${prefix}${WEAK_OPEN}${body.trim()}${WEAK_CLOSE}`);
-        else out.push(`${prefix}${c.repaired ? withCitation(body, c.repaired, maxCite) : body}`);
+        out.push(`${prefix}${marked.trimEnd()}`);
         break;
       }
-      case 'math':
-        // Display math goes with the sentence that introduced it.
-        if (lastVerdict === 'unsupported' && (pending.length || out[out.length - 1] === ':::')) {
-          if (!pending.length && out[out.length - 1] === ':::') {
-            out.pop();
-            pending.push(out.pop() ?? '');
-          }
-          pending.push(`\n\n${block.lines.join('\n')}\n`);
+      case 'table': {
+        flushBox();
+        const row = block.lines[0];
+        const separator = (l?: string) => !!l && /^\s*\|?[\s:|-]+\|?\s*$/.test(l) && l.includes('-');
+        // Column labels ("| Idea | Detail |") state nothing.
+        const header = separator(blocks[b + 1]?.lines[0]) && cellsOf(row).every((cell) => cell.split(/\s+/).length <= 4 && !criticalTokens(cell).length);
+        if (separator(row) || header) {
+          out.push(row);
+          break;
+        }
+        const c = checkStatement(row, citesIn(row, maxCite), ctx);
+        count(c);
+        lastVerdict = c.verdict;
+        // Each cell is marked on its own: one mark around the whole row would shift its cells.
+        if (c.verdict === 'unsupported') out.push(markCells(stripCites(row, maxCite), OWN_OPEN, OWN_CLOSE));
+        else if (c.verdict === 'weak') out.push(markCells(row, WEAK_OPEN, WEAK_CLOSE));
+        else out.push(c.repaired ? citeRow(stripCites(row, maxCite), c.repaired) : row);
+        break;
+      }
+      case 'heading': {
+        // A short heading is a label; a longer one can state something, and is checked like a sentence.
+        const text = block.lines[0].replace(/^#{1,6}\s+/, '');
+        const c = text.split(/\s+/).length > 4 || criticalTokens(text).length ? checkStatement(text, citesIn(text, maxCite), ctx) : null;
+        if (c) count(c);
+        if (c?.verdict === 'unsupported') {
+          toBox(`**${plainText(stripCites(text, maxCite))}**`);
+          lastVerdict = 'unsupported';
+          break;
+        }
+        flushBox();
+        out.push(block.lines[0]);
+        break;
+      }
+      case 'code': {
+        // Code is shown as the notes' only when the notes (or the student's own work) have it.
+        const code = block.lines.slice(1, /^\s*(?:```|~~~)/.test(block.lines[block.lines.length - 1]) && block.lines.length > 1 ? -1 : undefined).join('\n');
+        const known = !code.trim() || [...ctx.excerpts.values()].some((e) => isSpanOf(code, e.text)) || isSpanOf(code, ctx.context);
+        if (!known) {
+          count({ text: code.slice(0, 80), verdict: 'unsupported', support: 0, novel: [], cites: [] });
+          toBox(block.lines.join('\n'));
+          lastVerdict = 'unsupported';
+          break;
+        }
+        flushBox();
+        out.push(...block.lines);
+        break;
+      }
+      case 'math': {
+        const c = checkFormula(block.lines.join('\n'), ctx);
+        count(c);
+        // Display math goes with the sentence that introduced it, and is boxed itself unless the notes have it.
+        if (c.verdict === 'unsupported' || (lastVerdict === 'unsupported' && (pending.length || out[out.length - 1] === ':::'))) {
+          toBox(block.lines.join('\n'));
+          lastVerdict = 'unsupported';
         } else {
           flushBox();
           out.push(...block.lines);
         }
         break;
+      }
       case 'outside':
         flushBox();
         report.outside++;
@@ -590,12 +765,16 @@ export function verifyAnswer(raw: string, ctx: VerifyCtx): VerifyReport {
   return report;
 }
 
-/** Copy/history version of a checked answer: inline markers become words. */
+/** Copy version of a checked answer: boxes keep their label as a quote, inline marks become words. */
 export function markersToText(md: string): string {
-  return md
+  return normalizeOutside(md)
+    .replace(/^:::outside( auto)?\n([\s\S]*?)\n:::\s*$/gm, (_m, auto: string | undefined, body: string) =>
+      [`> **${auto ? AUTO_HEAD : OWN_HEAD}**`, ...body.split('\n').map((l) => (l ? `> ${l}` : '>'))].join('\n'),
+    )
     .replace(new RegExp(OWN_OPEN, 'g'), '')
     .replace(new RegExp(OWN_CLOSE, 'g'), ' _(not from your notes)_')
-    .replace(/[\uE002\uE003]/g, '');
+    .replace(/\uE002/g, '')
+    .replace(/\uE003/g, ' _(loosely matched \u2014 check your notes)_');
 }
 
 /**
@@ -623,6 +802,17 @@ export function transformCheck(passage: string, output: string): string[] {
     .slice(0, 6);
 }
 
+/**
+ * What a rearrangement of the student's own passage (bullets in place of a
+ * paragraph) adds to it: any new name, number or formula, or more than a
+ * couple of new words. Empty when it only rearranges.
+ */
+export function rearrangeCheck(passage: string, output: string): string[] {
+  const invented = transformCheck(passage, output);
+  const added = [...invented, ...idfSupport(output, passage).missing];
+  return invented.length || added.length > 2 ? added.slice(0, 6) : [];
+}
+
 /** The double-check prompt: the model must quote the excerpt that says each statement (verified in code). */
 export const VERIFY_PROMPT = (statements: string[]) => `Check your answer against the excerpts. For each numbered statement, copy the exact words from ONE excerpt that say the same thing. If no excerpt says it, write "none".
 ${statements.map((st, i) => `${i + 1}. ${st}`).join('\n')}
@@ -638,15 +828,19 @@ export function settleWeak(
   checks: { n: number; excerpt: number; quote: string }[],
   excerpts: Map<number, ExcerptRef>,
   idf?: (t: string) => number,
+  inVault?: (t: string) => boolean,
 ): Map<string, { verdict: Verdict; cite?: number }> {
   const out = new Map<string, { verdict: Verdict; cite?: number }>();
   statements.forEach((st, i) => {
     const c = checks.find((x) => x.n === i + 1);
     const e = c && excerpts.get(c.excerpt);
     const quote = c?.quote ?? '';
-    // The quote must really be in that passage; the passage's own line (with its heading) is what's compared.
+    // The quote must really be in that passage; the passage's own line (with its heading) is what's compared,
+    // as strictly as any statement: no word the student's notes never use, nothing new.
     const line = e && !e.visual && (quote.match(/[\p{L}\p{N}]+/gu) ?? []).length >= 5 ? findQuote(quote, e.text) : null;
-    const ok = !!line && idfSupport(st, `${e!.title ?? ''} ${e!.section ?? ''} ${line}`, idf).support >= 0.4 && !novelTokens(st, e!.text).length;
+    const { support, missing } = line ? idfSupport(st, `${e!.title ?? ''} ${e!.section ?? ''} ${line}`, idf) : { support: 0, missing: [] };
+    const rare = inVault ? missing.filter((t) => t.length >= 4 && !inVault(t)).length : 0;
+    const ok = !!line && support >= SUPPORTED_AT && !rare && !novelTokens(st, e!.text).length;
     out.set(st, ok ? { verdict: 'supported', cite: c!.excerpt } : { verdict: 'unsupported' });
   });
   return out;

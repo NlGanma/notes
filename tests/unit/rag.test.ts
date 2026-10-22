@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildBm25, bm25Scores, chunkNote, chunkVault, formatExcerpts, rankChunks, tokenize, encodeVector, decodeVector, cosine } from '../../src/lib/ai/rag';
-import { vault } from './fixtures';
+import { callout, note, p, vault } from './fixtures';
 
 test('tokenize drops stop words, keeps math words and light-stems', () => {
   const t = tokenize('The limits of \\sin x and the derivatives');
@@ -26,6 +26,16 @@ test('assistant callouts pasted into a note are never retrieved as class materia
     .map((c) => c.text)
     .join('\n');
   assert.ok(!/AI explanation/.test(text));
+  // …however deep: one pasted into a list item or a quote too.
+  const nested = note('Lecture 9', 'Calculus I', [
+    { type: 'bulletList', content: [{ type: 'listItem', content: [p('A limit is approached.'), callout('ai', p('Archimedes proved it in 250 BC.'))] }] },
+    { type: 'blockquote', content: [callout('outside', p('Newton used it in 1687.'))] },
+  ]);
+  const nestedText = chunkNote(nested)
+    .map((c) => c.text)
+    .join('\n');
+  assert.match(nestedText, /A limit is approached/);
+  assert.ok(!/Archimedes|Newton/.test(nestedText), nestedText);
 });
 
 test('scopes: class folder, explicit notes, trash excluded', () => {

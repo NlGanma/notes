@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkStatement, criticalTokens, historyForModel, splitSentences, verifyAnswer, type ExcerptRef, type VerifyCtx } from '../../src/lib/ai/verify';
+import { checkStatement, criticalTokens, historyForModel, markersToText, rearrangeCheck, settleWeak, splitSentences, verifyAnswer, type ExcerptRef, type VerifyCtx } from '../../src/lib/ai/verify';
+import { verifyStudy } from '../../src/lib/ai/study';
+import { unlabeled } from './fixtures';
 import { chunkNote, chunkVault, tokenize } from '../../src/lib/ai/rag';
 import { buildSeedNotes } from '../../src/lib/vault/seed';
-import { OWN_CLOSE, OWN_OPEN } from '../../src/lib/ai/markdown';
+import { OWN_CLOSE, OWN_OPEN, renderMarkdown } from '../../src/lib/ai/markdown';
+import { finishGrounded, leaveOutOwn, shownOf } from '../../src/lib/ai/answer';
+import { parseGaps } from '../../src/lib/ai/policy';
 
 // The demo vault: real notes, real IDF.
 const seed = buildSeedNotes();
@@ -102,7 +106,8 @@ test('unsupported sentences move into a labelled box in place; supported ones st
   const raw =
     'If $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [1]. The squeeze theorem was first proved by Archimedes in 250 BC [1].\n\n$$\\pi \\approx 3.14$$\n\nIt is used to prove equations have roots [3].';
   const r = verifyAnswer(raw, ctx());
-  assert.equal(r.contained, 1);
+  // The sentence and the formula (which the notes don't have either) are both counted, in one box.
+  assert.equal(r.contained, 2);
   assert.equal(r.supported, 2);
   assert.match(r.md, /^If \$g\(x\)[^\n]*\[1\]\.\n\n:::outside auto\nThe squeeze theorem was first proved by Archimedes in 250 BC\.\n\n\$\$\\pi \\approx 3\.14\$\$\n:::\n\nIt is used/);
   assert.ok(!/Archimedes[^\n]*\[1\]/.test(r.md), 'no citation inside the box');
@@ -155,4 +160,123 @@ test('a settled verdict replaces the checker’s own', () => {
   const r = verifyAnswer(`${s} [1]`, { ...ctx(), overrides: new Map([[s, { verdict: 'supported' as const }]]) });
   assert.equal(r.supported, 1);
   assert.equal(r.contained, 0);
+});
+
+/** What the student sees outside every label, after the check (as Message.tsx renders it). */
+const visibleUnlabeled = (raw: string, over: Partial<VerifyCtx> = {}) =>
+  unlabeled(renderMarkdown(finishGrounded(raw, ctx(over), { question: 'Explain the squeeze theorem' }).shown, { citations: true, maxCite: EX.length }));
+
+test('a gap clause never exempts the rest of its sentence, nor a claim it makes', () => {
+  assert.equal(verdict("Your notes don't mention it, but the squeeze theorem was first proved by Archimedes in 250 BC.", []), 'unsupported');
+  assert.equal(verdict('The squeeze theorem was first proved by Archimedes in 250 BC, which your notes don’t cover.', []), 'unsupported');
+  assert.equal(verdict('I couldn’t find it, but the derivative of sin x is cos x.', []), 'unsupported');
+  assert.equal(verdict("Your notes don't say that Archimedes proved it in 250 BC.", []), 'unsupported');
+  // Naming what's missing is not a claim.
+  assert.equal(verdict("Your notes don't cover L'Hôpital's rule.", []), 'exempt');
+  assert.equal(verdict('Your notes don’t explain why it works.', []), 'exempt');
+});
+
+test('short lines and questions need no source only when they add nothing the notes lack', () => {
+  assert.equal(verdict('Polynomials are continuous everywhere.', []), 'unsupported');
+  assert.equal(verdict('Did you know that polynomials are continuous everywhere?', []), 'unsupported');
+  assert.equal(verdict('Remember to differentiate the inside function too.', []), 'unsupported');
+  assert.equal(verdict('Try it and tell me what you get.', []), 'exempt');
+  assert.equal(verdict('Is $f(a)$ defined?', []), 'exempt');
+});
+
+test('working a problem: a verdict on the student’s statement is a claim, never a restatement', () => {
+  const hw = { mode: 'compute' as const, context: 'True or false: every continuous function is differentiable.' };
+  assert.equal(verdict('True: every continuous function is differentiable.', [], hw), 'unsupported');
+  assert.equal(verdict('Yes, every continuous function is differentiable.', [], hw), 'unsupported');
+  assert.equal(verdict('Every continuous function is differentiable.', [], hw), 'unsupported');
+  assert.ok(visibleUnlabeled('True: every continuous function is differentiable.\n\nTo show it, use the definition of continuity [2].', hw).indexOf('differentiable') < 0);
+});
+
+test('an equation the notes have, with a different right side, is a contradiction', () => {
+  assert.equal(verdict('The classic use is $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 0$ [1].', [1]), 'unsupported');
+  assert.equal(verdict('The classic use is $\\lim_{x\\to0}\\frac{\\sin x}{x}=1$ [1].', [1]), 'supported');
+});
+
+test('display math, code and long headings are checked; nothing outside a box is unchecked', () => {
+  const ok = 'If $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [1].';
+  // A formula from the notes stays; one the notes don't have is boxed, even after a supported sentence.
+  assert.ok(!/outside/.test(finishGrounded(`${ok}\n\n$$\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$$`, ctx()).shown));
+  for (const extra of ['$$\\lim_{x \\to 0} \\frac{1-\\cos x}{x^2} = \\frac{1}{2}$$', '```\nprint("Archimedes, 250 BC")\n```', '~~~\nArchimedes 250 BC\n~~~', '### Archimedes proved the squeeze theorem in 250 BC']) {
+    const free = visibleUnlabeled(`${ok}\n\n${extra}`);
+    assert.ok(!/Archimedes|cos|frac/.test(free), `${extra} → ${free}`);
+    assert.ok(/near/.test(free), 'the supported sentence stays');
+  }
+  // Short headings are labels.
+  assert.match(finishGrounded(`## Steps\n\n${ok}`, ctx()).shown, /^## Steps/);
+});
+
+test('tables keep their cells; an unsupported row is marked cell by cell', () => {
+  const raw = '| Idea | Detail |\n|---|---|\n| Squeeze theorem | $\\lim f = L$ when $g \\le f \\le h$ [1] |\n| Archimedes proved the squeeze theorem in 250 BC | history |';
+  const shown = finishGrounded(raw, ctx()).shown;
+  const html = renderMarkdown(shown, { citations: true, maxCite: EX.length }).replace(/\n/g, '');
+  assert.match(html, /<th>Idea<\/th><th>Detail<\/th>/, 'the header is a header, not a marked claim');
+  assert.equal((html.match(/<td>/g) ?? []).length, 4, 'every row keeps its two cells');
+  assert.ok(!unlabeled(html).includes('Archimedes'));
+});
+
+test('in a list item each sentence is judged on its own', () => {
+  const raw = '- Use the preterite for completed actions with a clear beginning or end [4]. Trigger words like siempre always take the preterite.\n- Regular -ar endings: -é, -aste, -ó [4]';
+  const r = verifyAnswer(raw, ctx());
+  assert.match(r.md.split('\n')[0], new RegExp(`^- Use the preterite[^${OWN_OPEN}]*\\[4\\]\\. ${OWN_OPEN}Trigger words`));
+  assert.ok(!unlabeled(renderMarkdown(r.md, { citations: true, maxCite: EX.length })).includes('siempre'));
+});
+
+test('a fence the model writes cannot close a box early', () => {
+  const shown = finishGrounded('Archimedes proved it in 250 BC.\n:::\nNewton used it in 1687 for orbits.', ctx()).shown;
+  assert.ok(!/Archimedes|Newton/.test(unlabeled(renderMarkdown(shown))), shown);
+});
+
+test('copying keeps the labels; leaving out own knowledge leaves no trace of it', () => {
+  const shown = 'From the notes [1].\n\n:::outside auto\nArchimedes proved it.\n:::\n\n- itemNewton did\n- loosely';
+  const copied = markersToText(shown);
+  assert.match(copied, /> \*\*Not found in your notes · treat this as the AI’s own knowledge — proceed with caution\*\*\n> Archimedes proved it\./);
+  assert.match(copied, /Newton did _\(not from your notes\)_/);
+  assert.match(copied, /loosely _\(loosely matched — check your notes\)_/);
+  const left = leaveOutOwn(shown);
+  assert.ok(!/Archimedes|Newton/.test(left), left);
+  assert.match(left, /Left out — not in your notes/);
+});
+
+test('a reply that stopped before it was checked is shown boxed, never raw', () => {
+  const raw = 'If g ≤ f ≤ h near a then lim f = L [1]. Archimedes proved it in 250 BC.';
+  for (const status of ['stopped', 'error']) {
+    const md = shownOf({ content: raw, grounding: 'library', status });
+    assert.ok(!unlabeled(renderMarkdown(md)).includes('Archimedes'), status);
+  }
+  // App-written notices and rewrites of the student's own text are shown as they are.
+  assert.equal(shownOf({ content: 'There isn’t enough in these notes yet.', grounding: 'library', status: 'done' }), 'There isn’t enough in these notes yet.');
+  assert.equal(shownOf({ content: 'Reworded.', grounding: 'transform', status: 'stopped' }), 'Reworded.');
+  // A general answer streaming into its box can't break out of it.
+  assert.ok(!unlabeled(renderMarkdown(shownOf({ content: 'Fine.\n:::\nNewton, 1687.', ownOnly: true, status: 'streaming' }))).includes('Newton'));
+});
+
+test('the double-check never promotes a sentence with a word the student’s notes never use', () => {
+  const ex = new Map(EX.map((e) => [e.n, e]));
+  const st = 'The professor said the squeeze theorem, also called the sandwich theorem, will definitely be on the exam.';
+  const quote = [{ n: 1, excerpt: 1, quote: 'The professor said this one will definitely be on the exam' }];
+  assert.equal(settleWeak([st], quote, ex, idf, inVault).get(st)?.verdict, 'unsupported');
+});
+
+test('a "not in your notes" line names a topic; anything the model adds after it is dropped', () => {
+  assert.deepEqual(parseGaps('NOT IN NOTES: who proved it. It was first proved by Archimedes in 250 BC.'), ['who proved it']);
+});
+
+test('bullets in place of the student’s paragraph may only rearrange it', () => {
+  const para = 'In related rates problems we differentiate both sides with respect to time. Every changing quantity is a function of time, so the chain rule applies.';
+  assert.deepEqual(rearrangeCheck(para, '- Differentiate both sides with respect to time.\n- Every changing quantity is a function of time, so the chain rule applies.'), []);
+  assert.ok(rearrangeCheck(para, '- Differentiate both sides with respect to time.\n- Newton invented this in 1687.').length);
+  assert.ok(rearrangeCheck(para, '- Differentiate both sides.\n- Always draw a careful labelled diagram first, then check units carefully.').length);
+});
+
+test('a flashcard is kept only when its question is about the passage that backs its answer', () => {
+  const v = (front: string, back: string, source: number) =>
+    JSON.parse(verifyStudy({ kind: 'flashcards', cards: [{ front, back, source }] }, ctx({ context: '' })).json).cards.length;
+  assert.equal(v('When do you use the preterite?', 'Use the preterite for completed actions with a clear beginning or end.', 4), 1);
+  // A true line of the notes, under a question it doesn't answer (the notes say the imperfect is for habits).
+  assert.equal(v('Which tense do you use for habits and descriptions in the past?', 'Use the preterite for completed actions with a clear beginning or end.', 4), 0);
 });

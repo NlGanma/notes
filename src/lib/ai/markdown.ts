@@ -164,6 +164,14 @@ export const WEAK_CLOSE = '\uE003';
 const FENCE_CLOSE = /^\s*:{3,}\s*$/;
 
 /**
+ * Text to put inside a box the app draws: a fence line of the model's own
+ * (":::", ":::note") would close the box early and leave the rest unlabelled.
+ */
+export function boxBody(text: string): string {
+  return text.replace(/^[ \t]*:{3,}[^\n]*(?:\n|$)/gm, '').trim();
+}
+
+/**
  * Tidies the "not from your notes" fences models write: accepts a few
  * spellings, and closes a block that is still open (while streaming, or when
  * the model forgot) so the box shows up immediately.

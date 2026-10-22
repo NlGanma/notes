@@ -17,7 +17,7 @@ import {
 import type { ChatMsg, MsgPhase, SourceRef } from '../../state/assistant';
 import { renderMarkdown } from '../../lib/ai/markdown';
 import { applyGrounding, type GroundingReport } from '../../lib/ai/grounding';
-import type { CheckSummary } from '../../lib/ai/answer';
+import { shownOf, type CheckSummary } from '../../lib/ai/answer';
 import { LABELS } from '../../lib/ai/policy';
 import { markersToText } from '../../lib/ai/verify';
 import { openSource } from './Citations';
@@ -41,11 +41,9 @@ function phaseLabel(phase: MsgPhase, msg: ChatMsg): string {
   }
 }
 
-/** The markdown a message shows: the checked version when there is one. */
+/** The markdown a message shows: the checked version (see shownOf). */
 export function shownMarkdown(msg: ChatMsg): string {
-  if (msg.shown !== undefined) return msg.shown;
-  // The notes don't cover it: the reply streams straight into the labelled box.
-  return msg.ownOnly && msg.content ? `:::outside\n${msg.content}` : msg.content;
+  return shownOf(msg);
 }
 
 /** Plain markdown for Copy (inline marks spelled out). */

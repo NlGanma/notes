@@ -16,13 +16,14 @@ import {
   type AskMode,
   type StudyTool,
 } from '../lib/ai/prompts';
-import { blockToText, docToText, estimateTokens, fitToBudget, isAssistantBlock } from '../lib/ai/context';
+import { blockToText, docToText, estimateTokens, fitToBudget, withoutAssistant } from '../lib/ai/context';
 import { chunkNote, chunkVault, formatExcerpts, rankChunks, type Chunk, type Hit, type Scope } from '../lib/ai/rag';
 import { parseStudyJSON, verifyStudy } from '../lib/ai/study';
 import { assessCoverage, findExamples, gapFillSystem, gateQuery, RULE_REMINDER, type CoverageLevel } from '../lib/ai/policy';
 import { historyForModel, settleWeak, transformCheck, VERIFY_PROMPT, type ExcerptRef, type VerifyCtx, type VerifyMode } from '../lib/ai/verify';
 import { parseJSONLoose } from '../lib/ai/json';
-import { finishGrounded, type Banner, type CheckSummary } from '../lib/ai/answer';
+import { finishGrounded, leaveOutOwn, shownOf, type Banner, type CheckSummary, type Finished } from '../lib/ai/answer';
+import { boxBody } from '../lib/ai/markdown';
 import type { NoteDoc } from '../lib/vault/types';
 import { homeworkSources } from '../lib/homework';
 import { classInfo, classOfNote } from '../lib/classes';
@@ -283,7 +284,8 @@ export const useAssistant = create<AssistantState>()(
           if (raf) cancelAnimationFrame(raf);
           // Superseded by a newer request that aborted us after the server had already finished.
           if (ctrl.signal.aborted) {
-            patchMsg(key, msgId, { status: 'stopped', phase: undefined });
+            patchMsg(key, msgId, { content: buf.trim(), status: 'stopped', phase: undefined });
+            if (opts.finish) checkPartial(key, msgId, buf.trim(), opts.finish);
             return null;
           }
           // Some servers don't stream (or stream only thinking); fall back to the final text.
@@ -320,6 +322,8 @@ export const useAssistant = create<AssistantState>()(
             phase: undefined,
             error: aborted ? undefined : friendlyError(e),
           });
+          // What arrived before it stopped is checked like a finished answer (never shown raw).
+          if (opts.finish) checkPartial(key, msgId, buf.trim(), opts.finish);
           return null;
         } finally {
           // Only the current stream owns the flags: an older, aborted one must not clear a newer one's.
@@ -329,6 +333,14 @@ export const useAssistant = create<AssistantState>()(
           }
         }
       };
+
+      /** Cards or a quiz the model's reply couldn't be read as: an error, never its raw text. */
+      const unreadable = (tool: StudyTool): Partial<ChatMsg> => ({
+        content: '',
+        status: 'error',
+        phase: undefined,
+        error: `The model’s reply couldn’t be read as ${tool === 'quiz' ? 'a quiz' : 'flashcards'}. Try again, or pick a larger model in Settings → Local AI.`,
+      });
 
       /** Re-asks once for valid JSON when a study tool reply can't be parsed. */
       const repairStudyJSON = async (key: string, msgId: string, tool: StudyTool, text: string, messages: ChatMessage[], model: string) => {
@@ -354,14 +366,10 @@ export const useAssistant = create<AssistantState>()(
               },
             ],
           });
-          patchMsg(
-            key,
-            msgId,
-            parseStudyJSON(tool, r.text) ? { content: r.text.trim(), status: 'done', phase: undefined } : { status: 'done', phase: undefined },
-          );
+          patchMsg(key, msgId, parseStudyJSON(tool, r.text) ? { content: r.text.trim(), status: 'done', phase: undefined } : unreadable(tool));
         } catch {
-          // Stopped: say so; failed: fall back to showing the model's reply as text.
-          patchMsg(key, msgId, { status: ctrl.signal.aborted ? 'stopped' : 'done', phase: undefined });
+          // Stopped: say so; failed: say that too — the model's unchecked text is never shown instead.
+          patchMsg(key, msgId, ctrl.signal.aborted ? { status: 'stopped', phase: undefined } : unreadable(tool));
         } finally {
           if (controller === ctrl) {
             controller = null;
@@ -369,6 +377,20 @@ export const useAssistant = create<AssistantState>()(
           }
         }
       };
+
+      /** The check alone, for a reply that stopped early (no double-check, no general-knowledge call). */
+      const checkPartial = (key: string, msgId: string, raw: string, spec: FinishSpec) => {
+        if (!raw) return;
+        const { idf, inVault } = vaultStats();
+        const f = finishGrounded(raw, { excerpts: new Map(spec.excerpts), context: spec.context, mode: spec.mode, idf, inVault }, { question: spec.question });
+        patchMsg(key, msgId, { ...visible(f), check: f.check, gaps: f.gaps, coverage: f.coverage });
+      };
+
+      /** Set to answer only from the notes: what isn't from them is left out rather than boxed. */
+      const visible = (f: Finished): { shown: string; banner?: Banner } =>
+        useAI.getState().outsideKnowledge === 'never'
+          ? { shown: leaveOutOwn(f.shown), banner: f.banner === 'collapsed' ? 'noneOff' : f.banner }
+          : { shown: f.shown, banner: f.banner };
 
       /**
        * The notes-only check on a finished reply: unsupported statements are
@@ -383,18 +405,21 @@ export const useAssistant = create<AssistantState>()(
           // The model refused although the check found the notes on topic: point at the passages themselves.
           const mayCover = f.coverage === 'none' && spec.gate === 'full';
           const sources = get().threads[key]?.messages.find((m) => m.id === msgId)?.sources ?? [];
+          const v = visible(f);
           patchMsg(key, msgId, {
-            shown: f.shown,
+            shown: v.shown,
             check: f.check,
             gaps: f.gaps,
             coverage: f.coverage,
-            banner: mayCover ? 'mayCover' : f.banner,
+            banner: mayCover ? 'mayCover' : v.banner,
             nearest: mayCover ? sources.filter((x) => !x.visual).slice(0, 2) : undefined,
           });
         };
         show();
         if (f.weak.length && useAI.getState().doubleCheck) {
           const overrides = await doubleCheck(key, msgId, raw, f.weak.slice(0, 6), vctx, model);
+          // Stopped: the reply stays as checked so far, with nothing more asked of the model.
+          if (overrides === 'stopped') return;
           if (overrides) {
             f = finishGrounded(raw, { ...vctx, overrides }, { question: spec.question });
             show();
@@ -436,10 +461,10 @@ export const useAssistant = create<AssistantState>()(
             },
             parseJSONLoose,
           );
-          return settleWeak(weak, value, vctx.excerpts, vctx.idf);
+          return settleWeak(weak, value, vctx.excerpts, vctx.idf, vctx.inVault);
         } catch {
           // Stopped or unreachable: the sentences stay marked as loosely matched, never promoted.
-          return null;
+          return ctrl.signal.aborted ? ('stopped' as const) : null;
         } finally {
           patchMsg(key, msgId, { phase: undefined });
           if (controller === ctrl) {
@@ -463,7 +488,7 @@ export const useAssistant = create<AssistantState>()(
         const ctrl = new AbortController();
         controller = ctrl;
         set({ streaming: key });
-        const box = (t: string) => `${o.base ? `${o.base}\n\n` : ''}:::outside\n${t.trim()}\n:::`;
+        const box = (t: string) => `${o.base ? `${o.base}\n\n` : ''}:::outside\n${boxBody(t)}\n:::`;
         patchMsg(key, msgId, { status: 'streaming', phase: 'general' });
         let buf = '';
         let raf = 0;
@@ -652,7 +677,7 @@ export const useAssistant = create<AssistantState>()(
             const linked = homeworkSources(note, notes);
             noLinked = !linked.length;
             // Answers pasted in earlier are not part of the assignment (and must not be graded as the student's work).
-            const ownContent = { ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) };
+            const ownContent = withoutAssistant({ ...content, content: content?.content ?? [] });
             const hwText = fitToBudget(docToText(ownContent), Math.floor(ctx * 0.18), focus);
             hits = await homeworkExcerpts(linked, [question, focus ?? '', hwText.slice(0, 1600)].join('\n'), Math.floor(ctx * 0.42));
             system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits), className);
@@ -708,7 +733,7 @@ export const useAssistant = create<AssistantState>()(
           if (moreExcerpts) userContent = `${moreExcerpts}\n\n${userContent}`;
           if (instructions) userContent = `${instructions}\n\n${userContent}`;
           const missing = gate?.level === 'partial' && gate.missing.length ? `\n\nThese words from the question don't appear in the notes: ${gate.missing.join(', ')}.` : '';
-          const hwContext = homework ? docToText({ ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) }) : '';
+          const hwContext = homework ? docToText(withoutAssistant({ ...content, content: content?.content ?? [] })) : '';
           await stream(key, botMsg.id, msgs(system, `${userContent}${missing}\n\n${RULE_REMINDER}`), model, {
             label: homework ? `Homework · ${title}` : `Ask · ${title}`,
             temperature: groundedTemp(ai.temperature),
@@ -932,7 +957,7 @@ function toSources(hits: Hit[], _withPicture = false): SourceRef[] {
 function modelHistory(m: ChatMsg): string {
   if (m.role !== 'assistant') return m.content;
   if (m.ownOnly) return '(That answer was general knowledge, not from the notes.)';
-  return historyForModel(m.shown ?? m.content) || '(no answer)';
+  return historyForModel(shownOf(m)) || '(no answer)';
 }
 
 const PICTURE_ID = '__picture';
@@ -966,7 +991,8 @@ async function noteExcerpts(
   ctx: number,
 ): Promise<{ hits: Hit[]; own: number; gate: Hit[] }> {
   if (!note) return { hits: [], own: 0, gate: [] };
-  const chunks = chunkNote({ ...note, content: content ?? note.content }).filter((c) => c.text.trim() && !/^\[[^\]]*\]$/.test(c.text.trim()));
+  // A note the AI wrote (saved flashcards) is not the student's notes: it is never evidence.
+  const chunks = note.meta.generated ? [] : chunkNote({ ...note, content: content ?? note.content }).filter((c) => c.text.trim() && !/^\[[^\]]*\]$/.test(c.text.trim()));
   const budget = Math.floor(ctx * 0.45);
   const cost = (c: Chunk) => estimateTokens(c.text) + 24;
   let own = chunks;

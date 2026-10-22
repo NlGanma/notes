@@ -51,3 +51,24 @@ export function vault() {
   const list = [lecture4, lecture5, cells, loose, hw, trashed];
   return { lecture4, lecture5, cells, loose, hw, trashed, list, notes: byId(list) };
 }
+
+/** Visible text of rendered HTML outside every caution box and inline mark. */
+export function unlabeled(html: string): string {
+  let out = '';
+  let skip = 0;
+  const stack: boolean[] = [];
+  for (const m of html.matchAll(/<(\/?)([a-z0-9]+)([^>]*)>|([^<]+)/gi)) {
+    if (m[4] !== undefined) {
+      if (!skip) out += m[4];
+      continue;
+    }
+    const [, close, tag, attrs] = m;
+    if (/^(?:br|hr|img|input)$/i.test(tag) || /\/$/.test(attrs)) continue;
+    if (!close) {
+      const labelled = /class="[^"]*\b(?:outside-notes|own-inline|own-tag)\b/.test(attrs);
+      stack.push(labelled);
+      if (labelled) skip++;
+    } else if (stack.pop()) skip--;
+  }
+  return out.replace(/\s+/g, ' ');
+}

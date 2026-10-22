@@ -1,5 +1,5 @@
 import { parseJSONLoose } from './json';
-import { checkStatement, novelTokens, type VerifyCtx } from './verify';
+import { checkStatement, idfSupport, novelTokens, type VerifyCtx } from './verify';
 
 /** Parsing for the JSON study tools (flashcards, quiz) — tolerant of the shapes small models produce. */
 
@@ -66,7 +66,11 @@ export function verifyStudy(
     if (novelTokens(ask, allNotes).length) return null;
     const c = checkStatement(answer, source ? [source] : [], { ...ctx, context: '' });
     // Shown without a caution label, so it must be fully backed (loosely matched isn't enough).
-    return c.verdict === 'supported' ? (c.repaired ?? source ?? c.cites[0]) : null;
+    if (c.verdict !== 'supported') return null;
+    const n = c.repaired ?? source ?? c.cites[0];
+    // …and the question must be about what that passage says: a true line under the wrong question is no card.
+    const e = n ? ctx.excerpts.get(n) : undefined;
+    return e && idfSupport(ask, `${e.title ?? ''} ${e.section ?? ''}\n${e.text}`, ctx.idf).support >= 0.5 ? n : null;
   };
   if (parsed.kind === 'flashcards') {
     const cards = parsed.cards.flatMap((c) => {

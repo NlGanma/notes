@@ -8,6 +8,7 @@ import { strokeBounds } from './ink/geometry';
 import { lineHeightFor } from '../editor/registry';
 import { docToText } from './ai/context';
 import { markdownToEditorHTML } from './ai/markdown';
+import { rearrangeCheck } from './ai/verify';
 import { complete, parseJSONLoose, transcribeStrokes } from './ai/actions';
 import { BULLETS_PROMPT, SUMMARY_PROMPT, TAGS_PROMPT, TITLE_PROMPT } from './ai/prompts';
 import { fittedHeight, setTranscript } from '../editor/ink/ops';
@@ -390,8 +391,12 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       async apply(editor) {
         const at = blockPos(editor, String(longPara.attrs?.id));
         if (!at) return;
-        const md = (await complete([{ role: 'user', content: BULLETS_PROMPT(docToText({ type: 'doc', content: [longPara] })) }], { label: 'Polish · bullets' }))
-          .text;
+        const passage = docToText({ type: 'doc', content: [longPara] });
+        const md = (await complete([{ role: 'user', content: BULLETS_PROMPT(passage) }], { label: 'Polish · bullets' })).text;
+        // The bullets replace the student's own words, so they may only rearrange them: anything new would
+        // become "notes" that later answers cite.
+        const added = rearrangeCheck(passage, md);
+        if (added.length) throw new Error(`The rewrite added things your paragraph doesn’t say (${added.slice(0, 3).map((a) => `“${a}”`).join(', ')}), so your paragraph was left as it is.`);
         const nodes = htmlToNodes(editor, markdownToEditorHTML(md));
         if (nodes.length) editor.view.dispatch(editor.state.tr.replaceWith(at.pos, at.pos + at.size, nodes));
       },

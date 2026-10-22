@@ -99,6 +99,11 @@ export interface DocBlock {
 /** Callouts written by the assistant — not something the student or teacher wrote. */
 export const isAssistantBlock = (b: JSONContent) => b.type === 'callout' && (b.attrs?.variant === 'ai' || b.attrs?.variant === 'outside');
 
+/** The node without the assistant's callouts, however deep (one pasted into a list item or a quote too). */
+export function withoutAssistant<T extends JSONContent>(n: T): T {
+  return n.content ? { ...n, content: n.content.filter((c) => !isAssistantBlock(c)).map(withoutAssistant) } : n;
+}
+
 /**
  * Top-level blocks with their section path. `sourcesOnly` leaves out the
  * assistant's own callouts, so answers pasted into a note are never cited
@@ -107,8 +112,9 @@ export const isAssistantBlock = (b: JSONContent) => b.type === 'callout' && (b.a
 export function docBlocks(doc: JSONContent | undefined, opts: { sourcesOnly?: boolean } = {}): DocBlock[] {
   const out: DocBlock[] = [];
   const stack: string[] = [];
-  for (const b of doc?.content ?? []) {
-    if (opts.sourcesOnly && isAssistantBlock(b)) continue;
+  for (const top of doc?.content ?? []) {
+    if (opts.sourcesOnly && isAssistantBlock(top)) continue;
+    const b = opts.sourcesOnly ? withoutAssistant(top) : top;
     if (b.type === 'heading') {
       const level = Number(b.attrs?.level ?? 1);
       stack.length = Math.max(0, level - 1);

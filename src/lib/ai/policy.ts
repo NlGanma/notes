@@ -162,7 +162,9 @@ export function assessCoverage(question: string, hits: Hit[], stats: VaultStats,
 export function parseGaps(md: string): string[] {
   const out: string[] = [];
   for (const m of md.matchAll(/^\s*\**\s*not in (?:your |the )?notes\s*\**\s*:?\s*\**\s*(.*)$/gim)) {
-    const what = m[1].replace(/\*\*/g, '').replace(/[.\s]+$/, '').trim();
+    // Only what is missing — the banner is the app's, so a sentence the model added after it is dropped.
+    let what = m[1].replace(/\*\*/g, '').split(/(?<=[.!?])\s+/)[0].replace(/[.\s]+$/, '').trim();
+    if (what.length > 100) what = `${what.slice(0, 100).replace(/\s+\S*$/, '')}…`;
     if (what && !out.includes(what)) out.push(what);
   }
   return out;
