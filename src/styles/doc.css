@@ -286,7 +286,7 @@
 }
 .callout[data-variant='ai'] {
   background: linear-gradient(135deg, #f7f4ff, #f1f6ff) !important;
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.16) !important;
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.16) !important;
 }
 .callout[data-variant='ai'] .callout-icon {
   color: var(--ai);

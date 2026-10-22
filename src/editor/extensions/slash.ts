@@ -204,9 +204,9 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
   {
     id: 'ask',
-    title: 'Ask AI',
+    title: 'Ask about this note',
     hint: 'About this note, with full context',
-    icon: 'Sparkles',
+    icon: 'MessageCircleQuestion',
     keywords: 'ai assistant ask chat question explain llm',
     group: 'AI',
     shortcut: '⌘J',

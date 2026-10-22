@@ -24,7 +24,7 @@ import {
   Shapes,
   Sigma,
   Signature,
-  Sparkles,
+  MessageCircleQuestion,
   Square,
   Triangle,
   Type,
@@ -169,7 +169,7 @@ export function InkToolbar({ editor }: { editor: Editor }) {
           onClick={(e) => pickTool('ask', e.currentTarget)}
           aria-label="Ask AI about an area"
         >
-          <Sparkles size={16} />
+          <MessageCircleQuestion size={16} />
           <span className="tb-ask-label">Ask</span>
           <Tip label="Drag over anything on the page to ask your AI" kbd={`${ALT}A`} />
         </button>

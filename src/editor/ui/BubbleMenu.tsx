@@ -14,10 +14,9 @@ import {
   Link2,
   MessageCircleQuestion,
   Radical,
-  Sparkles,
   Strikethrough,
   Underline,
-  Wand2,
+  PenLine,
   Languages,
   BookOpenText,
   Baseline,
@@ -34,12 +33,12 @@ export interface AskTextRequest {
   label?: string;
 }
 
-const AI_ACTIONS: { id: AskTextRequest['action']; label: string; icon: typeof Sparkles }[] = [
+const AI_ACTIONS: { id: AskTextRequest['action']; label: string; icon: typeof MessageCircleQuestion }[] = [
   { id: 'explain', label: 'Explain this', icon: Lightbulb },
   { id: 'simplify', label: 'Explain like I’m new to it', icon: MessageCircleQuestion },
   { id: 'example', label: 'Give an example', icon: BookOpenText },
   { id: 'define', label: 'Define key terms', icon: Baseline },
-  { id: 'rewrite', label: 'Tidy up the wording', icon: Wand2 },
+  { id: 'rewrite', label: 'Tidy up the wording', icon: PenLine },
   { id: 'translate', label: 'Translate', icon: Languages },
 ];
 
@@ -126,7 +125,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
     >
       <div className="bubble-row">
         <button className={cx('bub-btn is-ai', panel === 'ai' && 'is-on')} onClick={() => setPanel(panel === 'ai' ? null : 'ai')}>
-          <Sparkles size={14} /> Ask AI <ChevronDown size={12} />
+          <MessageCircleQuestion size={14} /> Ask <ChevronDown size={12} />
         </button>
         <span className="bub-sep" />
         <button className={cx('bub-btn', st.bold && 'is-on')} onClick={() => editor.chain().focus().toggleBold().run()} title={`Bold ${MOD}B`}>

@@ -7,7 +7,7 @@ import {
   ListChecks,
   MessageSquarePlus,
   ScanSearch,
-  Sparkles,
+  MessageCircleQuestion,
   Square,
   X,
   ImageIcon,
@@ -162,7 +162,7 @@ export function AssistantPanel() {
       <div className="assistant-head drag">
         <div className="assistant-title no-drag">
           <span className="assistant-spark">
-            <Sparkles size={15} />
+            <MessageCircleQuestion size={15} />
           </span>
           <div>
             <div className="assistant-name">{isHomework ? 'Homework helper' : 'Assistant'}</div>
@@ -368,7 +368,7 @@ export function AssistantPanel() {
         <div className="composer-row">
           <div className="mode-toggle" role="radiogroup" aria-label="Mode">
             <button className={cx(draft.mode === 'chat' && 'is-active')} onClick={() => useAssistant.getState().setDraft(key, { mode: 'chat' })}>
-              <Sparkles size={13} /> Ask
+              <MessageCircleQuestion size={13} /> Ask
             </button>
             <button
               className={cx(draft.mode === 'tutor' && 'is-active')}

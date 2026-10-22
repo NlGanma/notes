@@ -942,7 +942,7 @@
   background: var(--ai-soft);
 }
 .hw-suggest:hover {
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.3);
 }
 .hw-link-btn {
   height: 24px;
@@ -963,7 +963,7 @@
   padding: 12px 13px;
   border-radius: 12px;
   background: linear-gradient(135deg, #f7f5ff, #f3f7ff);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.14);
   text-align: left;
 }
 .hw-helper-head {

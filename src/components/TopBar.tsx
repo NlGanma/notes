@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, FileDown, FileText, FileUp, PanelLeft, Plus, Sparkles, Wand2, X, Code2, FileJson, FileType2 } from 'lucide-react';
+import { ChevronDown, FileDown, FileText, FileUp, PanelLeft, Plus, MessageCircleQuestion, ListChecks, X, Code2, FileJson, FileType2 } from 'lucide-react';
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
 import { newNote, toggleAssistant } from '../lib/commands';
@@ -73,7 +73,7 @@ export function TopBar() {
               onClick={() => setMenu(menu === 'polish' ? null : 'polish')}
               title="Suggestions to tidy this note"
             >
-              <Wand2 size={15} />
+              <ListChecks size={15} />
               <span>Polish</span>
               {polishCount > 0 && <span className="badge">{polishCount}</span>}
             </button>
@@ -84,7 +84,7 @@ export function TopBar() {
             </button>
             {/* Like the panel itself, only with a note open. */}
             <button className={cx('top-btn is-ai', assistant && 'is-on')} onClick={() => toggleAssistant()} title={`Assistant  ${MOD}J`}>
-              <Sparkles size={15} />
+              <MessageCircleQuestion size={15} />
               <span>Assistant</span>
             </button>
           </>

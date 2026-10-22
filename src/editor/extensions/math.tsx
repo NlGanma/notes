@@ -2,7 +2,7 @@ import { InputRule, mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, Sparkles, Copy, Check } from 'lucide-react';
+import { GraduationCap, MessageCircleQuestion, Copy, Check } from 'lucide-react';
 import { renderMath } from '../../lib/katex';
 import { editorBus } from '../bus';
 import { cx } from '../../lib/util';
@@ -294,7 +294,7 @@ function MathBlockView({ node, updateAttributes, selected, editor, getPos, delet
             title="Explain this"
             onClick={() => editorBus.emit('math:ask', { editor, latex, mode: 'explain', blockId: node.attrs.id })}
           >
-            <Sparkles size={14} />
+            <MessageCircleQuestion size={14} />
           </button>
           <button
             className="ink-action is-math"

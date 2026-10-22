@@ -17,6 +17,11 @@ const waitIdle = async () => {
   await page.waitForTimeout(250);
 };
 const stats = () => fetch(`${MOCK}/__mock`).then((r) => r.json()).then((j) => j.stats);
+/** Waits until the model has been called `n` more times than in `since` (a busy machine starts requests late), then for the reply. */
+const waitCalls = async (since, n) => {
+  for (let i = 0; i < 80 && (await stats()).chat < since.chat + n; i++) await page.waitForTimeout(250);
+  await waitIdle();
+};
 const bot = () => page.locator('.assistant .msg.is-bot').last();
 const ask = async (text) => {
   await page.fill('.assistant .composer textarea', text);
@@ -58,8 +63,7 @@ await shot(page, 'grounding-01-not-covered');
 // Search my notes anyway: the notes prompt runs; the model says what isn't there.
 before = await stats();
 await bot().locator('.coverage-force').click();
-await page.waitForTimeout(300);
-await waitIdle();
+await waitCalls(before, 2);
 after = await stats();
 check(after.kinds.slice(before.kinds.length).join(',') === 'note,general', '“Search my notes anyway” asks the notes first, then answers the rest separately');
 check(/notes don.t cover this/i.test((await bot().locator('.coverage-banner').textContent().catch(() => '')) ?? ''), '…and still labels it');
@@ -170,8 +174,7 @@ await page.waitForSelector('.bubble');
 await page.click('.bubble .bub-btn.is-ai');
 before = await stats();
 await page.click('.bubble-panel .menu-item:has-text("example")');
-await page.waitForTimeout(300);
-await waitIdle();
+await waitCalls(before, 1);
 after = await stats();
 check(/don.t include an example/i.test(await bot().locator('.coverage-banner').textContent().catch(() => '')), 'no example in the notes: Nib says so');
 check(await bot().locator('.outside-notes').count(), '…and the example it gives is boxed as the AI’s own knowledge');

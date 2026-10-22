@@ -26,11 +26,11 @@
   --accent-soft: #eaf1fe;
   --accent-text: #1a4fc2;
 
-  /* AI: violet → blue */
-  --ai: #6b4fe0;
-  --ai-2: #2f6bf0;
-  --ai-soft: #f2efff;
-  --ai-grad: linear-gradient(135deg, #7a55f0 0%, #3b6cf2 100%);
+  /* AI features use the same accent as everything else: nothing looks like a separate, premium add-on. */
+  --ai: var(--accent);
+  --ai-2: var(--accent);
+  --ai-soft: var(--accent-soft);
+  --ai-grad: var(--accent);
 
   --danger: #d93030;
   --danger-soft: #fdeeee;

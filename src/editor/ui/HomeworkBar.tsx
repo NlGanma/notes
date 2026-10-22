@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ClipboardList, Link2, Plus, ScanText, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { CalendarDays, Check, ClipboardList, Link2, Plus, ScanText, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
@@ -114,7 +114,7 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
           </button>
         )}
         <button className="btn is-ai is-small" onClick={() => toggleAssistant(true)}>
-          <Sparkles size={13} /> Help with this
+          <MessageCircleQuestion size={13} /> Help with this
         </button>
       </div>
       <div className="hw-bar-row is-sources">

@@ -43,7 +43,7 @@
   border-radius: 8px;
   background: var(--ai-grad);
   color: #fff;
-  box-shadow: 0 3px 8px rgba(107, 79, 224, 0.3);
+  box-shadow: 0 3px 8px rgba(33, 96, 232, 0.3);
   flex: none;
 }
 .assistant-name {
@@ -165,7 +165,7 @@
 }
 .starter:hover:not(:disabled) {
   background: var(--ai-soft);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.2);
   color: var(--text);
 }
 .starter:disabled {
@@ -195,7 +195,7 @@
 }
 .msg-bubble.is-tool {
   background: var(--ai-soft);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.15);
   color: var(--ai);
   font-weight: 600;
   display: inline-flex;
@@ -385,10 +385,10 @@
   font-size: 12.5px;
   color: var(--ai);
   background: var(--ai-soft);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.18);
 }
 .followup:hover {
-  background: #e9e3ff;
+  background: #dde8fd;
 }
 
 /* markdown in answers */
@@ -507,8 +507,8 @@
 }
 .composer:focus-within {
   box-shadow:
-    0 0 0 1.5px rgba(107, 79, 224, 0.55),
-    0 4px 18px rgba(107, 79, 224, 0.1);
+    0 0 0 1.5px rgba(33, 96, 232, 0.55),
+    0 4px 18px rgba(33, 96, 232, 0.1);
 }
 .composer-atts {
   display: flex;
@@ -603,7 +603,7 @@
   place-items: center;
   background: var(--ai-grad);
   color: #fff;
-  box-shadow: 0 3px 10px rgba(107, 79, 224, 0.3);
+  box-shadow: 0 3px 10px rgba(33, 96, 232, 0.3);
   transition:
     transform 0.12s,
     opacity 0.12s;
@@ -653,7 +653,7 @@
   place-items: center;
   background: var(--ai-grad);
   color: #fff;
-  box-shadow: 0 6px 16px rgba(107, 79, 224, 0.28);
+  box-shadow: 0 6px 16px rgba(33, 96, 232, 0.28);
 }
 .library-title h1 {
   margin: 0;
@@ -727,7 +727,7 @@
   color: var(--text-2);
 }
 .suggest-q:hover {
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.4);
   color: var(--ai);
   background: var(--ai-soft);
 }
@@ -753,7 +753,7 @@
 }
 .study-tool:hover {
   box-shadow:
-    inset 0 0 0 1px rgba(107, 79, 224, 0.25),
+    inset 0 0 0 1px rgba(33, 96, 232, 0.25),
     0 8px 24px rgba(16, 16, 24, 0.06);
   transform: translateY(-1px);
 }
@@ -791,8 +791,8 @@
 }
 .library-composer-inner:focus-within {
   box-shadow:
-    0 0 0 1.5px rgba(107, 79, 224, 0.55),
-    0 8px 28px rgba(107, 79, 224, 0.12);
+    0 0 0 1.5px rgba(33, 96, 232, 0.55),
+    0 8px 28px rgba(33, 96, 232, 0.12);
 }
 .library-composer textarea {
   width: 100%;
@@ -945,7 +945,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(107, 79, 224, 0.2);
+  border: 2px solid rgba(33, 96, 232, 0.2);
   border-top-color: var(--ai);
   animation: spin 0.8s linear infinite;
 }
@@ -1167,7 +1167,7 @@
   padding: 14px 16px;
   border-radius: 14px;
   background: linear-gradient(135deg, #f7f4ff, #f1f6ff);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.16);
 }
 .quiz-score-n {
   font-family: var(--font-display);

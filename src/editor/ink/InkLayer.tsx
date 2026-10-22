@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import { Copy, CopyPlus, GraduationCap, Sigma, Sparkles, Trash2, Type } from 'lucide-react';
+import { Copy, CopyPlus, GraduationCap, Sigma, MessageCircleQuestion, Trash2, Type } from 'lucide-react';
 import type { Bounds, Stroke } from '../../lib/ink/types';
 import { livePath, strokePath, strokeSvgAttrs } from '../../lib/ink/render';
 import {
@@ -1706,7 +1706,7 @@ function SelectionMenu(props: {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <button className="sel-btn is-ai" onClick={() => props.onAsk('explain')} title="Ask your local AI about this">
-        <Sparkles size={14} /> Ask
+        <MessageCircleQuestion size={14} /> Ask
       </button>
       <button className="sel-btn" onClick={() => props.onAsk('tutor')} title="Guide me through this problem">
         <GraduationCap size={14} /> Tutor

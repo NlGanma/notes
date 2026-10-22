@@ -12,7 +12,7 @@ import {
   Pilcrow,
   ScanText,
   Sigma,
-  Sparkles,
+  Cpu,
   Tags,
   Text,
 } from 'lucide-react';
@@ -112,7 +112,7 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
       {smart.length > 0 && (
         <div className="polish-group">
           <div className="polish-group-label">
-            <Sparkles size={12} /> With your local AI {ai.chatModel && <span className="polish-model">· {ai.chatModel}</span>}
+            <Cpu size={12} /> With your local AI {ai.chatModel && <span className="polish-model">· {ai.chatModel}</span>}
           </div>
           {smart.map((s) => (
             <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />

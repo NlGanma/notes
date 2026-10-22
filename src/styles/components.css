@@ -54,7 +54,7 @@
 .btn.is-ai {
   background: var(--ai-grad);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(107, 79, 224, 0.25);
+  box-shadow: 0 2px 8px rgba(33, 96, 232, 0.25);
 }
 .btn.is-small {
   height: 28px;
@@ -986,7 +986,7 @@
 .polish-icon.is-ai {
   color: var(--ai);
   background: var(--ai-soft);
-  box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.15);
 }
 .polish-text {
   flex: 1;

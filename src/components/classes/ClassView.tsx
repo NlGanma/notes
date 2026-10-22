@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookMarked, ChevronRight, FolderPlus, Layers, ListChecks, Pencil, Plus, ScanText, ScrollText, Sparkles, Target } from 'lucide-react';
+import { BookMarked, ChevronRight, FolderPlus, Layers, ListChecks, Pencil, Plus, ScanText, ScrollText, MessageCircleQuestion, Target } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAssistant } from '../../state/assistant';
@@ -96,7 +96,7 @@ export function ClassView({ path }: { path: string }) {
         </div>
         <div className="collection-actions">
           <button className="btn is-ai" onClick={() => openLibrary(scope)} title={`Ask questions answered only from your ${cls.name} notes`}>
-            <Sparkles size={15} /> Ask {cls.code || cls.name}
+            <MessageCircleQuestion size={15} /> Ask {cls.code || cls.name}
           </button>
           <button className="btn is-secondary" onClick={() => newHomework(path)}>
             <Plus size={15} /> Homework

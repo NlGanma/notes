@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useEffect, useRef, useState } from 'react';
-import { GraduationCap, MoreHorizontal, Sparkles, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
+import { GraduationCap, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
 import { useTools } from '../../state/tools';
 import type { InkTranscript, Stroke } from '../../lib/ink/types';
 import { deleteBlock, fittedHeight, inkOf, insertParagraphInInk, setInkBlockHeight, trimInkBlock } from '../ink/ops';
@@ -166,7 +166,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
           </button>
         )}
         <button className="ink-action" title="Ask about this handwriting" onClick={() => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'explain' })}>
-          <Sparkles size={14} />
+          <MessageCircleQuestion size={14} />
         </button>
         {(isMath || ink.length > 0) && (
           <button

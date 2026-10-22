@@ -12,7 +12,7 @@ import {
   PanelLeft,
   Search,
   Settings,
-  Sparkles,
+  MessageCircleQuestion,
   TextSearch,
   FileDown,
   Folder,
@@ -153,7 +153,7 @@ function Palette() {
           id: 'ask-library',
           group: 'Ask',
           label: `Ask your notes: “${term}”`,
-          icon: <Sparkles size={15} />,
+          icon: <MessageCircleQuestion size={15} />,
           run: () => {
             openLibrary();
             setTimeout(() => window.dispatchEvent(new CustomEvent('nib:library-ask', { detail: term })), 50);
@@ -221,7 +221,7 @@ function Palette() {
       ]),
       { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={15} />, run: () => void newFolder() },
       { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
-      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <Sparkles size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },
+      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <MessageCircleQuestion size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },
       { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={15} />, run: () => void importFiles() },
       ...(noteId
         ? [

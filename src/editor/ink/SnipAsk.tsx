@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, BookOpenCheck, GraduationCap, Lightbulb, ListChecks, Sparkles, X } from 'lucide-react';
+import { ArrowUp, BookOpenCheck, GraduationCap, Lightbulb, ListChecks, MessageCircleQuestion, X } from 'lucide-react';
 import type { Bounds } from '../../lib/ink/types';
 
 import type { AskMode } from '../../lib/ai/prompts';
 export type { AskMode };
 
-const QUICK: { mode: AskMode; label: string; icon: typeof Sparkles }[] = [
+const QUICK: { mode: AskMode; label: string; icon: typeof MessageCircleQuestion }[] = [
   { mode: 'explain', label: 'Explain', icon: Lightbulb },
   { mode: 'tutor', label: 'Give me a hint', icon: GraduationCap },
   { mode: 'check', label: 'Check my work', icon: ListChecks },
@@ -56,7 +56,7 @@ export function SnipAsk({
           if (text.trim()) onSubmit('custom', text.trim());
         }}
       >
-        <Sparkles size={15} className="snip-ask-spark" />
+        <MessageCircleQuestion size={15} className="snip-ask-spark" />
         <input
           ref={ref}
           value={text}

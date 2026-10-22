@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, FileText, Search, Sparkles } from 'lucide-react';
+import { Check, FileText, Search, Lightbulb } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
@@ -112,7 +112,7 @@ export function LinkNotesDialog() {
         {suggestions.length > 0 && !q && (
           <div className="link-group">
             <div className="link-group-head is-suggest">
-              <Sparkles size={13} /> Suggested — they match this homework
+              <Lightbulb size={13} /> Suggested — they match this homework
             </div>
             {suggestions.map((s) => (
               <button key={s.note.meta.id} className={cx('link-row', isOn(s.note) && 'is-on')} onClick={() => toggleNote(s.note)}>
