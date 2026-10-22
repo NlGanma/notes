@@ -66,3 +66,18 @@ test('intervals after "on", "in", "∈" stay text; bogus ranges never become chi
   // The sources list counts only real citations, never math.
   assert.deepEqual([...citedInAnswer('Use $x \\in [2,3]$ and $[0, 1]$ as in the notes [1].', 3)], [1]);
 });
+
+test('a formula still being written is left out until it closes; prices, code and finished formulas stay', async () => {
+  const { withoutOpenMath } = await import('../../src/lib/ai/markdown');
+  assert.equal(withoutOpenMath('If $g \\le f$ near $a$ and $\\lim g = \\lim'), 'If $g \\le f$ near $a$ and');
+  assert.equal(withoutOpenMath('Product: $\\lim (fg) = (\\lim [3]'), 'Product: [3]', 'a citation Nib added after it stays');
+  assert.equal(withoutOpenMath('So\n\n$$\n\\lim_{x \\to 0}'), 'So');
+  assert.equal(withoutOpenMath('It is \\(\\lim'), 'It is');
+  assert.equal(withoutOpenMath(':::outside\nIn general $x^'), ':::outside\nIn general');
+  assert.equal(withoutOpenMath(':::outside\nIn general $x^\n:::'), ':::outside\nIn general\n:::', 'the box the app closes stays closed');
+  for (const done of ['It costs $5', 'From $5 to $10.', 'Area $\\pi r^2$.', 'Run `echo $HOME` first', 'Escaped \\$x', 'Done $a$.\n\nNext para $x$ ok', 'Total: 5$ each']) {
+    assert.equal(withoutOpenMath(done), done);
+  }
+  // Only the last paragraph can still be open.
+  assert.equal(withoutOpenMath('An odd $x line.\n\nThen [1].'), 'An odd $x line.\n\nThen [1].');
+});

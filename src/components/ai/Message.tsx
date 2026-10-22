@@ -7,6 +7,7 @@ import {
   Copy,
   CornerDownLeft,
   Globe,
+  Link2,
   PlayCircle,
   RefreshCw,
   Search,
@@ -15,7 +16,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import type { ChatMsg, MsgPhase, SourceRef } from '../../state/assistant';
-import { renderMarkdown } from '../../lib/ai/markdown';
+import { citedInAnswer, renderMarkdown, withoutOpenMath } from '../../lib/ai/markdown';
 import { applyGrounding, type GroundingReport } from '../../lib/ai/grounding';
 import { shownOf, type CheckSummary } from '../../lib/ai/answer';
 import { LABELS } from '../../lib/ai/policy';
@@ -41,23 +42,32 @@ function phaseLabel(phase: MsgPhase, msg: ChatMsg): string {
   }
 }
 
-/** The markdown a message shows: the checked version (see shownOf). */
+/** The markdown a message shows: the checked version (see shownOf), without a formula still being written. */
 export function shownMarkdown(msg: ChatMsg): string {
-  return shownOf(msg);
+  const md = shownOf(msg);
+  return msg.status === 'done' && !msg.truncated ? md : withoutOpenMath(md);
 }
 
-/** Plain markdown for Copy (inline marks spelled out). */
+/** Plain markdown for Copy (inline marks spelled out), with the notes its [n] point to. */
 export function copyText(msg: ChatMsg): string {
-  return markersToText(shownMarkdown(msg));
+  const md = shownMarkdown(msg);
+  const cited = citedInAnswer(md, msg.sources?.length);
+  const sources = (msg.sources ?? []).filter((s) => cited.has(s.n)).map((s) => `[${s.n}] ${[s.title, s.section].filter(Boolean).join(' › ')}`);
+  return sources.length ? `${markersToText(md)}\n\nSources: ${sources.join(' · ')}` : markersToText(md);
+}
+
+/** Older replies (from before the notes-only check) get the in-place citation check; the AI's own answers are labelled already. */
+export function needsLegacyCheck(msg: ChatMsg, citations?: boolean): boolean {
+  return !!msg.grounding && !msg.check && !msg.ownOnly && msg.status === 'done' && !!citations;
 }
 
 /** "Your notes don't cover this…" — written by the app, above the answer. */
-function CoverageBanner({ msg, onForce }: { msg: ChatMsg; onForce?(): void }) {
+function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): void; onLink?(): void }) {
   const b = msg.banner;
   if (!b) return null;
   const text = {
     none: LABELS.noneBody,
-    noneOff: LABELS.noneOff,
+    noneOff: LABELS.noneOff(msg.grounding === 'library'),
     noLinked: LABELS.noLinked,
     collapsed: LABELS.collapsed,
     partial: LABELS.partial,
@@ -87,9 +97,15 @@ function CoverageBanner({ msg, onForce }: { msg: ChatMsg; onForce?(): void }) {
           ))}
         </div>
       )}
-      {none && b !== 'collapsed' && onForce && msg.status !== 'streaming' && (
+      {/* Only when the notes weren't searched for this answer (a search is forced, or checked); with no notes linked, linking them is what helps. */}
+      {none && b !== 'noLinked' && !msg.forced && !msg.check && onForce && msg.status !== 'streaming' && (
         <button className="link-btn coverage-force" onClick={onForce}>
           <Search size={12} /> {LABELS.searchAnyway}
+        </button>
+      )}
+      {b === 'noLinked' && onLink && msg.status !== 'streaming' && (
+        <button className="link-btn coverage-force" onClick={onLink}>
+          <Link2 size={12} /> Link notes…
         </button>
       )}
     </div>
@@ -111,6 +127,7 @@ export const MessageView = memo(function MessageView({
   onRegenerate,
   onContinue,
   onForce,
+  onLink,
   citations,
   children,
 }: {
@@ -121,6 +138,8 @@ export const MessageView = memo(function MessageView({
   onContinue?(): void;
   /** "Search my notes anyway" after the coverage check said they don't cover it. */
   onForce?(): void;
+  /** Homework with no notes linked: link some. */
+  onLink?(): void;
   citations?: boolean;
   children?: React.ReactNode;
 }) {
@@ -139,15 +158,16 @@ export const MessageView = memo(function MessageView({
   const unchecked = msg.status === 'streaming' && !msg.ownOnly && msg.shown === undefined && !!msg.grounding && msg.grounding !== 'transform';
 
   // Older messages (before the notes-only check) still get the in-place citation check.
+  const legacy = needsLegacyCheck(msg, citations);
   useLayoutEffect(() => {
     const el = mdRef.current;
-    if (!el || !msg.grounding || msg.check || msg.status !== 'done' || !citations) {
+    if (!el || !legacy) {
       setReport(null);
       return;
     }
     const sources = msg.sources ?? [];
     setReport(applyGrounding(el, (n) => sources.find((s) => s.n === n)?.text));
-  }, [html, msg.grounding, msg.check, msg.status, msg.sources, citations]);
+  }, [html, legacy, msg.sources]);
 
   if (msg.role === 'user') {
     return (
@@ -189,7 +209,7 @@ export const MessageView = memo(function MessageView({
           <span />
         </div>
       )}
-      <CoverageBanner msg={msg} onForce={onForce} />
+      <CoverageBanner msg={msg} onForce={onForce} onLink={onLink} />
       {msg.phase && (
         <div className={cx('msg-phase', `is-${msg.phase}`)}>
           <span className="spinner" /> {phaseLabel(msg.phase, msg)}
@@ -216,27 +236,38 @@ export const MessageView = memo(function MessageView({
       {msg.grounding === 'transform' && msg.status === 'done' && msg.content && /^Translate/.test(msg.question ?? '') && (
         <div className="msg-checking">{LABELS.translateNote}</div>
       )}
-      {msg.check?.derived && msg.status === 'done' ? <div className="msg-checking">{LABELS.computed}</div> : null}
+      {/* "…with your notes' method" only when some of the answer is from the notes. */}
+      {msg.check?.derived && msg.check.supported > 0 && msg.banner !== 'collapsed' && msg.status === 'done' ? (
+        <div className="msg-checking">{LABELS.computed}</div>
+      ) : null}
       {msg.dropped ? (
         <div className="msg-added">
           <CircleAlert size={13} /> Left out {plural(msg.dropped, 'item')} that no passage of your notes backed.
         </div>
       ) : null}
+      {/* Retry sits here only when there is no answer to show (otherwise it's under the answer). */}
       {msg.status === 'error' && (
         <div className="msg-error">
           <TriangleAlert size={15} />
           <div>
             <div>{msg.error}</div>
-            <button className="link-btn" onClick={() => useUI.getState().openSettings('ai')}>
-              <Settings size={12} /> AI settings
-            </button>
+            <div className="msg-error-actions">
+              {onRegenerate && !md && (
+                <button className="link-btn" onClick={onRegenerate}>
+                  <RefreshCw size={12} /> Retry
+                </button>
+              )}
+              <button className="link-btn" onClick={() => useUI.getState().openSettings('ai')}>
+                <Settings size={12} /> AI settings
+              </button>
+            </div>
           </div>
         </div>
       )}
       {msg.status === 'stopped' && (
         <div className="msg-stopped">
           Stopped
-          {onRegenerate && !msg.content && (
+          {onRegenerate && !md && (
             <button className="link-btn" onClick={onRegenerate}>
               <RefreshCw size={12} /> Retry
             </button>
@@ -310,7 +341,10 @@ function CheckBar({ check, general, showWeak, onToggle }: { check: CheckSummary;
   return (
     <div className={cx('grounding', clean ? 'is-clean' : 'is-warn')}>
       {check.supported > 0 && (
-        <span className="grounding-item is-cited" title="Each one was checked against the passage it cites">
+        <span
+          className="grounding-item is-cited"
+          title={`Each one was checked against the passage it cites${check.repaired ? ` (Nib added or corrected ${plural(check.repaired, 'citation')} after checking)` : ''}`}
+        >
           <ShieldCheck size={13} /> {plural(check.supported, 'statement')} from your notes
         </span>
       )}
@@ -321,18 +355,13 @@ function CheckBar({ check, general, showWeak, onToggle }: { check: CheckSummary;
       )}
       {own > 0 && (
         <span className="grounding-item is-outside" title="The AI’s own knowledge — your notes don’t cover this">
-          <Globe size={13} /> {own === 1 ? '1 part' : `${own} parts`} from the AI’s own knowledge
+          <Globe size={13} /> {LABELS.ownParts(own)}
         </span>
       )}
       {check.weak > 0 && (
         <button className={cx('grounding-item is-uncited', showWeak && 'is-on')} onClick={onToggle} title="Related to the cited note, but not clearly the same — check these">
           <CircleAlert size={13} /> {check.weak} loosely matched — {showWeak ? 'hide' : 'show'}
         </button>
-      )}
-      {check.repaired > 0 && (
-        <span className="grounding-item is-repaired" title="Nib added or corrected these citations after checking them">
-          {plural(check.repaired, 'source')} added by Nib
-        </span>
       )}
     </div>
   );
@@ -361,8 +390,8 @@ function GroundingBar({
         </span>
       )}
       {report.outside > 0 && (
-        <span className="grounding-item is-outside" title="Marked general knowledge — your notes don’t cover this">
-          <Globe size={13} /> {report.outside === 1 ? '1 part' : `${report.outside} parts`} not from your notes
+        <span className="grounding-item is-outside" title="The AI’s own knowledge — your notes don’t cover this">
+          <Globe size={13} /> {LABELS.ownParts(report.outside)}
         </span>
       )}
       {(report.uncited > 0 || report.weak > 0) && (

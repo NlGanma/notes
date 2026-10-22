@@ -263,6 +263,62 @@ export function citedInAnswer(src: string, maxCite?: number): Set<number> {
 }
 
 /**
+ * A reply still being written, or cut off, can end inside a formula ("…and
+ * $\lim g = \lim"), which shows as raw TeX until it closes: the formula is left
+ * out until then. Only the last paragraph is looked at; a box the app closes
+ * after it, and citations Nib added after it, stay.
+ */
+export function withoutOpenMath(md: string): string {
+  const fence = /\n:::[ \t]*$/.exec(md)?.[0] ?? '';
+  const body = md.slice(0, md.length - fence.length);
+  let start = 0;
+  for (const m of body.matchAll(/\n[ \t]*\n/g)) start = m.index! + m[0].length;
+  const at = openMathAt(body.slice(start));
+  if (at < 0) return md;
+  const cites = /(?:\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\())+\s*$/.exec(body.slice(start + at))?.[0].trim();
+  return `${body.slice(0, start + at).trimEnd()}${cites ? ` ${cites}` : ''}${fence}`;
+}
+
+/** Where a formula opens without closing in `s` (-1 if none). A lone "$5" is a price, not a formula. */
+function openMathAt(s: string): number {
+  let at = -1;
+  let close = '';
+  for (let i = 0; i < s.length; i++) {
+    if (at >= 0) {
+      if (s.startsWith(close, i) && !(close === '$' && s[i - 1] === '\\')) {
+        i += close.length - 1;
+        at = -1;
+      }
+      continue;
+    }
+    const c = s[i];
+    if (c === '\\') {
+      if (s[i + 1] === '(' || s[i + 1] === '[') {
+        at = i;
+        close = s[i + 1] === '(' ? '\\)' : '\\]';
+      }
+      i++;
+    } else if (c === '`') {
+      // Code spans can hold a "$".
+      const run = /^`+/.exec(s.slice(i))![0];
+      const end = s.indexOf(run, i + run.length);
+      if (end < 0) break;
+      i = end + run.length - 1;
+    } else if (c === '$') {
+      const display = s[i + 1] === '$';
+      // As in mathInline: a "$" after a digit or before a space opens nothing.
+      if (!display && (/\d/.test(s[i - 1] ?? '') || /\s/.test(s[i + 1] ?? ' '))) continue;
+      at = i;
+      close = display ? '$$' : '$';
+      i += close.length - 1;
+    }
+  }
+  if (at < 0 || close !== '$') return at;
+  const rest = s.slice(at + 1);
+  return /^[\p{L}\\({]/u.test(rest) || /[\\^_{}=]/.test(rest) ? at : -1;
+}
+
+/**
  * Renders model output. With `citations`, "[n]" becomes a chip; pass
  * `maxCite` (the number of excerpts) so only real excerpt numbers do.
  */

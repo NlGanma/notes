@@ -225,8 +225,8 @@ export function AssistantPanel() {
                 <ClipboardList size={15} /> Strictly from your notes
               </div>
               <div className="hw-helper-text">
-                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in a box
-                marked <b>Not from your notes</b>.
+                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in an
+                amber box marked as <b>the AI’s own knowledge</b>.
               </div>
               <div className="hw-helper-sources">
                 {linked.slice(0, 4).map((n) => (
@@ -291,6 +291,7 @@ export function AssistantPanel() {
             onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
             onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
             onForce={m === lastBot && noteId ? () => useAssistant.getState().forceNotes(noteId) : undefined}
+            onLink={m === lastBot && isHomework && noteId ? () => linkNotes(noteId) : undefined}
           >
             {(m.grounding === 'homework' || m.grounding === 'note') && m.status !== 'streaming' && !m.ownOnly && m.sources && m.sources.length > 0 && (
               <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />

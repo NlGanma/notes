@@ -31,6 +31,10 @@
   gap: 10px;
   min-width: 0;
 }
+/* The note's name gives way (ellipsis) before the buttons do, in a narrow panel. */
+.assistant-title > div {
+  min-width: 0;
+}
 .assistant-spark {
   width: 26px;
   height: 26px;
@@ -164,6 +168,10 @@
   box-shadow: inset 0 0 0 1px rgba(107, 79, 224, 0.2);
   color: var(--text);
 }
+.starter:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* messages */
 .msg {
@@ -220,7 +228,7 @@
   border-left: 3px solid var(--ai);
   border-radius: 6px;
   padding: 4px 8px;
-  max-width: 280px;
+  max-width: min(280px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -308,10 +316,21 @@
   flex: none;
   margin-top: 1px;
 }
+.msg-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
 .msg-stopped {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 11.5px;
   color: var(--text-4);
   margin-top: 4px;
+}
+.msg-stopped .link-btn {
+  margin-top: 0;
 }
 .msg-actions {
   display: flex;
@@ -325,7 +344,8 @@
   display: none;
 }
 .msg:hover .msg-actions,
-.msg:last-child .msg-actions {
+.msg:last-child .msg-actions,
+.msg:has(+ .followups) .msg-actions {
   opacity: 1;
 }
 .msg-act {
@@ -613,6 +633,7 @@
 }
 .library-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -835,7 +856,7 @@
   background: #fff;
   box-shadow: inset 0 0 0 1px var(--border);
   text-align: left;
-  max-width: 340px;
+  max-width: min(340px, 100%);
 }
 .source:hover {
   box-shadow: inset 0 0 0 1px rgba(33, 96, 232, 0.35);
@@ -1301,6 +1322,8 @@
   color: #94600a;
   background: #fbf0d9;
   cursor: help;
+  /* Never broken mid-word in a narrow table column. */
+  white-space: nowrap;
 }
 .md.show-uncited .weak-claim {
   background: linear-gradient(transparent 60%, rgba(232, 160, 20, 0.22) 60%);
@@ -1317,10 +1340,6 @@
 .msg-checking {
   margin-top: 6px;
   font-size: 11.5px;
-  color: var(--text-3);
-}
-.grounding-item.is-repaired {
-  background: var(--bg-subtle);
   color: var(--text-3);
 }
 .msg-added {

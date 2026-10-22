@@ -39,9 +39,14 @@ export function gapFillSystem(gaps: string[], className?: string) {
 export const LABELS = {
   noneTitle: 'Your notes don’t cover this',
   noneBody: 'So the answer below is from the AI’s own general knowledge, not your notes — proceed with caution and check it against your class materials.',
-  noneOff: 'Your notes don’t cover this, and Nib is set to answer only from your notes (Settings → Local AI).',
+  /** Under "Your notes don't cover this"; says where the switch is (Ask your notes has its own, under the question box). */
+  noneOff: (library: boolean) =>
+    `Nib is set to answer only from your notes, so the AI’s own knowledge isn’t used (${library ? '“Never use the AI’s own knowledge”, under the question box' : 'Settings → Local AI'}).`,
   noLinked: 'You haven’t linked any notes to this homework, so nothing here can come from your class notes. The answer below is the AI’s own general knowledge — proceed with caution.',
-  partial: 'Your notes only cover part of this. Anything in a “Not from your notes” box is the AI’s own knowledge — proceed with caution.',
+  // The boxes say "Not from your notes" or "Not found in your notes", list items and table rows "not in your notes".
+  partial: 'Your notes only cover part of this. Anything in an amber box, or marked “not in your notes”, is the AI’s own knowledge — proceed with caution.',
+  /** The pill for parts from the AI's own knowledge (the same words wherever it shows). */
+  ownParts: (n: number) => `${n === 1 ? '1 part' : `${n} parts`} from the AI’s own knowledge`,
   collapsed: 'Nib couldn’t match this answer to your notes, so all of it is shown as the AI’s own knowledge — proceed with caution.',
   gap: (what: string) => `Not in your notes: ${what}`,
   nearest: 'Closest in your notes',
