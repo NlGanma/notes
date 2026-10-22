@@ -68,7 +68,7 @@ export function insertReply(noteId: string, md: string, anchor?: string) {
   const editor = editors.get(noteId);
   if (!editor) return;
   const div = document.createElement('div');
-  div.innerHTML = markdownToEditorHTML(md);
+  div.innerHTML = markdownToEditorHTML(md, { stripCitations: true });
   const frag = PMDOMParser.fromSchema(editor.schema).parse(div);
   const nodes: import('@tiptap/pm/model').Node[] = [];
   frag.forEach((n) => nodes.push(n));
@@ -303,6 +303,7 @@ export function AssistantPanel() {
                     prompt: f,
                     mode: f.startsWith('Check') ? 'check' : f.startsWith('Solve') ? 'solve' : 'tutor',
                     attachments: [],
+                    inherit: true,
                   })
                 }
               >

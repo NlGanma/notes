@@ -71,8 +71,12 @@ export function chunkVault(notes: NoteDoc[], scope: Scope = { kind: 'all' }): Ch
     switch (scope.kind) {
       case 'all':
         return true;
-      case 'folder':
-        return n.meta.folder === scope.path || n.meta.folder.startsWith(scope.path + '/');
+      case 'folder': {
+        if (!(n.meta.folder === scope.path || n.meta.folder.startsWith(scope.path + '/'))) return false;
+        // A class's Homework/ folder holds the student's own work, not class material.
+        const rel = n.meta.folder.slice(scope.path.length + 1);
+        return rel !== 'Homework' && !rel.startsWith('Homework/');
+      }
       case 'note':
         return n.meta.id === scope.id;
       case 'tag':

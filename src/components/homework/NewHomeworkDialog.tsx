@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileUp, PenLine, ScanText, X } from 'lucide-react';
 import type { JSONContent } from '@tiptap/core';
 import { Modal } from '../common/Modal';
@@ -43,6 +43,9 @@ export function NewHomeworkDialog() {
   const [start, setStart] = useState<'blank' | 'scan'>('blank');
   const [file, setFile] = useState<InFile | null>(null);
   const [busy, setBusy] = useState(false);
+  // Guards against a second Enter while the first import is still running (state updates lag a render).
+  const busyRef = useRef(false);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -52,6 +55,7 @@ export function NewHomeworkDialog() {
     setTitle(dialog.file ? dialog.file.name.replace(/\.[^.]+$/, '') : '');
     setDue(toDateInput(Date.now() + 7 * 86_400_000));
     setBusy(false);
+    busyRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -61,19 +65,24 @@ export function NewHomeworkDialog() {
   const sourceCount = classPath ? classNotes(classPath, notes).length : 0;
   const hasVision = !!visionModel(useAI.getState());
 
-  const chooseFile = async () => {
-    const [f] = await pickFiles({ accept: SCAN_TYPES, multiple: false, title: 'Choose your homework' });
-    if (!f) return;
+  const takeFile = (f: InFile) => {
     setFile(f);
     setStart('scan');
     if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ''));
   };
 
+  const chooseFile = async () => {
+    const [f] = await pickFiles({ accept: SCAN_TYPES, multiple: false, title: 'Choose your homework' });
+    if (f) takeFile(f);
+  };
+
   const create = async () => {
+    if (busyRef.current) return;
     if (start === 'scan' && !file) {
       void chooseFile();
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     try {
       let content: JSONContent | undefined;
@@ -99,13 +108,31 @@ export function NewHomeworkDialog() {
       }
     } catch (e) {
       toast.error('Couldn’t create the homework', String((e as Error).message ?? e));
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   return (
     <Modal open onClose={close} width={560} title="New homework" className="hw-dialog">
-      <div className="hw-form">
+      <div
+        className={cx('hw-form', dragOver && 'is-drop')}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => e.currentTarget === e.target && setDragOver(false)}
+        onDrop={async (e) => {
+          setDragOver(false);
+          const f = [...e.dataTransfer.files].find((x) => SCAN_TYPES.includes(x.name.split('.').pop()?.toLowerCase() ?? ''));
+          e.preventDefault();
+          e.stopPropagation();
+          if (f && !busyRef.current) takeFile({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+          else if (!f && e.dataTransfer.files.length) toast.error('Not a worksheet', 'Drop a PDF or a photo (PNG, JPG).');
+        }}
+      >
         <div className="hw-field">
           <span className="hw-label">Class</span>
           <div className="class-chips">
@@ -133,8 +160,11 @@ export function NewHomeworkDialog() {
               autoFocus
               placeholder={start === 'scan' ? 'Problem Set 5' : 'e.g. Problem Set 5, §2.3 #1–15'}
               value={title}
+              disabled={busy}
               onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void create()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) void create();
+              }}
             />
           </label>
           <label className="hw-field hw-due">

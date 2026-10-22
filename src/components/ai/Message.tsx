@@ -62,7 +62,11 @@ export const MessageView = memo(function MessageView({
   const [report, setReport] = useState<GroundingReport | null>(null);
   const [showUncited, setShowUncited] = useState(false);
   const mdRef = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => (msg.role === 'assistant' ? renderMarkdown(msg.content, { citations }) : ''), [msg.content, msg.role, citations]);
+  const maxCite = msg.sources?.length;
+  const html = useMemo(
+    () => (msg.role === 'assistant' ? renderMarkdown(msg.content, { citations, maxCite: citations ? maxCite : undefined }) : ''),
+    [msg.content, msg.role, citations, maxCite],
+  );
 
   // Grounding check once the answer is complete: which statements are backed by which note.
   useLayoutEffect(() => {

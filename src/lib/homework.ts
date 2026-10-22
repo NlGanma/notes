@@ -1,6 +1,7 @@
 import type { HomeworkMeta, NoteDoc } from './vault/types';
 import { chunkNote, buildBm25, bm25Scores, tokenize } from './ai/rag';
 import { docToText } from './ai/context';
+import { HOMEWORK_SUBFOLDER } from './classes';
 
 /** Homework: assignments whose AI help is grounded strictly in linked notes. */
 
@@ -24,7 +25,11 @@ export function homeworkSources(hw: NoteDoc, notes: Record<string, NoteDoc>): No
   for (const f of meta.folders) {
     for (const n of Object.values(notes)) {
       if (n.meta.trashed || n.meta.homework || n.meta.id === hw.meta.id) continue;
-      if (n.meta.folder === f || n.meta.folder.startsWith(f + '/')) out.set(n.meta.id, n);
+      if (!(n.meta.folder === f || n.meta.folder.startsWith(f + '/'))) continue;
+      // Anything filed in the linked folder's Homework/ is the student's work, not class material.
+      const rel = n.meta.folder.slice(f.length + 1);
+      if (rel === HOMEWORK_SUBFOLDER || rel.startsWith(HOMEWORK_SUBFOLDER + '/')) continue;
+      out.set(n.meta.id, n);
     }
   }
   return [...out.values()];

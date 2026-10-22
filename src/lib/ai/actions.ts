@@ -10,7 +10,9 @@ export { parseJSONLoose } from './json';
 
 export class NoVisionModelError extends Error {
   constructor() {
-    super('No model that can read images is configured. Pull one with “ollama pull qwen2.5vl:7b” (or gemma3, llama3.2-vision) and pick it in Settings → Local AI.');
+    super(
+      'No model that can read images is configured. Pull one with “ollama pull qwen2.5vl:7b” (or gemma3, llama3.2-vision) and pick it in Settings → Local AI.',
+    );
   }
 }
 

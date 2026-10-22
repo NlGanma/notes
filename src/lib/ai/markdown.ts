@@ -90,13 +90,43 @@ function mathBlock(state: StateBlock, startLine: number, endLine: number, silent
   return true;
 }
 
+const CITE_RE = /^\[(\d{1,2}(?:\s*[,–-]\s*\d{1,2})*)\](?!\()/;
+
+/** Expands "1, 3" / "2–4" into the cited numbers. */
+export function citedNumbers(spec: string): number[] {
+  const nums: number[] = [];
+  for (const part of spec.split(/\s*,\s*/)) {
+    const range = part.split(/\s*[–-]\s*/).map(Number);
+    if (range.length === 2 && range[1] >= range[0] && range[1] - range[0] < 10) for (let n = range[0]; n <= range[1]; n++) nums.push(n);
+    else nums.push(Number(part));
+  }
+  return nums;
+}
+
+/**
+ * "[2]" or "[1, 3]" as a citation — but only when every number is a real
+ * excerpt number, so intervals like "[0, 1]" or "[1, 10]" stay plain text.
+ */
 function citations(state: StateInline, silent: boolean): boolean {
-  const m = /^\[(\d{1,2}(?:\s*[,–-]\s*\d{1,2})*)\](?!\()/.exec(state.src.slice(state.pos));
+  const m = CITE_RE.exec(state.src.slice(state.pos));
   if (!m) return false;
+  const max = (state.env as { maxCite?: number } | undefined)?.maxCite;
+  const nums = citedNumbers(m[1]);
+  if (nums.some((n) => n < 1 || (max !== undefined && n > max))) return false;
   if (!silent) {
     const token = state.push('citation', 'cite', 0);
     token.content = m[1];
   }
+  state.pos += m[0].length;
+  return true;
+}
+
+/** Drops citation markers (for text inserted into a note). Runs after math, so nothing inside $…$ is touched. */
+function stripCitations(state: StateInline, silent: boolean): boolean {
+  const m = CITE_RE.exec(state.src.slice(state.pos));
+  if (!m) return false;
+  if (citedNumbers(m[1]).some((n) => n < 1)) return false;
+  if (!silent) state.pending = state.pending.replace(/[ \t]+$/, '');
   state.pos += m[0].length;
   return true;
 }
@@ -160,15 +190,10 @@ function build(withCitations: boolean) {
   md.renderer.rules.math_block = (tokens, idx) => `<div class="md-display">${renderMath(tokens[idx].content, true)}</div>\n`;
   if (withCitations) {
     md.inline.ruler.before('link', 'citation', citations);
-    md.renderer.rules.citation = (tokens, idx) => {
-      const nums: number[] = [];
-      for (const part of tokens[idx].content.split(/\s*,\s*/)) {
-        const range = part.split(/\s*[–-]\s*/).map(Number);
-        if (range.length === 2 && range[1] >= range[0] && range[1] - range[0] < 10) for (let n = range[0]; n <= range[1]; n++) nums.push(n);
-        else nums.push(Number(part));
-      }
-      return nums.map((n) => `<button class="cite" data-cite="${n}" type="button">${n}</button>`).join('');
-    };
+    md.renderer.rules.citation = (tokens, idx) =>
+      citedNumbers(tokens[idx].content)
+        .map((n) => `<button class="cite" data-cite="${n}" type="button">${n}</button>`)
+        .join('');
   }
   const defaultLink = md.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
@@ -182,12 +207,20 @@ function build(withCitations: boolean) {
 const plain = build(false);
 const cited = build(true);
 
-export function renderMarkdown(src: string, opts: { citations?: boolean } = {}): string {
-  return (opts.citations ? cited : plain).render(normalizeOutside(src));
+/**
+ * Renders model output. With `citations`, "[n]" becomes a chip; pass
+ * `maxCite` (the number of excerpts) so only real excerpt numbers do.
+ */
+export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite?: number } = {}): string {
+  return (opts.citations ? cited : plain).render(normalizeOutside(src), { maxCite: opts.maxCite });
 }
 
-/** Converts model markdown into HTML the editor can parse (math → math nodes). */
-export function markdownToEditorHTML(src: string): string {
+/**
+ * Converts markdown into HTML the editor can parse (math → math nodes).
+ * `stripCitations` removes "[n]" markers from assistant answers; it is off for
+ * the student's own text (imports, handwriting), where "[0, 1]" is an interval.
+ */
+export function markdownToEditorHTML(src: string, opts: { stripCitations?: boolean } = {}): string {
   const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
   md.inline.ruler.before('escape', 'math_inline', mathInline);
   md.block.ruler.before('fence', 'math_block', mathBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
@@ -199,6 +232,6 @@ export function markdownToEditorHTML(src: string): string {
   md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
   md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
   md.renderer.rules.outside_close = () => '</div></div>\n';
-  // Strip citation markers from inserted text.
-  return md.render(normalizeOutside(src).replace(/\s?\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()/g, ''));
+  if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
+  return md.render(normalizeOutside(src));
 }

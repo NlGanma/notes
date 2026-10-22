@@ -69,6 +69,28 @@ const renamed = path.join(vault, 'Welcome to Nib (edited).nib');
 check(fs.existsSync(renamed), 'renaming a note renames its file');
 check(fs.existsSync(renamed) && fs.readFileSync(renamed, 'utf8').includes('Saved straight to disk'), 'typing is saved to the file');
 
+// The renderer can only touch an approved vault: not, say, the home folder.
+const outside = path.join(home, 'not-a-vault');
+fs.mkdirSync(outside, { recursive: true });
+const escaped = await win.evaluate(
+  (dir) =>
+    window.nib.vault.writeText(dir, 'pwned.txt', 'x').then(
+      () => 'written',
+      (e) => String(e?.message ?? e),
+    ),
+  outside,
+);
+check(/not a Nib vault/.test(escaped) && !fs.existsSync(path.join(outside, 'pwned.txt')), 'the file bridge refuses folders that are not a vault');
+const traversal = await win.evaluate(
+  (v) =>
+    window.nib.vault.writeText(v, '../escape.txt', 'x').then(
+      () => 'written',
+      (e) => String(e?.message ?? e),
+    ),
+  vault,
+);
+check(/escapes the vault/.test(traversal), 'paths cannot escape the vault');
+
 // Real screen capture for "ask about this area".
 const b64 = await win.evaluate(() => window.nib.captureRect({ x: 300, y: 200, width: 300, height: 120 }));
 check(typeof b64 === 'string' && b64.length > 1000, `screen capture returns a PNG (${b64?.length ?? 0} bytes b64)`);

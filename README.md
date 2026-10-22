@@ -82,7 +82,7 @@ The app keeps its vault in `~/Documents/Nib Vault` (*Settings → Vault* to chan
 
 | | |
 |---|---|
-| <kbd>⌘N</kbd> / <kbd>⇧⌘H</kbd> | New note / new homework (in the current class) |
+| <kbd>⌘N</kbd> / <kbd>⇧⌘Y</kbd> | New note / new homework (in the current class) |
 | <kbd>⌘K</kbd> | Quick open, search inside notes, commands |
 | <kbd>⌘J</kbd> | Assistant |
 | <kbd>⇧⌘L</kbd> | Ask your notes |

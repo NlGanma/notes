@@ -86,7 +86,7 @@ export function classInfo(path: string, meta: FolderMeta | undefined, i = 0): Cl
 
 export function listClasses(folders: string[], folderMeta: Record<string, FolderMeta>, opts: { archived?: boolean } = {}): ClassInfo[] {
   return folders
-    .filter((f) => isClassFolder(f, folderMeta))
+    .filter((f) => !f.includes('/') && isClassFolder(f, folderMeta))
     .map((f, i) => classInfo(f, folderMeta[f], i))
     .filter((c) => opts.archived || !c.archived)
     .sort((a, b) => Number(a.archived) - Number(b.archived) || a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -111,7 +111,8 @@ export const inFolder = (n: NoteDoc, path: string) => n.meta.folder === path || 
 
 /** Lecture notes of a class (everything that is not homework). */
 export function classNotes(path: string, notes: Record<string, NoteDoc>): NoteDoc[] {
-  return Object.values(notes).filter((n) => !n.meta.trashed && !n.meta.homework && inFolder(n, path));
+  const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
+  return Object.values(notes).filter((n) => !n.meta.trashed && !n.meta.homework && inFolder(n, path) && !inFolder(n, hwDir));
 }
 
 export function classHomework(path: string, notes: Record<string, NoteDoc>): NoteDoc[] {

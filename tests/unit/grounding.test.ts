@@ -17,3 +17,10 @@ test('statements need citations; talking to the student or naming a gap does not
   assert.equal(needsCitation('Ask your teacher whether you are expected to use it yet.'), false);
   assert.equal(needsCitation('Short one.'), false);
 });
+
+test('method steps that start with Now/Next still need a source', () => {
+  assert.equal(needsCitation('Next, factor the numerator: (x-3)(x+3), so f simplifies to x+3.'), true);
+  assert.equal(needsCitation('Now cancel the common factor and note the removable discontinuity.'), true);
+  assert.equal(needsCitation('Now try the next step yourself and tell me what you get.'), false);
+  assert.equal(needsCitation('Nowhere in the definition does the limit need f(a) to exist.'), true);
+});

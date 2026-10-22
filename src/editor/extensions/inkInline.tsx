@@ -10,11 +10,16 @@ import { cx } from '../../lib/util';
 /** Geometry for rendering an inline sketch at the current font size. */
 export function inlineInkBox(a: InlineInkAttrs) {
   const pad = 2;
+  // Coerced: these end up in markup for thumbnails and exports.
+  const w = Number(a.w) || 0;
+  const h = Number(a.h) || 0;
+  const em = Number(a.em) || 16;
+  const drop = Number(a.drop) || 0;
   return {
-    viewBox: `${-pad} ${-pad} ${a.w + pad * 2} ${a.h + pad * 2}`,
-    width: `${(a.w + pad * 2) / a.em}em`,
-    height: `${(a.h + pad * 2) / a.em}em`,
-    verticalAlign: `${-(a.drop + pad) / a.em}em`,
+    viewBox: `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`,
+    width: `${(w + pad * 2) / em}em`,
+    height: `${(h + pad * 2) / em}em`,
+    verticalAlign: `${-(drop + pad) / em}em`,
   };
 }
 

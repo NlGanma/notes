@@ -29,6 +29,7 @@ export function App() {
   const error = useVault((s) => s.error);
   const notes = useVault((s) => s.notes);
   const folderMeta = useVault((s) => s.folderMeta);
+  const folders = useVault((s) => s.folders);
   const { view, tabs, sidebar, assistant } = useUI();
   const [dropping, setDropping] = useState(false);
 
@@ -64,11 +65,14 @@ export function App() {
     const ui = useUI.getState();
     const valid = ui.tabs.filter((id) => notes[id] && !notes[id].meta.trashed);
     const v = ui.view;
-    if (v.kind === 'class' && folderMeta[v.path]?.kind !== 'class') ui.set({ view: { kind: 'home' } });
+    // A class or folder page whose folder is gone (deleted, or renamed outside Nib) goes home.
+    if ((v.kind === 'class' && folderMeta[v.path]?.kind !== 'class') || ((v.kind === 'class' || v.kind === 'folder') && !folders.includes(v.path)))
+      ui.set({ view: { kind: 'home' } });
+    if (ui.libraryScope.kind === 'folder' && !folders.includes(ui.libraryScope.path)) ui.set({ libraryScope: { kind: 'all' } });
     if (v.kind === 'note' && (!notes[v.id] || notes[v.id].meta.trashed)) ui.set({ view: { kind: 'home' }, tabs: valid });
     else if (v.kind === 'note' && !valid.includes(v.id)) ui.set({ tabs: [...valid, v.id] });
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
-  }, [ready, notes, folderMeta]);
+  }, [ready, notes, folderMeta, folders]);
 
   if (!ready) {
     return (
@@ -84,16 +88,21 @@ export function App() {
     <div
       className={cx('app', !sidebar && 'no-sidebar', assistant && 'has-assistant', dropping && 'is-dropping')}
       onDragOver={(e) => {
+        // Dialogs handle (or refuse) their own drops; never import behind an open dialog.
+        if ((e.target as HTMLElement).closest('.modal-backdrop')) return;
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
           setDropping(true);
         }
       }}
       onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setDropping(false);
+        if (e.currentTarget === e.target || !e.relatedTarget) setDropping(false);
       }}
+      // Capture phase: pages that handle a drop themselves stop propagation, but the overlay must still go.
+      onDropCapture={() => setDropping(false)}
       onDrop={(e) => {
         setDropping(false);
+        if ((e.target as HTMLElement).closest('.modal-backdrop')) return;
         if (e.dataTransfer.files.length && !(e.target as HTMLElement).closest('.ProseMirror')) {
           e.preventDefault();
           void importDropped(e.dataTransfer.files);

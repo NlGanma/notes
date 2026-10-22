@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { complete } from './ai/actions';
-import type { Priority } from './ai/engine';
+import { PreemptedError, type Priority } from './ai/engine';
 import { PAGE_OCR_PROMPT } from './ai/prompts';
 import { downscaleImage } from './ink/raster';
 import { useVault } from '../state/vault';
@@ -67,7 +67,23 @@ export async function readScannedPages(noteId: string, opts: { priority?: Priori
   const pages = (liveContent(noteId)?.content ?? []).filter((b) => b.type === 'image' && b.attrs?.id && needsReading(b.attrs));
   let done = 0;
   for (const p of pages) {
-    await readPage(noteId, String(p.attrs!.id), { priority: opts.priority });
+    const id = String(p.attrs!.id);
+    for (let paused = 0; ; paused++) {
+      // The page may have been deleted, or read with the button, meanwhile.
+      const live = (liveContent(noteId)?.content ?? []).find((b) => b.type === 'image' && b.attrs?.id === id);
+      if (!live || !needsReading(live.attrs)) break;
+      try {
+        await readPage(noteId, id, { priority: opts.priority });
+        break;
+      } catch (e) {
+        // Background reading steps aside while the student asks something, then picks up again.
+        if (e instanceof PreemptedError && paused < 20) {
+          await new Promise((r) => setTimeout(r, 4000));
+          continue;
+        }
+        throw e;
+      }
+    }
     opts.onProgress?.(++done, pages.length);
   }
   return done;

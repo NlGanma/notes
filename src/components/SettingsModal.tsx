@@ -457,7 +457,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
     'General',
     [
       [`${MOD}N`, 'New note'],
-      [`${SHIFT}${MOD}H`, 'New homework'],
+      [`${SHIFT}${MOD}Y`, 'New homework'],
       [`${MOD}K`, 'Quick open & commands'],
       [`${MOD}J`, 'Assistant'],
       [`${SHIFT}${MOD}L`, 'Ask your notes'],

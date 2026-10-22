@@ -12,6 +12,7 @@ const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron')
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const crypto = require('node:crypto');
 
 const isMac = process.platform === 'darwin';
 const DEV_URL = process.env.NIB_DEV_URL || '';
@@ -134,7 +135,7 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'New Note', accelerator: 'CmdOrCtrl+N', click: () => send('new-note') },
-        { label: 'New Homework…', accelerator: 'CmdOrCtrl+Shift+H', click: () => send('new-homework') },
+        { label: 'New Homework…', accelerator: 'CmdOrCtrl+Shift+Y', click: () => send('new-homework') },
         { label: 'New Class…', click: () => send('new-class') },
         { label: 'New Folder', accelerator: 'CmdOrCtrl+Alt+N', click: () => send('new-folder') },
         { type: 'separator' },
@@ -208,8 +209,47 @@ function buildMenu() {
 // Vault filesystem. Every path from the renderer is relative to the vault root
 // and is checked so it can never escape it.
 
+// Folders the user picked (or the default one). A renderer can only touch a
+// folder it was given, or one that already is a Nib vault — never e.g. $HOME.
+let approvedRoots = null;
+const rootsPath = () => path.join(app.getPath('userData'), 'vault-roots.json');
+function loadRoots() {
+  if (!approvedRoots) {
+    try {
+      approvedRoots = new Set(JSON.parse(fs.readFileSync(rootsPath(), 'utf8')));
+    } catch {
+      approvedRoots = new Set();
+    }
+  }
+  return approvedRoots;
+}
+function approveRoot(dir) {
+  const r = path.resolve(dir);
+  const set = loadRoots();
+  if (set.has(r)) return;
+  set.add(r);
+  try {
+    fs.writeFileSync(rootsPath(), JSON.stringify([...set]));
+  } catch {
+    /* still approved for this session */
+  }
+}
+function isApprovedRoot(root) {
+  const r = path.resolve(root);
+  if (loadRoots().has(r)) return true;
+  // A vault opened by an older version: it has Nib's data folder or notes at its top level.
+  try {
+    if (fs.statSync(path.join(r, '.nib')).isDirectory()) return true;
+    return fs.readdirSync(r).some((f) => f.endsWith('.nib'));
+  } catch {
+    return false;
+  }
+}
+
 function resolveInVault(root, rel = '') {
   if (typeof root !== 'string' || !root) throw new Error('No vault selected');
+  if (!isApprovedRoot(root)) throw new Error('That folder is not a Nib vault. Choose it with File → Open Vault…');
+  approveRoot(root);
   const base = path.resolve(root);
   const abs = path.resolve(base, rel || '.');
   if (abs !== base && !abs.startsWith(base + path.sep)) throw new Error('Path escapes the vault');
@@ -239,9 +279,15 @@ function uniqueRel(root, rel, ignoreAbs) {
 
 async function atomicWrite(abs, text) {
   await fsp.mkdir(path.dirname(abs), { recursive: true });
-  const tmp = path.join(path.dirname(abs), `.${path.basename(abs)}.${process.pid}.tmp`);
-  await fsp.writeFile(tmp, text, 'utf8');
-  await fsp.rename(tmp, abs);
+  // A unique temp file per write, so two writes to the same file can never interleave.
+  const tmp = path.join(path.dirname(abs), `.${path.basename(abs)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+  try {
+    await fsp.writeFile(tmp, text, 'utf8');
+    await fsp.rename(tmp, abs);
+  } catch (err) {
+    await fsp.rm(tmp, { force: true }).catch(() => undefined);
+    throw err;
+  }
 }
 
 function toRel(...parts) {
@@ -251,6 +297,7 @@ function toRel(...parts) {
 ipcMain.handle('vault:default', async () => {
   const dir = path.join(app.getPath('documents'), 'Nib Vault');
   await fsp.mkdir(dir, { recursive: true });
+  approveRoot(dir);
   return dir;
 });
 
@@ -260,7 +307,9 @@ ipcMain.handle('vault:choose', async () => {
     buttonLabel: 'Use as Vault',
     properties: ['openDirectory', 'createDirectory'],
   });
-  return res.canceled ? null : res.filePaths[0];
+  if (res.canceled) return null;
+  approveRoot(res.filePaths[0]);
+  return res.filePaths[0];
 });
 
 ipcMain.handle('vault:scan', async (_e, root) => {
@@ -358,7 +407,12 @@ ipcMain.handle('vault:mkdir', async (_e, root, rel) => {
 ipcMain.handle('vault:renameDir', async (_e, root, fromRel, toRelPath) => {
   const fromAbs = resolveInVault(root, fromRel);
   const toAbs = resolveInVault(root, toRelPath);
-  if (exists(toAbs)) throw new Error('A folder with that name already exists');
+  if (exists(toAbs)) {
+    // On case-insensitive disks (macOS) "biology" → "Biology" finds the folder itself; that rename is fine.
+    const a = fs.statSync(fromAbs);
+    const b = fs.statSync(toAbs);
+    if (a.ino !== b.ino || a.dev !== b.dev) throw new Error('A folder with that name already exists');
+  }
   await fsp.mkdir(path.dirname(toAbs), { recursive: true });
   await fsp.rename(fromAbs, toAbs);
   return toRelPath;

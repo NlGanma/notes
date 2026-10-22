@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { escapeHtml } from '../util';
+import { safeColor } from '../vault/sanitize';
 import { renderMath, renderMathML } from '../katex';
 import { strokesToSvgMarkup } from '../ink/render';
 import type { InlineInkAttrs, Stroke } from '../ink/types';
@@ -52,10 +53,10 @@ function marks(text: string, list: JSONContent['marks']): string {
         html = `<code>${html}</code>`;
         break;
       case 'highlight':
-        html = `<mark style="background:${attr(m.attrs?.color || '#fff3a3')}">${html}</mark>`;
+        html = `<mark style="background:${attr(safeColor(m.attrs?.color, '#fff3a3'))}">${html}</mark>`;
         break;
       case 'textStyle':
-        if (m.attrs?.color) html = `<span style="color:${attr(m.attrs.color)}">${html}</span>`;
+        if (m.attrs?.color) html = `<span style="color:${attr(safeColor(m.attrs.color))}">${html}</span>`;
         break;
       case 'link':
         html = `<a href="${attr(safeUrl(String(m.attrs?.href ?? '')))}">${html}</a>`;

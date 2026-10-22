@@ -4,7 +4,7 @@ import { bridge } from '../lib/platform';
 import { createBrowserVault } from '../lib/vault/browser';
 import { createFsVault } from '../lib/vault/fs';
 import { EMPTY_DOC, type FolderMeta, type NoteDoc, type NoteMeta, type VaultBackend } from '../lib/vault/types';
-import { uid } from '../lib/util';
+import { sanitizeFolderName, uid } from '../lib/util';
 import { normalizeDocJSON } from '../editor/extensions/blockAttrs';
 import { useSettings } from './settings';
 import { useUI } from './ui';
@@ -147,12 +147,15 @@ export const useVault = create<VaultState>((set, get) => {
     duplicateNote(id) {
       const src = get().notes[id];
       if (!src) return null;
-      return get().createNote({
+      const copy = get().createNote({
         folder: src.meta.folder,
         title: `${src.meta.title || 'Untitled'} copy`,
         content: structuredClone(src.content),
         tags: [...src.meta.tags],
       });
+      // A copy of homework is homework too — otherwise it would count as class notes and be cited as a source.
+      if (src.meta.homework) get().updateMeta(copy.meta.id, { homework: { ...structuredClone(src.meta.homework), done: false } });
+      return get().notes[copy.meta.id] ?? copy;
     },
 
     moveNote(id, folder) {
@@ -192,40 +195,59 @@ export const useVault = create<VaultState>((set, get) => {
       const idx = path.lastIndexOf('/');
       const parent = idx >= 0 ? path.slice(0, idx) : '';
       const name = idx >= 0 ? path.slice(idx + 1) : path;
-      const full = uniqueFolderName(get().folders, parent, name.trim() || 'New folder');
+      const full = uniqueFolderName(get().folders, parent, sanitizeFolderName(name) || 'New folder');
       await get().backend?.createFolder(full);
       set({ folders: [...new Set([...get().folders, ...parentsOf(full)])].sort() });
       return full;
     },
 
     async renameFolder(path, newName) {
-      const name = newName.replace(/[\\/:*?"<>|]/g, ' ').trim();
+      const name = sanitizeFolderName(newName);
       if (!name) return null;
       const idx = path.lastIndexOf('/');
       const parent = idx >= 0 ? path.slice(0, idx) : '';
       const target = (parent ? parent + '/' : '') + name;
       if (target === path) return path;
-      if (get().folders.includes(target)) return null;
+      // Case-insensitive: on macOS "biology" and "Biology" are the same folder. A case-only rename of itself is fine.
+      if (get().folders.some((f) => f !== path && f.toLowerCase() === target.toLowerCase())) return null;
       return relocateFolder(path, target);
     },
 
     async moveFolder(path, parent) {
-      const name = path.split('/').pop()!;
+      const idx = path.lastIndexOf('/');
+      const name = path.slice(idx + 1);
+      // Already there (e.g. dropped on its own parent or on the tree background): nothing to do.
+      if ((idx >= 0 ? path.slice(0, idx) : '') === parent) return path;
       if (parent === path || parent.startsWith(path + '/')) return null;
+      // Classes stay top-level; a class inside another class would leak its notes into the parent's scope.
+      if (parent && get().folderMeta[path]?.kind === 'class') return null;
       const target = uniqueFolderName(get().folders, parent, name);
       if (target === path) return path;
       return relocateFolder(path, target);
     },
 
     async deleteFolder(path) {
+      const inside = (f: string) => f === path || f.startsWith(path + '/');
       const { notes } = get();
       for (const n of Object.values(notes)) {
-        if (n.meta.folder === path || n.meta.folder.startsWith(path + '/')) get().trashNote(n.meta.id);
+        if (inside(n.meta.folder)) get().trashNote(n.meta.id);
       }
       get().flush();
       await new Promise((r) => setTimeout(r, 120));
       await get().backend?.deleteFolder(path);
-      set({ folders: get().folders.filter((f) => f !== path && !f.startsWith(path + '/')) });
+      // Forget the folder's class details too, or the class would come back (and a new folder with
+      // the same name would inherit them).
+      const folderMeta = Object.fromEntries(Object.entries(get().folderMeta).filter(([k]) => !inside(k)));
+      set({ folders: get().folders.filter((f) => !inside(f)), folderMeta });
+      await get().backend?.saveFolderMeta(folderMeta);
+      const ui = useUI.getState();
+      const v = ui.view;
+      if ((v.kind === 'class' || v.kind === 'folder') && inside(v.path)) ui.set({ view: { kind: 'home' } });
+      if (ui.libraryScope.kind === 'folder' && inside(ui.libraryScope.path)) ui.set({ libraryScope: { kind: 'all' } });
+      for (const [id, n] of Object.entries(get().notes)) {
+        const hw = n.meta.homework;
+        if (hw?.folders.some(inside)) get().updateMeta(id, { homework: { ...hw, folders: hw.folders.filter((f) => !inside(f)) }, updated: n.meta.updated });
+      }
     },
 
     setFolderMeta(path, meta) {
@@ -235,7 +257,7 @@ export const useVault = create<VaultState>((set, get) => {
     },
 
     async createClass(info) {
-      const name = info.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'New class';
+      const name = sanitizeFolderName(info.name) || 'New class';
       const path = await get().createFolder(name);
       const { name: _n, ...rest } = info;
       void _n;
@@ -245,8 +267,11 @@ export const useVault = create<VaultState>((set, get) => {
 
     async updateClass(path, info) {
       let target = path;
-      if (info.name !== undefined && info.name.trim() && info.name.trim() !== path.split('/').pop()) {
-        target = (await get().renameFolder(path, info.name)) ?? path;
+      const name = info.name !== undefined ? sanitizeFolderName(info.name) : '';
+      if (name && name !== path.split('/').pop()) {
+        const renamed = await get().renameFolder(path, name);
+        if (!renamed) throw new Error(`There is already a folder called “${name}”.`);
+        target = renamed;
       }
       const { name: _n, ...rest } = info;
       void _n;
@@ -291,7 +316,11 @@ export const useVault = create<VaultState>((set, get) => {
         notes[n.meta.id] = n;
       }
       const folders = [...new Set([...snap.folders, ...snap.notes.flatMap((n) => parentsOf(n.meta.folder))])].sort();
-      set({ backend, notes, folders, folderMeta: snap.folderMeta, ready: true, error: null, revision: get().revision + 1 });
+      // Details of folders that no longer exist (deleted outside Nib) are dropped; classes are top-level only.
+      const folderMeta = Object.fromEntries(
+        Object.entries(snap.folderMeta ?? {}).filter(([k, m]) => folders.includes(k) && m && typeof m === 'object' && !(m.kind === 'class' && k.includes('/'))),
+      );
+      set({ backend, notes, folders, folderMeta, ready: true, error: null, revision: get().revision + 1 });
 
       const seededKey = `${SEEDED_KEY}:${backend.label}`;
       if (!snap.notes.length && !localStorage.getItem(seededKey)) {

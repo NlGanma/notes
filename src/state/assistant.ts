@@ -13,7 +13,7 @@ import {
   type AskMode,
   type StudyTool,
 } from '../lib/ai/prompts';
-import { blockToText, docToText, estimateTokens, fitToBudget } from '../lib/ai/context';
+import { blockToText, docToText, estimateTokens, fitToBudget, isAssistantBlock } from '../lib/ai/context';
 import { chunkVault, formatExcerpts, type Hit, type Scope } from '../lib/ai/rag';
 import { parseStudyJSON } from '../lib/ai/study';
 import { homeworkSources } from '../lib/homework';
@@ -62,6 +62,8 @@ export interface ChatMsg {
   sources?: SourceRef[];
   /** Block the question was about — replies are inserted right after it. */
   anchor?: string;
+  /** Homework: the problem text the question was about (kept so follow-ups and Retry stay on it). */
+  focus?: string;
   /** The reply hit the token limit; it can be continued. */
   truncated?: boolean;
   metrics?: Metrics;
@@ -94,7 +96,19 @@ interface AssistantState {
   setDraft(key: string, patch: Partial<Draft>): void;
   attach(key: string, att: Omit<Attachment, 'id'>): void;
   detach(key: string, id: string): void;
-  ask(noteId: string, opts: { prompt?: string; mode?: AskMode; attachments?: Attachment[]; anchor?: string }): Promise<void>;
+  ask(
+    noteId: string,
+    opts: {
+      prompt?: string;
+      mode?: AskMode;
+      attachments?: Attachment[];
+      anchor?: string;
+      /** Homework problem text to use instead of the caret (Retry). */
+      focus?: string;
+      /** A follow-up about the same problem (e.g. "Give me another hint"), wherever the caret is now. */
+      inherit?: boolean;
+    },
+  ): Promise<void>;
   askLibrary(opts: { prompt: string; scope: Scope; scopeLabel?: string; tool?: StudyTool }): Promise<void>;
   /** Picks up a reply that stopped at the token limit. */
   continueReply(key: string, msgId: string): Promise<void>;
@@ -115,7 +129,7 @@ interface StreamOpts {
 }
 
 /** The exact request behind each reply, so a cut-off answer can be continued. */
-const lastRequests = new Map<string, { messages: ChatMessage[]; model: string; opts: StreamOpts }>();
+const lastRequests = new Map<string, { messages: ChatMessage[]; model: string; opts: StreamOpts; raw: string }>();
 
 const CONTINUE_PROMPT = 'Continue exactly where you stopped, mid-sentence if needed. Do not repeat anything or add a preamble.';
 
@@ -188,7 +202,8 @@ export const useAssistant = create<AssistantState>()(
           // Some servers don't stream (or stream only thinking); fall back to the final text.
           if (buf === (opts.prefix ?? '') && res.text) buf += res.text;
           const content = buf.trim();
-          lastRequests.set(msgId, { messages, model, opts: { ...opts, prefix: undefined } });
+          // The untrimmed text is kept so Continue joins exactly where the model stopped.
+          lastRequests.set(msgId, { messages, model, opts: { ...opts, prefix: undefined }, raw: buf });
           if (lastRequests.size > 40) lastRequests.delete(lastRequests.keys().next().value!);
           patchMsg(key, msgId, {
             content,
@@ -212,8 +227,11 @@ export const useAssistant = create<AssistantState>()(
           });
           return null;
         } finally {
-          if (controller === ctrl) controller = null;
-          if (get().streaming === key) set({ streaming: null });
+          // Only the current stream owns the flags: an older, aborted one must not clear a newer one's.
+          if (controller === ctrl) {
+            controller = null;
+            if (get().streaming === key) set({ streaming: null });
+          }
         }
       };
 
@@ -221,6 +239,9 @@ export const useAssistant = create<AssistantState>()(
       const repairStudyJSON = async (key: string, msgId: string, tool: StudyTool, text: string, messages: ChatMessage[], model: string) => {
         if ((tool !== 'flashcards' && tool !== 'quiz') || parseStudyJSON(tool, text)) return;
         patchMsg(key, msgId, { status: 'streaming', phase: 'repairing' });
+        controller?.abort();
+        const ctrl = new AbortController();
+        controller = ctrl;
         set({ streaming: key });
         try {
           const r = await chatRobust({
@@ -228,6 +249,7 @@ export const useAssistant = create<AssistantState>()(
             model,
             json: true,
             temperature: 0,
+            signal: ctrl.signal,
             messages: [
               ...messages,
               { role: 'assistant', content: text.slice(0, 6000) },
@@ -245,7 +267,10 @@ export const useAssistant = create<AssistantState>()(
         } catch {
           patchMsg(key, msgId, { status: 'done', phase: undefined });
         } finally {
-          if (get().streaming === key) set({ streaming: null });
+          if (controller === ctrl) {
+            controller = null;
+            if (get().streaming === key) set({ streaming: null });
+          }
         }
       };
 
@@ -283,10 +308,16 @@ export const useAssistant = create<AssistantState>()(
           const note = notes[noteId];
           const homework = !!note?.meta.homework;
 
-          // Follow-ups without new context stay anchored to the problem being discussed.
-          const previousAnchor = [...(get().threads[key]?.messages ?? [])].reverse().find((m) => m.role === 'user' && m.anchor)?.anchor;
-          const anchor = opts.anchor ?? (!attachments.length ? previousAnchor : undefined) ?? currentBlockId(noteId);
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, attachments, mode, anchor, at: Date.now() };
+          // Follow-ups without new context stay on the problem being discussed. In homework, a typed
+          // question after the caret moved to another problem is about that problem instead.
+          const prevUser = [...(get().threads[key]?.messages ?? [])].reverse().find((m) => m.role === 'user' && m.anchor);
+          const liveCaret = homework && !attachments.length && opts.focus === undefined ? caretContext(noteId) : undefined;
+          const moved = !!liveCaret && !!prevUser?.focus && liveCaret !== prevUser.focus;
+          const inherit = !attachments.length && !opts.anchor && !!prevUser && (opts.inherit || !moved);
+          const anchor = opts.anchor ?? (inherit ? prevUser!.anchor : undefined) ?? currentBlockId(noteId);
+          // In homework, the problem under the caret is what the student means by "this".
+          const caret = homework && !attachments.length ? (opts.focus ?? (inherit && prevUser?.focus ? prevUser.focus : liveCaret)) : undefined;
+          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, attachments, mode, anchor, focus: caret, at: Date.now() };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -300,7 +331,11 @@ export const useAssistant = create<AssistantState>()(
           push(key, userMsg, botMsg);
 
           if (ai.status !== 'online' || !ai.chatModel) {
-            patchMsg(key, botMsg.id, { status: 'error', phase: undefined, error: ai.status === 'offline' ? OFFLINE : 'Choose a model in Settings → Local AI.' });
+            patchMsg(key, botMsg.id, {
+              status: 'error',
+              phase: undefined,
+              error: ai.status === 'offline' ? OFFLINE : 'Choose a model in Settings → Local AI.',
+            });
             return;
           }
 
@@ -311,8 +346,6 @@ export const useAssistant = create<AssistantState>()(
           const useImages = images.length > 0 && !!vm;
           const model = useImages ? vm! : ai.chatModel;
           const ctx = effectiveCtx(model);
-          // In homework, the problem under the caret is what the student means by "this".
-          const caret = homework && !attachments.length ? caretContext(noteId) : undefined;
           const focus = attachments.find((a) => a.kind === 'text')?.text ?? caret;
           const classPath = classOfNote(note, folderMeta);
           const className = classPath ? classInfo(classPath, folderMeta[classPath]).name : undefined;
@@ -325,7 +358,9 @@ export const useAssistant = create<AssistantState>()(
             // Homework: the answer may only use the linked notes. Include every
             // linked passage when it fits, otherwise the most relevant ones.
             const linked = homeworkSources(note, notes);
-            const hwText = fitToBudget(docToText(content), Math.floor(ctx * 0.18), focus);
+            // Answers pasted in earlier are not part of the assignment (and must not be graded as the student's work).
+            const ownContent = { ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) };
+            const hwText = fitToBudget(docToText(ownContent), Math.floor(ctx * 0.18), focus);
             const hits = await homeworkExcerpts(linked, [question, focus ?? '', hwText.slice(0, 1600)].join('\n'), Math.floor(ctx * 0.42));
             patchMsg(key, botMsg.id, { sources: toSources(hits), phase: undefined });
             system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits), linked.length, className);
@@ -409,10 +444,13 @@ export const useAssistant = create<AssistantState>()(
           const msg = get().threads[key]?.messages.find((m) => m.id === msgId);
           if (!req || !msg) return;
           patchMsg(key, msgId, { status: 'streaming', truncated: false });
-          await stream(key, msgId, [...req.messages, { role: 'assistant', content: msg.content }, { role: 'user', content: CONTINUE_PROMPT }], req.model, {
+          // Join on the exact text the model produced (untrimmed), so a cut mid-word or after a newline
+          // continues seamlessly; the model sees the same text as its own previous turn.
+          const base = req.raw || msg.content;
+          await stream(key, msgId, [...req.messages, { role: 'assistant', content: base }, { role: 'user', content: CONTINUE_PROMPT }], req.model, {
             ...req.opts,
             label: `${req.opts.label} (continued)`,
-            prefix: msg.content + (/\s$/.test(msg.content) ? '' : ' '),
+            prefix: base,
           });
           // Later continues should see the whole reply so far, from the original request.
           const cur = lastRequests.get(msgId);
@@ -433,7 +471,15 @@ export const useAssistant = create<AssistantState>()(
               scopeLabel: lastUser.scopeLabel,
               tool: lastUser.tool,
             });
-          else void get().ask(key, { prompt: lastUser.content, mode: lastUser.mode, attachments: lastUser.attachments, anchor: lastUser.anchor });
+          else
+            void get().ask(key, {
+              prompt: lastUser.content,
+              mode: lastUser.mode,
+              attachments: lastUser.attachments,
+              anchor: lastUser.anchor,
+              focus: lastUser.focus,
+              inherit: true,
+            });
         },
 
         stop() {

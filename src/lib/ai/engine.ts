@@ -29,6 +29,8 @@ export class PreemptedError extends Error {
 export interface Metrics {
   firstTokenMs: number | null;
   totalMs: number;
+  /** Time spent waiting behind other requests before this one started. */
+  queuedMs?: number;
   tokens: number;
   tokensPerSec: number | null;
 }
@@ -174,13 +176,16 @@ export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
 
   for (let attempt = 1; ; attempt++) {
     let gotToken = false;
-    const t0 = performance.now();
+    const enqueued = performance.now();
+    // The clock starts when the job runs, not while it waits in the queue.
+    let t0 = enqueued;
     let first: number | null = null;
     let loadingTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const res = await scheduler.run(
         priority,
         (signal) => {
+          t0 = performance.now();
           useActivity.getState().patch(entry.id, { status: 'running', attempts: attempt });
           loadingTimer = setTimeout(() => !gotToken && req.onStatus?.('loading'), 2500);
           const onFirst = () => {
@@ -208,9 +213,16 @@ export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
       );
       clearTimeout(loadingTimer);
       const totalMs = performance.now() - t0;
-      const tokens = res.evalCount ?? Math.round(res.text.length / 3.8);
+      // Without server stats, estimate from everything generated (reasoning included), since the timing covers it too.
+      const tokens = res.evalCount ?? Math.round((res.text.length + (res.thinking?.length ?? 0)) / 3.8);
       const genMs = res.evalMs ?? (first !== null ? totalMs - first : totalMs);
-      const metrics: Metrics = { firstTokenMs: first, totalMs, tokens, tokensPerSec: genMs > 50 ? (tokens / genMs) * 1000 : null };
+      const metrics: Metrics = {
+        firstTokenMs: first,
+        totalMs,
+        queuedMs: Math.round(t0 - enqueued),
+        tokens,
+        tokensPerSec: genMs > 50 ? (tokens / genMs) * 1000 : null,
+      };
       useActivity.getState().patch(entry.id, { status: 'ok', metrics });
       return { ...res, model: req.model, metrics, truncated: res.finishReason === 'length' };
     } catch (e) {

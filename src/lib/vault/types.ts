@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Paper } from '../../state/settings';
+import { sanitizeDoc } from './sanitize';
 
 export interface NoteMeta {
   id: string;
@@ -102,7 +103,8 @@ export function parseNoteFile(text: string): NoteDoc | null {
               }
             : undefined,
       },
-      content: raw.content?.type === 'doc' ? raw.content : EMPTY_DOC,
+      // Files can come from anywhere: coerce everything that ends up in markup.
+      content: raw.content?.type === 'doc' ? sanitizeDoc(raw.content) : EMPTY_DOC,
     };
   } catch {
     return null;

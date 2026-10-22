@@ -31,8 +31,25 @@ test('fence spellings are normalised and an unclosed block is closed (streaming)
 });
 
 test('inserted into a note, the general-knowledge part stays marked and citations are stripped', () => {
-  const html = markdownToEditorHTML('Cited [1].\n\n:::outside\nNot in notes.\n:::');
+  const html = markdownToEditorHTML('Cited [1].\n\n:::outside\nNot in notes.\n:::', { stripCitations: true });
   assert.match(html, /data-variant="outside"/);
   assert.doesNotMatch(html, /\[1\]/);
   assert.match(markdownToEditorHTML('$x^2$'), /data-type="math-inline"/);
+});
+
+test('only real excerpt numbers become citations; intervals stay text', () => {
+  const html = renderMarkdown('On [0, 1] the function is continuous [2]. See [9].', { citations: true, maxCite: 3 });
+  assert.match(html, /data-cite="2"/);
+  assert.doesNotMatch(html, /data-cite="0"|data-cite="9"/);
+  assert.match(html, /On \[0, 1\]/);
+});
+
+test('inserting an answer strips citations but never touches math', () => {
+  const html = markdownToEditorHTML('Continuous on $[0, 1]$ and $$\\int_{[1,2]} f$$ so a root exists [2].', { stripCitations: true });
+  assert.match(html, /data-latex="\[0, 1\]"/);
+  assert.match(html, /\\int_\{\[1,2\]\} f/);
+  assert.doesNotMatch(html, /\[2\]/);
+  assert.match(html, /root exists\./);
+  // The student's own Markdown keeps its brackets.
+  assert.match(markdownToEditorHTML('Interval [1, 2] here.'), /\[1, 2\]/);
 });

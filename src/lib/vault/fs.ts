@@ -94,14 +94,16 @@ export function createFsVault(bridge: NibBridge, root: string): VaultBackend {
     async deleteFolder(path) {
       await v.remove(root, path);
     },
-    async saveFolderMeta(meta) {
-      await v.writeText(root, '.nib/folders.json', JSON.stringify(meta, null, 2));
+    saveFolderMeta(meta) {
+      // Writes are queued so a quick rename + edit can't race on folders.json.
+      const text = JSON.stringify(meta, null, 2);
+      return enqueue('\u0000folders', () => v.writeText(root, '.nib/folders.json', text).then(() => undefined));
     },
     async readKV(key) {
       return v.readText(root, `.nib/${key}.json`);
     },
-    async writeKV(key, value) {
-      await v.writeText(root, `.nib/${key}.json`, value);
+    writeKV(key, value) {
+      return enqueue(`\u0000kv:${key}`, () => v.writeText(root, `.nib/${key}.json`, value).then(() => undefined));
     },
     reveal(id) {
       const cur = paths.get(id);

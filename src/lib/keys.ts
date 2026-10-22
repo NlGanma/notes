@@ -110,7 +110,7 @@ export function handleGlobalKey(e: KeyboardEvent) {
     map['-'] = () => runCommand('zoom', 'out');
     map['0'] = () => runCommand('zoom', 'reset');
     if (e.shiftKey) map['l'] = () => runCommand('library');
-    if (e.shiftKey) map['h'] = () => runCommand('new-homework');
+    if (e.shiftKey) map['y'] = () => runCommand('new-homework');
   }
   const fn = map[key];
   if (fn && !(key === 'l' && !e.shiftKey)) {

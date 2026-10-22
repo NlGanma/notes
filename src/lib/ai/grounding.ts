@@ -40,7 +40,12 @@ export function needsCitation(text: string): boolean {
     )
   )
     return false;
-  if (/^(try|now|next|your turn|give it a try|can you|what do you|see if|ask your|check with|let me know|tell me|good luck|remember to|want me)/i.test(t))
+  // Lines addressed to the student. "Now"/"Next" alone usually start a method step, which does need a source.
+  if (
+    /^(?:(?:now|next)\b,?\s+(?:try|you|it['’]?s your turn|see if|check|give it)\b|try\b|your turn\b|give it a try\b|can you\b|what do you\b|see if\b|ask your\b|check with\b|let me know\b|tell me\b|good luck\b|remember to\b|want me\b)/i.test(
+      t,
+    )
+  )
     return false;
   return true;
 }
@@ -62,13 +67,17 @@ export function textWithTex(el: Element): string {
  */
 export function applyGrounding(root: HTMLElement, excerptFor: (n: number) => string | undefined): GroundingReport {
   const report: GroundingReport = { cited: 0, uncited: 0, outside: root.querySelectorAll('.outside-notes').length, weak: 0 };
+  // Paragraphs and list items; a list item that wraps its text in <p> is checked through that <p>.
   const statements = [...root.querySelectorAll('p, li')].filter(
-    (el) => !el.closest('.outside-notes') && !el.querySelector('p, li') && !el.closest('.outside-head'),
+    (el) => !el.closest('.outside-notes') && !el.closest('.outside-head') && !el.querySelector(':scope > p'),
   );
   for (const el of statements) {
     el.classList.remove('uncited');
-    const cites = [...el.querySelectorAll<HTMLElement>('.cite')];
-    const text = textWithTex(el);
+    // Only the statement's own text and citations — not those of sub-bullets, which are checked separately.
+    const own = el.cloneNode(true) as Element;
+    own.querySelectorAll('ul, ol').forEach((n) => n.remove());
+    const cites = [...el.querySelectorAll<HTMLElement>('.cite')].filter((c) => c.closest('li, p') === el);
+    const text = textWithTex(own);
     if (!cites.length) {
       if (needsCitation(text)) {
         el.classList.add('uncited');

@@ -5,7 +5,7 @@ import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
 import { CLASS_COLORS, CLASS_ICONS, classInfo, guessClassIcon, listClasses, type ClassIconName } from '../../lib/classes';
 import { ClassBadge, ClassGlyph } from './ClassIcon';
-import { cx } from '../../lib/util';
+import { cx, sanitizeFolderName } from '../../lib/util';
 import { openClass } from '../../lib/commands';
 import { confirmDialog } from '../common/dialogs';
 import { toast } from '../common/toast';
@@ -64,9 +64,10 @@ export function ClassDialog() {
   const shownIcon = icon ?? guessClassIcon(name);
 
   const save = async () => {
-    const n = name.trim();
+    // The name becomes a folder on disk, so it's cleaned the same way the vault cleans it.
+    const n = sanitizeFolderName(name);
     if (!n) {
-      setError('Give the class a name.');
+      setError(name.trim() ? 'Use letters or numbers — a class name can’t start with a dot.' : 'Give the class a name.');
       return;
     }
     const same = folders.find((f) => !f.includes('/') && f.toLowerCase() === n.toLowerCase() && f !== path);
@@ -78,18 +79,22 @@ export function ClassDialog() {
     }
     const info = { name: n, code: code.trim(), instructor: instructor.trim(), term: term.trim(), color, icon: shownIcon };
     const vault = useVault.getState();
-    if (path) {
-      const next = await vault.updateClass(path, info);
-      const v = useUI.getState().view;
-      if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: next });
+    try {
+      if (path) {
+        const next = await vault.updateClass(path, info);
+        const v = useUI.getState().view;
+        if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: next });
+        close();
+        return;
+      }
+      // A plain folder with the same name becomes the class (keeping its notes).
+      const created = same ? await vault.updateClass(same, info) : await vault.createClass(info);
       close();
-      return;
+      openClass(created);
+      toast.success(`Created ${n}`, 'New notes and homework you make here stay with this class.');
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
     }
-    // A plain folder with the same name becomes the class (keeping its notes).
-    const created = same ? await vault.updateClass(same, info) : await vault.createClass(info);
-    close();
-    openClass(created);
-    toast.success(`Created ${n}`, 'New notes and homework you make here stay with this class.');
   };
 
   return (

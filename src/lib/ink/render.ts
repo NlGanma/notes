@@ -114,11 +114,13 @@ export function strokesToSvgMarkup(strokes: Stroke[], dx = 0, dy = 0): string {
     const d = strokePath(s);
     if (!d) return '';
     const op = strokeOpacity(s);
-    const col = escAttr(s.color);
+    const col = escAttr(String(s.color));
+    const o = Number(op);
+    const opAttr = Number.isFinite(o) && o < 1 ? ` opacity="${o}"` : '';
     if (s.brush === 'mono') {
-      return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${s.size}" stroke-linecap="round" stroke-linejoin="round"${op < 1 ? ` opacity="${op}"` : ''}/>`;
+      return `<path d="${escAttr(d)}" fill="none" stroke="${col}" stroke-width="${Number(s.size) || 2}" stroke-linecap="round" stroke-linejoin="round"${opAttr}/>`;
     }
-    return `<path d="${d}" fill="${col}"${op < 1 ? ` opacity="${op}"` : ''}/>`;
+    return `<path d="${escAttr(d)}" fill="${col}"${opAttr}/>`;
   };
   if (highlight.length) out += `<g style="mix-blend-mode:multiply">${highlight.map(one).join('')}</g>`;
   out += rest.map(one).join('');

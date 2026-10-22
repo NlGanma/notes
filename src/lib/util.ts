@@ -47,6 +47,21 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * A safe folder name: no path separators or characters macOS/Windows reject,
+ * no control characters, and no leading dots (dot-folders are hidden and
+ * skipped when the vault is scanned).
+ */
+export function sanitizeFolderName(name: string): string {
+  return name
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[.\s]+/, '')
+    .replace(/[.\s]+$/, '')
+    .slice(0, 120);
+}
+
 export function sanitizeFileName(name: string): string {
   const cleaned = name
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')

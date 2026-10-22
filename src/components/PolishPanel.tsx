@@ -120,7 +120,9 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
         </div>
       )}
       {ai.status !== 'online' && (
-        <div className="polish-foot">Connect a local model in Settings → Local AI to unlock smart suggestions (titles, tags, summaries, reading handwriting).</div>
+        <div className="polish-foot">
+          Connect a local model in Settings → Local AI to unlock smart suggestions (titles, tags, summaries, reading handwriting).
+        </div>
       )}
     </div>
   );
