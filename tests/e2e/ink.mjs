@@ -640,6 +640,12 @@ await page.keyboard.press('Alt+l');
 await page.mouse.click(...mid(tiny[0]));
 await page.waitForTimeout(200);
 check((await selCount()) === tinyIds.length, `a tap on small handwriting picks up one whole word (${await selCount()} of ${tinyIds.length})`);
+const clear = await page.evaluate(() => {
+  const m = document.querySelector('.note-view:not(.is-hidden) .ink-sel-menu').getBoundingClientRect();
+  const top = Math.min(...[...document.querySelectorAll('.note-view:not(.is-hidden) .sel-box circle')].map((c) => c.getBoundingClientRect().top));
+  return { menuBottom: m.bottom, handlesTop: top };
+});
+check(clear.menuBottom <= clear.handlesTop, `the menu sits clear of a small selection's handles (menu ends ${clear.menuBottom.toFixed(0)}, handles start ${clear.handlesTop.toFixed(0)})`);
 await page.keyboard.press('Escape');
 
 // 12d. Wherever it is let go, a word lands on the nearest ruled line; ⇧⌘Z redoes the move.
@@ -792,6 +798,72 @@ await shot(page, 'ink-20-narrow-hint');
 await page.keyboard.press('Escape');
 await page.mouse.up();
 await page.setViewportSize({ width: 1440, height: 1000 });
+await page.waitForTimeout(300);
+wrap = await wrapBox();
+
+// 12j. Esc mid-drag puts the ink back and lets go of the closed hand at once.
+const cursorNow = () => page.evaluate(() => document.querySelector('.note-view:not(.is-hidden) .surface').dataset.inkCursor ?? null);
+const fNow = byId(await inkNow()).get(fId);
+const fAt = [wrap.x + fNow.pts[2][0], wrap.y + fNow.pts[2][1]];
+await page.mouse.move(...fAt);
+await page.mouse.down();
+await page.mouse.move(fAt[0] + 40, fAt[1] + 40, { steps: 6 });
+await page.waitForTimeout(80);
+const whileDragging = await cursorNow();
+await page.keyboard.press('Escape');
+await page.waitForTimeout(80);
+const afterEsc = await cursorNow();
+await page.mouse.up();
+check(whileDragging === 'grabbing' && afterEsc !== 'grabbing' && Math.abs(byId(await inkNow()).get(fId).pts[0][1] - fNow.pts[0][1]) < 0.01, `Esc mid-drag puts it back and drops the closed hand (cursor ${whileDragging} → ${afterEsc})`);
+
+// 12k. With the pen, holding ⌘ over ink shows the hand straight away.
+await page.keyboard.press('Alt+p');
+await page.mouse.move(fAt[0] + 1, fAt[1]);
+await page.waitForTimeout(80);
+await page.keyboard.down('Meta');
+await page.waitForTimeout(80);
+const withCmd = await cursorNow();
+await page.keyboard.up('Meta');
+await page.waitForTimeout(80);
+check(withCmd === 'grab' && (await cursorNow()) === null, `with the pen, ⌘ over ink shows the hand without moving the pointer (${withCmd})`);
+
+// 12l. Ink can't be dragged off the end of the page.
+await page.keyboard.press('Alt+l');
+const pageBottom = await page.evaluate(() => {
+  const wr = document.querySelector('.note-view:not(.is-hidden) .editor-wrap').getBoundingClientRect();
+  return document.querySelector('.note-view:not(.is-hidden) .page').getBoundingClientRect().bottom - wr.top;
+});
+await drag(fAt, 0, pageBottom + 400);
+const fLow = byId(await inkNow()).get(fId);
+check(Math.max(...fLow.pts.map((q) => q[1])) < pageBottom, `dragged past the end of the page, it stays on the paper (lowest point ${Math.max(...fLow.pts.map((q) => q[1])).toFixed(0)}, page ends ${pageBottom.toFixed(0)})`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+await page.locator(`${V} .note-scroll`).evaluate((el) => (el.scrollTop = 0));
+await page.waitForTimeout(250);
+
+// 12m. Zoomed in, writing still comes word by word.
+await page.keyboard.press('Escape');
+for (let i = 0; i < 4; i++) {
+  await page.keyboard.press(`${MOD}+Equal`);
+  await page.waitForTimeout(120);
+}
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(300);
+wrap = await wrapBox();
+const zs = await page.evaluate(() => {
+  const p = document.querySelector('.note-view:not(.is-hidden) .page');
+  return p.getBoundingClientRect().width / p.offsetWidth;
+});
+const zBase = wrap.y + R(11) * zs;
+const zMass = handPaths('mass', wrap.x + 300 * zs, zBase, 16).paths;
+const zIds = await newIds(() => writeText(page, 'mass', wrap.x + 300 * zs, zBase, 16));
+await writeText(page, 'velocity', wrap.x + 300 * zs + handPaths('mass ', 0, 0, 16).width, zBase, 16);
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...mid(zMass[0]));
+await page.waitForTimeout(200);
+check(zs > 1.3 && (await selCount()) === zIds.length, `zoomed in (×${zs.toFixed(2)}), a tap still picks up one whole word (${await selCount()} of ${zIds.length})`);
+await page.keyboard.press('Escape');
+await page.keyboard.press(`${MOD}+0`);
 await page.waitForTimeout(300);
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
