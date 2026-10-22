@@ -569,6 +569,231 @@ const menuBox = await page.locator(`${V} .ink-sel-menu`).boundingBox();
 check(!!menuBox && !!selNow && menuBox.y > selNow.y + selNow.height - 1, `near the toolbar the selection menu opens below the selection (menu at ${menuBox?.y.toFixed(0)}, selection ends ${(selNow.y + selNow.height).toFixed(0)})`);
 await shot(page, 'ink-16-menu-below');
 
+// 12. More of the feel: in a fresh note with two typed sentences.
+await page.keyboard.press('Escape');
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForTimeout(400);
+await page.keyboard.type('Light reactions');
+await page.keyboard.press('Enter');
+await page.keyboard.type('Photosynthesis converts light energy into chemical energy.');
+await page.keyboard.press('Enter');
+await page.keyboard.type('Chlorophyll absorbs mostly red and blue light.');
+await page.waitForTimeout(300);
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(200);
+wrap = await wrapBox();
+const newIds = async (fn) => {
+  const before = new Set((await inkNow()).map((s) => s.id));
+  await fn();
+  await page.waitForTimeout(120);
+  return (await inkNow()).filter((s) => !before.has(s.id)).map((s) => s.id);
+};
+const strokePath = async (pts) => {
+  await page.mouse.move(pts[0][0], pts[0][1]);
+  await page.mouse.down();
+  for (const q of pts.slice(1)) await page.mouse.move(q[0], q[1], { steps: 2 });
+  await page.mouse.up();
+};
+const inlineIn = async (i) => page.evaluate((i) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let n = 0;
+  ed.state.doc.child(i).forEach((c) => (n += c.type.name === 'inkInline' ? 1 : 0));
+  return n;
+}, i);
+const textAtOffset = (i, text) => page.evaluate(([i, text]) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let pos = 0;
+  ed.state.doc.forEach((_n, off, k) => {
+    if (k === i) pos = off + 1;
+  });
+  const r = ed.view.coordsAtPos(pos + ed.state.doc.child(i).textContent.indexOf(text));
+  return { x: r.left, base: r.bottom - 3 };
+}, [i, text]);
+
+// 12a. The first stroke on the line after a skipped line is kept (the area's resize strip swallowed it).
+await writeText(page, 'Force', wrap.x + 8, wrap.y + R(3), 18);
+const ball = handPaths('ball', wrap.x + 8, wrap.y + R(5), 20).paths;
+const ballIds = await newIds(() => writeText(page, 'ball', wrap.x + 8, wrap.y + R(5), 20));
+check(ballIds.length === ball.length, `after a skipped line every stroke is kept ("ball": ${ballIds.length} of ${ball.length})`);
+await shot(page, 'ink-17-after-skipped-line');
+
+// 12b. Pressing the outline of a drawn cell picks up what is drawn inside it.
+const cell = { x: wrap.x + 420, y: wrap.y + R(8) - 6 };
+const ellipse = (cx, cy, rx, ry, n = 44) => Array.from({ length: n + 3 }, (_, i) => [cx + Math.cos((i / n) * Math.PI * 2 + 0.4) * rx, cy + Math.sin((i / n) * Math.PI * 2 + 0.4) * ry]);
+const cellIds = await newIds(async () => {
+  await strokePath(ellipse(cell.x, cell.y, 52, 40));
+  await strokePath(ellipse(cell.x - 8, cell.y + 2, 14, 11, 24));
+  for (const [dx, dy] of [[24, -14], [28, 10], [-30, -18]]) await strokePath([[cell.x + dx, cell.y + dy], [cell.x + dx + 1.5, cell.y + dy + 0.5]]);
+});
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...ellipse(cell.x, cell.y, 52, 40)[0]);
+await page.waitForTimeout(200);
+check(cellIds.length === 5 && (await selCount()) === 5, `pressing a drawn cell's outline picks up its nucleus and dots too (${await selCount()} of ${cellIds.length})`);
+await page.keyboard.press('Escape');
+
+// 12c. Small writing still comes word by word.
+await page.keyboard.press('Alt+p');
+const tiny = handPaths('mass', wrap.x + 20, wrap.y + R(13), 10).paths;
+const tinyIds = await newIds(() => writeText(page, 'mass', wrap.x + 20, wrap.y + R(13), 10));
+await writeText(page, 'times', wrap.x + 20 + handPaths('mass ', 0, 0, 10).width, wrap.y + R(13), 10);
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...mid(tiny[0]));
+await page.waitForTimeout(200);
+check((await selCount()) === tinyIds.length, `a tap on small handwriting picks up one whole word (${await selCount()} of ${tinyIds.length})`);
+await page.keyboard.press('Escape');
+
+// 12d. Wherever it is let go, a word lands on the nearest ruled line; ⇧⌘Z redoes the move.
+const force = handPaths('Force', wrap.x + 8, wrap.y + R(3), 18).paths;
+const fId = (await inkNow()).find((s) => Math.abs(s.pts[0][0] - (force[0][0][0] - wrap.x)) < 0.6 && Math.abs(s.pts[0][1] - (force[0][0][1] - wrap.y)) < 0.6)?.id;
+// [how far it is dragged, the line it should land on (relative to where it was)]
+for (const [dy, want] of [
+  [75, 64],
+  [88, 96],
+  [19, 32],
+]) {
+  const f0 = byId(await inkNow()).get(fId);
+  await drag([wrap.x + f0.pts[2][0], wrap.y + f0.pts[2][1]], 200, dy);
+  const f1 = byId(await inkNow()).get(fId);
+  const off = dy - want;
+  check(Math.abs(f1.pts[0][1] - f0.pts[0][1] - want) < 1, `let go ${off >= 0 ? '+' : ''}${off}px off a line, a word still lands on the nearest one (moved ${(f1.pts[0][1] - f0.pts[0][1]).toFixed(1)}, want ${want})`);
+  if (dy === 75) {
+    await page.keyboard.press(`${MOD}+z`);
+    await page.waitForTimeout(200);
+    await page.keyboard.press(`${MOD}+Shift+z`);
+    await page.waitForTimeout(200);
+    check(Math.abs(byId(await inkNow()).get(fId).pts[0][1] - f1.pts[0][1]) < 0.01, `${MOD}+Z then ${MOD}+Shift+Z redoes the move`);
+  }
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(200);
+}
+
+// 12e. Let go at the very start of a typed line, a word joins the sentence instead of sitting on its first letters.
+const tinyNow = (await inkNow()).filter((s) => tinyIds.includes(s.id));
+const tinyLeft = Math.min(...tinyNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const p2 = await textAtOffset(1, 'Chlorophyll');
+await drag([wrap.x + tinyNow[0].pts[2][0], wrap.y + tinyNow[0].pts[2][1]], p2.x - 1 - (wrap.x + tinyLeft), p2.base - (wrap.y + R(13)));
+check((await inlineIn(1)) === 1, 'a word let go at the start of a typed line joins the sentence');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
+
+// 12f. A drawing let go between two paragraphs gets lines of its own there, instead of covering both.
+await page.keyboard.press('Alt+p');
+const bx = { x: wrap.x + 200, y: wrap.y + R(17) };
+const boxIds = await newIds(async () => {
+  await strokePath([[bx.x, bx.y - 50], [bx.x + 90, bx.y - 50], [bx.x + 90, bx.y], [bx.x, bx.y], [bx.x, bx.y - 50]]);
+  await strokePath([[bx.x + 10, bx.y - 25], [bx.x + 80, bx.y - 25]]);
+});
+await page.keyboard.press('Alt+l');
+const p1Bottom = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  return ed.view.nodeDOM(0).getBoundingClientRect().bottom;
+});
+await page.mouse.move(bx.x + 45, bx.y - 50);
+await page.mouse.down();
+await page.mouse.move(bx.x - 20, bx.y - 200, { steps: 8 });
+await page.mouse.move(bx.x - 120, p1Bottom - 2, { steps: 8 });
+await page.waitForTimeout(150);
+check(await page.locator(`${V} .room-line[display="inline"]`).count(), 'over the text, a line shows where it will make room');
+await shot(page, 'ink-18-room-between-paragraphs');
+await page.mouse.up();
+await page.waitForTimeout(300);
+doc = await docJSON();
+const blocks = doc.content.map((b) => b.type);
+const boxBlock = doc.content.findIndex((b) => (b.attrs?.ink ?? []).some((s) => boxIds.includes(s.id)));
+const covered = await page.evaluate((ids) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  const wr = document.querySelector('.note-view:not(.is-hidden) .editor-wrap').getBoundingClientRect();
+  const rects = [];
+  ed.state.doc.forEach((n, off) => {
+    if (n.type.name !== 'paragraph' || !n.textContent) return;
+    const range = document.createRange();
+    range.selectNodeContents(ed.view.nodeDOM(off));
+    for (const q of range.getClientRects()) rects.push(q);
+  });
+  let hits = 0;
+  ed.state.doc.forEach((n, off) => {
+    const top = ed.view.dom.offsetTop + ed.view.nodeDOM(off).offsetTop;
+    for (const s of n.attrs.ink ?? []) {
+      if (!ids.includes(s.id)) continue;
+      for (let i = 0; i + 1 < s.pts.length; i += 3) {
+        const x = wr.left + s.pts[i];
+        const y = wr.top + s.pts[i + 1] + top;
+        if (rects.some((q) => x > q.left && x < q.right && y > q.top && y < q.bottom)) hits++;
+      }
+    }
+  });
+  return hits;
+}, boxIds);
+check(boxBlock === 1 && blocks[0] === 'paragraph' && blocks[1] === 'inkBlock' && blocks[2] === 'paragraph' && covered === 0, `a drawing let go between two paragraphs gets lines of its own between them (blocks ${blocks.slice(0, 3).join(', ')}; points on text ${covered})`);
+await shot(page, 'ink-19-room-made');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+
+// 12g. A big word shrunk to fit a sentence comes back out at its own size.
+await page.keyboard.press('Alt+p');
+const big = handPaths('Big', wrap.x + 300, wrap.y + R(19), 26).paths;
+const bigIds = await newIds(() => writeText(page, 'Big', wrap.x + 300, wrap.y + R(19), 26));
+await page.keyboard.press('Alt+l');
+const bigNow = (await inkNow()).filter((s) => bigIds.includes(s.id));
+const height = (list) => Math.max(...list.flatMap((s) => s.pts.map((q) => q[1]))) - Math.min(...list.flatMap((s) => s.pts.map((q) => q[1])));
+const bigLeft = Math.min(...bigNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const into = await textAtOffset(0, 'energy into');
+await drag([wrap.x + bigNow[0].pts[3][0], wrap.y + bigNow[0].pts[3][1]], into.x + 1 - (wrap.x + bigLeft), into.base - (wrap.y + R(19)));
+const fitNow = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let fit = null;
+  ed.state.doc.child(0).forEach((c) => {
+    if (c.type.name === 'inkInline') fit = c.attrs.fit;
+  });
+  return fit;
+});
+check(fitNow !== null && fitNow < 1, `a big word dropped into a sentence is shrunk to fit the line (×${fitNow})`);
+const sk = await page.locator(`${V} .ProseMirror > p .ink-inline-node`).first().boundingBox();
+const outIds = await newIds(() => drag([sk.x + sk.width / 2, sk.y + sk.height / 2], 0, R(15) - R(0)));
+const outNow = (await inkNow()).filter((s) => outIds.includes(s.id));
+check(outNow.length === bigIds.length && Math.abs(height(outNow) / height(bigNow) - 1) < 0.03 && Math.abs(outNow[0].size - bigNow[0].size) < 0.05, `pulled back out, it is its own size again (${((height(outNow) / height(bigNow)) * 100).toFixed(0)}%, pen ${outNow[0]?.size})`);
+
+// 12h. A word let go just off the left edge of the word above lines up with it.
+await page.keyboard.press('Escape');
+wrap = await wrapBox();
+const tinyBack = (await inkNow()).filter((s) => tinyIds.includes(s.id));
+const massLeft = Math.min(...tinyBack.flatMap((s) => s.pts.map((q) => q[0])));
+const outLeft = Math.min(...outNow.flatMap((s) => s.pts.map((q) => q[0])));
+const outBase = Math.round((Math.max(...outNow.flatMap((s) => s.pts.map((q) => q[1]))) + 1) / 32 - 0.75);
+await drag([wrap.x + outNow[0].pts[3][0], wrap.y + outNow[0].pts[3][1]], massLeft + 3 - outLeft, R(14) - R(outBase));
+const aligned = (await inkNow()).filter((s) => outIds.includes(s.id));
+const alignedLeft = Math.min(...aligned.flatMap((s) => s.pts.map((q) => q[0])));
+check(Math.abs(alignedLeft - massLeft) < 1, `a word let go 3px off the edge of the word above lines up with it (edges ${(alignedLeft - massLeft).toFixed(1)}px apart)`);
+
+// 12i. In a narrow window the toolbar still says what letting go will do.
+await page.setViewportSize({ width: 1024, height: 768 });
+await page.waitForTimeout(400);
+wrap = await wrapBox();
+const hintShown = async () => page.evaluate(() => {
+  const h = document.querySelector('.note-view:not(.is-hidden) .tb-hint');
+  return h ? { text: h.textContent, shown: getComputedStyle(h).display !== 'none' && h.getBoundingClientRect().width > 20 } : null;
+});
+const idle = await hintShown();
+check(!!idle?.shown, `at 1024px wide the lasso hint is still shown ("${idle?.text}")`);
+const sc = await page.evaluate(() => {
+  const p = document.querySelector('.note-view:not(.is-hidden) .page');
+  return p.getBoundingClientRect().width / p.offsetWidth;
+});
+const forceNow = byId(await inkNow()).get(fId);
+const target = await textAtOffset(0, 'chemical');
+await page.mouse.move(wrap.x + forceNow.pts[2][0] * sc, wrap.y + forceNow.pts[2][1] * sc);
+await page.mouse.down();
+await page.mouse.move(target.x + 6, target.base - 20, { steps: 8 });
+await page.mouse.move(target.x + 2 + (forceNow.pts[2][0] - Math.min(...forceNow.pts.map((q) => q[0]))) * sc, target.base - (R(3) - forceNow.pts[2][1]) * sc, { steps: 6 });
+await page.waitForTimeout(150);
+const hovering = await hintShown();
+check(!!hovering?.shown && /Release to put it in the text/.test(hovering.text), `and while dragging over text it says "${hovering?.text}"`);
+await shot(page, 'ink-20-narrow-hint');
+await page.keyboard.press('Escape');
+await page.mouse.up();
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.waitForTimeout(300);
+
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
 await browser.close();
