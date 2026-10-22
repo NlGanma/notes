@@ -283,8 +283,13 @@ if (phrased) {
   const extra = await notInNotes([phrased.fact, ...(phrased.points ?? [])].join(' '), selected);
   check(!extra.length, `…and its answer is the notes’ own text${extra.length ? ` (not in notes: ${extra.join(' ')})` : ''}`);
 } else console.log('     (no idea reached the explain level in the second session)');
+// Esc in the answer box only leaves the box (a half-typed answer is kept); the next one ends the session.
+const running = () => page.evaluate(() => !!window.__nib.review.getState().session);
+const endedEarly = await running();
 await page.keyboard.press('Escape');
+if (await running()) await page.keyboard.press('Escape');
 await page.waitForSelector('.rv-summary');
+if (endedEarly) check(/Stopped after \d+ question/.test((await page.locator('.rv-summary-head').textContent()) ?? ''), 'a session ended early says it stopped');
 await page.click('.rv-summary-actions .btn.is-primary');
 
 // ---------------------------------------------------------------- persistence
