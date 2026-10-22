@@ -18,6 +18,8 @@ export interface NoteMeta {
   color?: string;
   /** Present when the note is a homework assignment. */
   homework?: HomeworkMeta;
+  /** Written by the AI (e.g. saved flashcards): never cited back as class material. */
+  generated?: boolean;
 }
 
 export interface HomeworkMeta {
@@ -102,6 +104,7 @@ export function parseNoteFile(text: string): NoteDoc | null {
                 done: !!meta.homework.done,
               }
             : undefined,
+        generated: meta.generated ? true : undefined,
       },
       // Files can come from anywhere: coerce everything that ends up in markup.
       content: raw.content?.type === 'doc' ? sanitizeDoc(raw.content) : EMPTY_DOC,

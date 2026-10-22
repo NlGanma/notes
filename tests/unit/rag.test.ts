@@ -67,3 +67,19 @@ test('vectors round-trip through base64 and cosine works', () => {
   assert.equal(Math.round(cosine([1, 0], [1, 0]) * 100), 100);
   assert.equal(Math.round(cosine([1, 0], [0, 1]) * 100), 0);
 });
+
+test('tokenize folds accents and keeps words in any language', () => {
+  assert.deepEqual(tokenize('El niño está en la guardería'), ['nino', 'esta', 'guarderia']);
+  assert.deepEqual(tokenize('Más café, por favor'), ['mas', 'cafe', 'favor']);
+  assert.ok(tokenize('λογος and \\theta').includes('λογος'));
+  assert.ok(tokenize('λογος and \\theta').includes('theta'));
+});
+
+test('notes written by the AI are never retrieved as class material unless picked', async () => {
+  const { note, p } = await import('./fixtures');
+  const cards = note('Flashcards', 'Calculus I', [p('The squeeze theorem traps f between g and h.')], { generated: true });
+  const v = vault();
+  assert.ok(!chunkVault([...v.list, cards]).some((c) => c.title === 'Flashcards'));
+  assert.ok(!chunkVault([...v.list, cards], { kind: 'folder', path: 'Calculus I' }).some((c) => c.title === 'Flashcards'));
+  assert.ok(chunkVault([cards], { kind: 'note', id: cards.meta.id }).length > 0);
+});

@@ -1,28 +1,36 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatMessage } from '../lib/ai/providers';
-import { chatRobust, effectiveCtx, type Metrics } from '../lib/ai/engine';
+import { chatJSON, chatRobust, effectiveCtx, type Metrics } from '../lib/ai/engine';
 import {
   HOMEWORK_MODES,
   MODE_INSTRUCTIONS,
   homeworkSystemPrompt,
+  isTransformPrompt,
   librarySystemPrompt,
   modeQuestion,
   noteSystemPrompt,
   STUDY_TOOLS,
+  TEXT_ACTIONS,
+  transformSystemPrompt,
   type AskMode,
   type StudyTool,
 } from '../lib/ai/prompts';
 import { blockToText, docToText, estimateTokens, fitToBudget, isAssistantBlock } from '../lib/ai/context';
-import { chunkVault, formatExcerpts, type Hit, type Scope } from '../lib/ai/rag';
-import { parseStudyJSON } from '../lib/ai/study';
+import { chunkNote, chunkVault, formatExcerpts, rankChunks, type Chunk, type Hit, type Scope } from '../lib/ai/rag';
+import { parseStudyJSON, verifyStudy } from '../lib/ai/study';
+import { assessCoverage, findExamples, gapFillSystem, gateQuery, RULE_REMINDER, type CoverageLevel } from '../lib/ai/policy';
+import { historyForModel, settleWeak, transformCheck, VERIFY_PROMPT, type ExcerptRef, type VerifyCtx, type VerifyMode } from '../lib/ai/verify';
+import { parseJSONLoose } from '../lib/ai/json';
+import { finishGrounded, type Banner, type CheckSummary } from '../lib/ai/answer';
+import type { NoteDoc } from '../lib/vault/types';
 import { homeworkSources } from '../lib/homework';
 import { classInfo, classOfNote } from '../lib/classes';
 import { useAI, visionModel } from './ai';
 import { useVault } from './vault';
 import { editors } from '../editor/registry';
 import { uid } from '../lib/util';
-import { sampleLibrary, searchLibrary } from './library';
+import { sampleLibrary, searchLibrary, semanticCalib, vaultStats } from './library';
 
 export interface Attachment {
   id: string;
@@ -42,9 +50,11 @@ export interface SourceRef {
   folder: string;
   blockId: string | null;
   text: string;
+  /** The picture of their work the student attached (not a passage of the notes). */
+  visual?: boolean;
 }
 
-export type MsgPhase = 'reading' | 'loading' | 'retrying' | 'repairing';
+export type MsgPhase = 'reading' | 'loading' | 'retrying' | 'repairing' | 'general' | 'checking';
 
 export interface ChatMsg {
   id: string;
@@ -67,8 +77,31 @@ export interface ChatMsg {
   /** The reply hit the token limit; it can be continued. */
   truncated?: boolean;
   metrics?: Metrics;
-  /** Answers that must come from the notes get a grounding check in the UI. */
-  grounding?: 'homework' | 'library';
+  /**
+   * Every answer is held to the notes: `note` (the open note), `homework`,
+   * `library` (Ask your notes). `transform` rewrites or translates the
+   * student's own passage and is checked for anything it adds.
+   */
+  grounding?: 'note' | 'homework' | 'library' | 'transform';
+  /** What is shown, inserted and copied: the reply after the notes-only check (unsupported parts boxed). */
+  shown?: string;
+  check?: CheckSummary;
+  /** What the model said the notes don't contain. */
+  gaps?: string[];
+  coverage?: CoverageLevel;
+  banner?: Banner;
+  /** Closest passages, when the notes don't cover the question. */
+  nearest?: SourceRef[];
+  /** The notes didn't cover the question: the whole reply is the model's own knowledge. */
+  ownOnly?: boolean;
+  /** Rewrites/translations: names, numbers or formulas the model added that the passage doesn't have. */
+  added?: string[];
+  /** Study tools: items dropped because no excerpt backed them. */
+  dropped?: number;
+  /** Search the notes even though the coverage check said they don't cover this. */
+  forced?: boolean;
+  /** The question this answers (rewrites: which action). */
+  question?: string;
   /** Library questions remember their scope (for retry). */
   scope?: Scope;
   scopeLabel?: string;
@@ -107,9 +140,13 @@ interface AssistantState {
       focus?: string;
       /** A follow-up about the same problem (e.g. "Give me another hint"), wherever the caret is now. */
       inherit?: boolean;
+      /** Answer from the notes even if the coverage check says they don't cover it. */
+      force?: boolean;
     },
   ): Promise<void>;
-  askLibrary(opts: { prompt: string; scope: Scope; scopeLabel?: string; tool?: StudyTool }): Promise<void>;
+  askLibrary(opts: { prompt: string; scope: Scope; scopeLabel?: string; tool?: StudyTool; force?: boolean }): Promise<void>;
+  /** "Search my notes anyway": re-asks the last question without the coverage check. */
+  forceNotes(key: string): void;
   /** Picks up a reply that stopped at the token limit. */
   continueReply(key: string, msgId: string): Promise<void>;
   regenerate(key: string): void;
@@ -120,16 +157,34 @@ interface AssistantState {
 
 let controller: AbortController | null = null;
 
+/** How a grounded reply is checked when it's done (kept so Continue re-checks the whole reply). */
+interface FinishSpec {
+  excerpts: [number, ExcerptRef][];
+  /** The student's own question and work: restating it needs no source. */
+  context: string;
+  mode: VerifyMode;
+  question: string;
+  className?: string;
+  /** What the coverage check said before the call (a refusal after 'full' points the student at the passages). */
+  gate?: CoverageLevel;
+}
+
 interface StreamOpts {
   label: string;
   temperature?: number;
   json?: boolean;
   /** Text already shown (when continuing a cut-off reply). */
   prefix?: string;
+  finish?: FinishSpec;
+  /** The caller marks the reply done (after checking it). */
+  holdDone?: boolean;
 }
 
 /** The exact request behind each reply, so a cut-off answer can be continued. */
 const lastRequests = new Map<string, { messages: ChatMessage[]; model: string; opts: StreamOpts; raw: string }>();
+
+/** Grounded answers run cool: the notes, not the model's imagination. */
+const groundedTemp = (t: number) => Math.min(t, 0.15);
 
 const CONTINUE_PROMPT =
   'Your reply was cut off. Continue it exactly where it stopped. Start by repeating the last five words you wrote, word for word, then carry on. No preamble, no other repetition.';
@@ -242,12 +297,17 @@ export const useAssistant = create<AssistantState>()(
           patchMsg(key, msgId, {
             content,
             thinking: think || undefined,
-            status: 'done',
+            status: opts.finish || opts.holdDone ? 'streaming' : 'done',
             phase: undefined,
             model,
             metrics: res.metrics,
             truncated: res.truncated,
           });
+          if (opts.finish) {
+            await finalize(key, msgId, content, opts.finish, model);
+            const m = get().threads[key]?.messages.find((x) => x.id === msgId);
+            if (m?.status === 'streaming') patchMsg(key, msgId, { status: 'done' });
+          }
           return content;
         } catch (e) {
           if (raf) cancelAnimationFrame(raf);
@@ -310,6 +370,161 @@ export const useAssistant = create<AssistantState>()(
         }
       };
 
+      /**
+       * The notes-only check on a finished reply: unsupported statements are
+       * boxed as the model's own knowledge, citations repaired, and whatever
+       * the notes don't contain is answered separately and labelled.
+       */
+      const finalize = async (key: string, msgId: string, raw: string, spec: FinishSpec, model: string) => {
+        const { idf, inVault } = vaultStats();
+        const vctx = { excerpts: new Map(spec.excerpts), context: spec.context, mode: spec.mode, idf, inVault };
+        let f = finishGrounded(raw, vctx, { question: spec.question });
+        const show = () => {
+          // The model refused although the check found the notes on topic: point at the passages themselves.
+          const mayCover = f.coverage === 'none' && spec.gate === 'full';
+          const sources = get().threads[key]?.messages.find((m) => m.id === msgId)?.sources ?? [];
+          patchMsg(key, msgId, {
+            shown: f.shown,
+            check: f.check,
+            gaps: f.gaps,
+            coverage: f.coverage,
+            banner: mayCover ? 'mayCover' : f.banner,
+            nearest: mayCover ? sources.filter((x) => !x.visual).slice(0, 2) : undefined,
+          });
+        };
+        show();
+        if (f.weak.length && useAI.getState().doubleCheck) {
+          const overrides = await doubleCheck(key, msgId, raw, f.weak.slice(0, 6), vctx, model);
+          if (overrides) {
+            f = finishGrounded(raw, { ...vctx, overrides }, { question: spec.question });
+            show();
+          }
+        }
+        if (f.gaps.length && !f.check.outside && useAI.getState().outsideKnowledge === 'auto')
+          await generalAnswer(key, msgId, { question: spec.question, gaps: f.gaps, className: spec.className, base: f.shown, model });
+      };
+
+      /**
+       * Loosely matched sentences: the model quotes the passage that says each
+       * one (as a follow-up turn, so the server reuses its cache); code checks
+       * the quote. Promoted only when the quote is really there; else boxed.
+       */
+      const doubleCheck = async (key: string, msgId: string, raw: string, weak: string[], vctx: VerifyCtx, model: string) => {
+        const req = lastRequests.get(msgId);
+        if (!req) return null;
+        controller?.abort();
+        const ctrl = new AbortController();
+        controller = ctrl;
+        set({ streaming: key });
+        patchMsg(key, msgId, { status: 'streaming', phase: 'checking' });
+        try {
+          const { value } = await chatJSON(
+            {
+              label: 'Double-check',
+              model,
+              temperature: 0,
+              maxTokens: 250,
+              priority: 'interactive',
+              signal: ctrl.signal,
+              messages: [...req.messages, { role: 'assistant', content: raw }, { role: 'user', content: VERIFY_PROMPT(weak) }],
+            },
+            (v) => {
+              const checks = (v as { checks?: unknown })?.checks;
+              return Array.isArray(checks)
+                ? checks.map((c: Record<string, unknown>) => ({ n: Number(c.n), excerpt: Number(c.excerpt), quote: String(c.quote ?? '') }))
+                : null;
+            },
+            parseJSONLoose,
+          );
+          return settleWeak(weak, value, vctx.excerpts, vctx.idf);
+        } catch {
+          // Stopped or unreachable: the sentences stay marked as loosely matched, never promoted.
+          return null;
+        } finally {
+          patchMsg(key, msgId, { phase: undefined });
+          if (controller === ctrl) {
+            controller = null;
+            if (get().streaming === key) set({ streaming: null });
+          }
+        }
+      };
+
+      /**
+       * The only call allowed to use the model's own knowledge. Its whole reply
+       * is put in a box labelled "Not from your notes — proceed with caution" by
+       * the app, never by the model.
+       */
+      const generalAnswer = async (
+        key: string,
+        msgId: string,
+        o: { question: string; gaps: string[]; className?: string; base?: string; model: string },
+      ) => {
+        controller?.abort();
+        const ctrl = new AbortController();
+        controller = ctrl;
+        set({ streaming: key });
+        const box = (t: string) => `${o.base ? `${o.base}\n\n` : ''}:::outside\n${t.trim()}\n:::`;
+        patchMsg(key, msgId, { status: 'streaming', phase: 'general' });
+        let buf = '';
+        let raf = 0;
+        try {
+          const res = await chatRobust({
+            label: o.base ? 'Ask · what your notes don’t cover' : 'Ask · general knowledge',
+            model: o.model,
+            temperature: Math.min(useAI.getState().temperature, 0.3),
+            maxTokens: 400,
+            priority: 'interactive',
+            signal: ctrl.signal,
+            messages: [
+              { role: 'system', content: gapFillSystem(o.gaps, o.className) },
+              { role: 'user', content: o.base ? `Question: ${o.question}\nMissing from the notes: ${o.gaps.join('; ')}` : o.question },
+            ],
+            onStatus: (st) => patchMsg(key, msgId, { phase: st ?? 'general' }),
+            onToken: (t) => {
+              buf += t;
+              if (!raf)
+                raf = requestAnimationFrame(() => {
+                  raf = 0;
+                  patchMsg(key, msgId, { shown: box(buf), phase: undefined });
+                });
+            },
+          });
+          if (raf) cancelAnimationFrame(raf);
+          if (ctrl.signal.aborted) throw new DOMException('stopped', 'AbortError');
+          const text = (buf || res.text).replace(/\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\()/g, '');
+          patchMsg(key, msgId, { shown: box(text), status: 'done', phase: undefined, truncated: o.base ? undefined : res.truncated });
+        } catch (e) {
+          if (raf) cancelAnimationFrame(raf);
+          const aborted = (e as Error).name === 'AbortError' || ctrl.signal.aborted;
+          // The notes part (if any) stays; the general-knowledge part is simply missing.
+          patchMsg(key, msgId, {
+            shown: buf ? box(buf) : o.base,
+            status: o.base ? 'done' : aborted ? 'stopped' : 'error',
+            phase: undefined,
+            error: o.base || aborted ? undefined : friendlyError(e),
+          });
+        } finally {
+          if (controller === ctrl) {
+            controller = null;
+            if (get().streaming === key) set({ streaming: null });
+          }
+        }
+      };
+
+      /**
+       * The notes don't cover the question (decided in code, before any notes
+       * prompt is sent): say so, then — unless the student turned it off — answer
+       * from general knowledge, clearly marked.
+       */
+      const notCovered = async (key: string, msgId: string, o: { question: string; className?: string; banner: Banner; nearest: SourceRef[]; model: string }) => {
+        if (useAI.getState().outsideKnowledge === 'never') {
+          patchMsg(key, msgId, { status: 'done', phase: undefined, ownOnly: true, coverage: 'none', banner: 'noneOff', nearest: o.nearest, content: '' });
+          return;
+        }
+        patchMsg(key, msgId, { ownOnly: true, coverage: 'none', banner: o.banner, nearest: o.nearest, phase: undefined });
+        await generalAnswer(key, msgId, { question: o.question, gaps: [o.question], className: o.className, model: o.model });
+      };
+
       return {
         threads: {},
         drafts: {},
@@ -365,8 +580,9 @@ export const useAssistant = create<AssistantState>()(
             content: '',
             status: 'streaming',
             mode,
-            grounding: homework ? 'homework' : undefined,
-            phase: homework ? 'reading' : undefined,
+            grounding: homework ? 'homework' : 'note',
+            phase: 'reading',
+            forced: opts.force,
             at: Date.now(),
           };
           push(key, userMsg, botMsg);
@@ -391,30 +607,13 @@ export const useAssistant = create<AssistantState>()(
           const classPath = classOfNote(note, folderMeta);
           const className = classPath ? classInfo(classPath, folderMeta[classPath]).name : undefined;
           const title = note?.meta.title || 'Untitled';
-
-          let system: string;
-          let instructions = MODE_INSTRUCTIONS[mode];
-          let temperature = ai.temperature;
-          if (homework && note) {
-            // Homework: the answer may only use the linked notes. Include every
-            // linked passage when it fits, otherwise the most relevant ones.
-            const linked = homeworkSources(note, notes);
-            // Answers pasted in earlier are not part of the assignment (and must not be graded as the student's work).
-            const ownContent = { ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) };
-            const hwText = fitToBudget(docToText(ownContent), Math.floor(ctx * 0.18), focus);
-            const hits = await homeworkExcerpts(linked, [question, focus ?? '', hwText.slice(0, 1600)].join('\n'), Math.floor(ctx * 0.42));
-            patchMsg(key, botMsg.id, { sources: toSources(hits), phase: undefined });
-            system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits), linked.length, className);
-            instructions = HOMEWORK_MODES[mode];
-            temperature = Math.min(temperature, 0.15);
-          } else {
-            const noteText = fitToBudget(docToText(content), Math.floor(ctx * 0.55), focus);
-            system = noteSystemPrompt(title, noteText, { hasImage: useImages, visionAvailable: !!vm, className });
-          }
+          const transform = !homework && isTransformPrompt(question);
+          // What the student wrote or pointed at: restating it needs no source, and its numbers may appear in answers.
+          const studentText = [question, ...attachments.map((a) => a.text ?? ''), caret ?? ''].filter(Boolean).join('\n');
 
           const prior = (get().threads[key]?.messages ?? []).filter((m) => m.id !== userMsg.id && m.id !== botMsg.id && m.status !== 'error');
           const history = trimHistory(
-            prior.slice(-8).map((m) => ({ role: m.role, content: m.role === 'user' ? withAttachmentText(m.content, m.attachments) : m.content })),
+            prior.slice(-8).map((m) => ({ role: m.role, content: m.role === 'user' ? withAttachmentText(m.content, m.attachments) : modelHistory(m) })),
             Math.floor(ctx * 0.15),
           );
           let userContent = withAttachmentText(question, attachments);
@@ -422,21 +621,113 @@ export const useAssistant = create<AssistantState>()(
           if (images.length && !useImages)
             userContent +=
               '\n\n(The student attached a picture of their handwriting, but no image-capable model is configured, so you only have the transcript above, if any.)';
+          const msgs = (system: string, user: string): ChatMessage[] => [
+            { role: 'system', content: system },
+            ...history,
+            { role: 'user', content: user, images: useImages ? images : undefined },
+          ];
+
+          // Rewrite / translate: reword the student's own passage, then check what it added.
+          if (transform) {
+            patchMsg(key, botMsg.id, { grounding: 'transform', phase: undefined, question });
+            const text = await stream(key, botMsg.id, msgs(transformSystemPrompt(), userContent), model, {
+              label: `Rewrite · ${title}`,
+              temperature: Math.min(ai.temperature, 0.2),
+            });
+            const passage = attachments.map((a) => a.text ?? '').join('\n');
+            if (text !== null) patchMsg(key, botMsg.id, { added: transformCheck(passage, text) });
+            return;
+          }
+
+          const stats = vaultStats().stats;
+          let hits: Hit[];
+          let system: string;
+          let instructions: string;
+          let gateHits: Hit[];
+          let noLinked = false;
+          let moreExcerpts = '';
+          if (homework && note) {
+            // Homework: the answer may only use the linked notes. Include every
+            // linked passage when it fits, otherwise the most relevant ones.
+            const linked = homeworkSources(note, notes);
+            noLinked = !linked.length;
+            // Answers pasted in earlier are not part of the assignment (and must not be graded as the student's work).
+            const ownContent = { ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) };
+            const hwText = fitToBudget(docToText(ownContent), Math.floor(ctx * 0.18), focus);
+            hits = await homeworkExcerpts(linked, [question, focus ?? '', hwText.slice(0, 1600)].join('\n'), Math.floor(ctx * 0.42));
+            system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits), className);
+            instructions = HOMEWORK_MODES[mode];
+            gateHits = hits.length ? rankChunks(hits.map((h) => h.chunk), [question, focus ?? ''].join(' '), { k: 5 }) : [];
+          } else {
+            const ex = await noteExcerpts(note, content, [question, focus ?? ''].join(' '), anchor, classPath, ctx);
+            hits = ex.hits;
+            const picture = useImages ? hits.length + 1 : undefined;
+            const pictureText = attachments
+              .filter((a) => a.kind === 'text')
+              .map((a) => a.text)
+              .join('\n');
+            if (picture) hits = [...hits, { chunk: pictureChunk(pictureText), score: 0, keyword: 0, semantic: null }];
+            system = noteSystemPrompt(title, formatExcerpts(hits.slice(0, ex.own)), { own: ex.own, hasImage: useImages, visionAvailable: !!vm, className });
+            // Everything that changes per question goes in the student's message, after the note.
+            if (hits.length > ex.own)
+              moreExcerpts = `MORE EXCERPTS (${className ? `other ${className} notes` : 'other notes'}${picture ? ', and the picture you attached' : ''}):\n${formatExcerpts(hits.slice(ex.own), ex.own + 1)}\n\nEND OF EXCERPTS`;
+            instructions = MODE_INSTRUCTIONS[mode];
+            gateHits = ex.gate;
+          }
+          const sources = toSources(hits, useImages);
+          patchMsg(key, botMsg.id, { sources, phase: undefined, grounding: homework ? 'homework' : 'note' });
+
+          // Coverage, decided in code before anything is generated. Questions about something the
+          // student pointed at (a selection, handwriting, a math block, a mode like Check) are on-topic by definition.
+          const pointed = attachments.length > 0 || mode !== 'custom' || Object.values(TEXT_ACTIONS).includes(question);
+          const prevQuestion = prevUser?.content ?? [...prior].reverse().find((m) => m.role === 'user')?.content;
+          const gate = opts.force || pointed ? null : assessCoverage(gateQuery([question, caret ?? ''].join(' '), prevQuestion), gateHits, stats, semanticCalib());
+          // "Give an example": if the notes have none, no notes prompt is sent at all.
+          const selection = attachments.map((a) => a.text ?? '').join('\n');
+          if (!opts.force && question === TEXT_ACTIONS.example && !findExamples(selection, hits).length) {
+            patchMsg(key, botMsg.id, { banner: 'noExample', coverage: 'none', ownOnly: true, phase: undefined });
+            if (ai.outsideKnowledge === 'never') {
+              patchMsg(key, botMsg.id, { status: 'done' });
+              return;
+            }
+            const topic = selection.split(/\s+/).slice(0, 10).join(' ');
+            await generalAnswer(key, botMsg.id, { question: `Give one short example of: ${topic}`, gaps: [`an example of: ${topic}`], className, model: ai.chatModel });
+            return;
+          }
+          const none = noLinked || (gate?.level === 'none' && (!homework || gate.termCov < 0.1));
+          if (none) {
+            await notCovered(key, botMsg.id, {
+              question,
+              className,
+              banner: noLinked ? 'noLinked' : 'none',
+              nearest: noLinked ? [] : toSources(gate?.nearest ?? []),
+              model: ai.chatModel,
+            });
+            return;
+          }
+          if (moreExcerpts) userContent = `${moreExcerpts}\n\n${userContent}`;
           if (instructions) userContent = `${instructions}\n\n${userContent}`;
-          await stream(
-            key,
-            botMsg.id,
-            [{ role: 'system', content: system }, ...history, { role: 'user', content: userContent, images: useImages ? images : undefined }],
-            model,
-            { label: homework ? `Homework · ${title}` : `Ask · ${title}`, temperature },
-          );
+          const missing = gate?.level === 'partial' && gate.missing.length ? `\n\nThese words from the question don't appear in the notes: ${gate.missing.join(', ')}.` : '';
+          const hwContext = homework ? docToText({ ...content, content: (content?.content ?? []).filter((b) => !isAssistantBlock(b)) }) : '';
+          await stream(key, botMsg.id, msgs(system, `${userContent}${missing}\n\n${RULE_REMINDER}`), model, {
+            label: homework ? `Homework · ${title}` : `Ask · ${title}`,
+            temperature: groundedTemp(ai.temperature),
+            finish: {
+              excerpts: hits.map((h, i) => [i + 1, { n: i + 1, text: h.chunk.text, title: h.chunk.title, section: h.chunk.section, visual: h.chunk.id === PICTURE_ID }]),
+              context: [studentText, hwContext.slice(0, 4000)].filter(Boolean).join('\n'),
+              mode: homework || mode === 'tutor' || mode === 'check' || mode === 'solve' ? 'compute' : 'explain',
+              question,
+              className,
+              gate: gate?.level,
+            },
+          });
         },
 
-        async askLibrary({ prompt, scope, scopeLabel, tool }) {
+        async askLibrary({ prompt, scope, scopeLabel, tool, force }) {
           const ai = useAI.getState();
           const key = LIBRARY_KEY;
           const question = tool ? STUDY_TOOLS[tool].label : prompt.trim();
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, scope, scopeLabel, at: Date.now() };
+          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, scope, scopeLabel, forced: force, at: Date.now() };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -444,7 +735,7 @@ export const useAssistant = create<AssistantState>()(
             status: 'streaming',
             tool,
             phase: 'reading',
-            grounding: tool ? undefined : 'library',
+            grounding: 'library',
             scopeLabel,
             at: Date.now(),
           };
@@ -460,24 +751,80 @@ export const useAssistant = create<AssistantState>()(
           } catch (e) {
             console.warn('retrieval failed', e);
           }
-          patchMsg(key, botMsg.id, { sources: toSources(hits), phase: undefined });
           const model = ai.chatModel;
           const ctx = effectiveCtx(model);
-          const system = librarySystemPrompt(formatExcerpts(fitHits(hits, Math.floor(ctx * 0.6))), ai.strictLibrary || !!tool, scopeLabel);
+          hits = fitHits(hits, Math.floor(ctx * 0.6));
+          patchMsg(key, botMsg.id, { sources: toSources(hits), phase: undefined });
+
+          // Does anything in the notes answer this? Decided before the model is asked.
+          let gateLevel: CoverageLevel | undefined;
+          if (!tool && !force) {
+            const prevQ = [...(get().threads[key]?.messages ?? [])].reverse().find((m) => m.role === 'user' && m.id !== userMsg.id && !m.tool)?.content;
+            const gate = assessCoverage(gateQuery(prompt, prevQ), hits, vaultStats().stats, semanticCalib());
+            gateLevel = gate.level;
+            if (gate.level === 'none' || !hits.length) {
+              await notCovered(key, botMsg.id, { question: prompt, banner: 'none', nearest: toSources(gate.nearest), model });
+              return;
+            }
+          }
+          if (tool && !hits.some((h) => h.chunk.text.length > 60)) {
+            patchMsg(key, botMsg.id, {
+              status: 'done',
+              content: 'There isn’t enough in these notes to make this yet — write a little more, then try again.',
+            });
+            return;
+          }
+
+          const system = librarySystemPrompt(formatExcerpts(hits), scopeLabel);
           const prior = (get().threads[key]?.messages ?? []).filter((m) => m.id !== userMsg.id && m.id !== botMsg.id && m.status === 'done' && !m.tool);
           const history = trimHistory(
-            prior.slice(-6).map((m) => ({ role: m.role, content: m.content })),
+            prior.slice(-6).map((m) => ({ role: m.role, content: m.role === 'user' ? m.content : modelHistory(m) })),
             Math.floor(ctx * 0.12),
           );
-          const userContent = tool ? `${STUDY_TOOLS[tool].prompt}${prompt ? `\nFocus: ${prompt}` : ''}` : prompt;
+          const userContent = tool ? `${STUDY_TOOLS[tool].prompt}${prompt ? `\nFocus: ${prompt}` : ''}` : `${prompt}\n\n${RULE_REMINDER}`;
           const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: userContent }];
           const json = tool === 'flashcards' || tool === 'quiz';
+          const excerpts: [number, ExcerptRef][] = hits.map((h, i) => [i + 1, { n: i + 1, text: h.chunk.text, title: h.chunk.title, section: h.chunk.section }]);
           const text = await stream(key, botMsg.id, messages, model, {
             label: tool ? `${STUDY_TOOLS[tool].label}${scopeLabel ? ` · ${scopeLabel}` : ''}` : `Ask your notes${scopeLabel ? ` · ${scopeLabel}` : ''}`,
             json,
-            temperature: json ? 0.2 : undefined,
+            temperature: json ? 0.2 : groundedTemp(ai.temperature),
+            // Prose study tools are checked like answers; cards and quizzes item by item below.
+            finish: json ? undefined : { excerpts, context: prompt, mode: 'explain', question: prompt || question, gate: gateLevel },
+            // Cards and questions are shown only once each has been checked against the notes.
+            holdDone: json,
           });
-          if (text !== null && tool) await repairStudyJSON(key, botMsg.id, tool, text, messages, model);
+          if (text !== null && tool && json) {
+            await repairStudyJSON(key, botMsg.id, tool, text, messages, model);
+            const m = get().threads[key]?.messages.find((x) => x.id === botMsg.id);
+            const parsed = m && parseStudyJSON(tool, m.content);
+            if (parsed) {
+              const { idf, inVault } = vaultStats();
+              const v = verifyStudy(parsed, { excerpts: new Map(excerpts), context: '', mode: 'explain', idf, inVault });
+              patchMsg(key, botMsg.id, { content: v.json, dropped: v.dropped || undefined });
+            }
+            const now = get().threads[key]?.messages.find((x) => x.id === botMsg.id);
+            if (now?.status === 'streaming') patchMsg(key, botMsg.id, { status: 'done', phase: undefined });
+          }
+        },
+
+        forceNotes(key) {
+          const t = get().threads[key];
+          const lastUser = t && [...t.messages].reverse().find((m) => m.role === 'user');
+          if (!t || !lastUser) return;
+          set({ threads: { ...get().threads, [key]: { ...t, messages: t.messages.slice(0, t.messages.indexOf(lastUser)) } } });
+          if (key === LIBRARY_KEY)
+            void get().askLibrary({ prompt: lastUser.content, scope: lastUser.scope ?? { kind: 'all' }, scopeLabel: lastUser.scopeLabel, force: true });
+          else
+            void get().ask(key, {
+              prompt: lastUser.content,
+              mode: lastUser.mode,
+              attachments: lastUser.attachments,
+              anchor: lastUser.anchor,
+              focus: lastUser.focus ?? '',
+              inherit: true,
+              force: true,
+            });
         },
 
         async continueReply(key, msgId) {
@@ -488,6 +835,8 @@ export const useAssistant = create<AssistantState>()(
           // Join on the exact text the model produced (untrimmed), so a cut mid-word or after a newline
           // continues seamlessly; the model sees the same text as its own previous turn.
           const base = req.raw || msg.content;
+          // The check runs again on the whole joined reply (the general-knowledge part is re-asked if still needed).
+          patchMsg(key, msgId, { shown: undefined, check: undefined, gaps: undefined });
           await stream(key, msgId, [...req.messages, { role: 'assistant', content: base }, { role: 'user', content: CONTINUE_PROMPT }], req.model, {
             ...req.opts,
             label: `${req.opts.label} (continued)`,
@@ -511,6 +860,7 @@ export const useAssistant = create<AssistantState>()(
               scope: lastUser.scope ?? { kind: 'all' },
               scopeLabel: lastUser.scopeLabel,
               tool: lastUser.tool,
+              force: lastUser.forced,
             });
           else
             void get().ask(key, {
@@ -521,6 +871,7 @@ export const useAssistant = create<AssistantState>()(
               // '' (not undefined) when the turn had no focus: Retry must not pick up wherever the caret is now.
               focus: lastUser.focus ?? '',
               inherit: true,
+              force: lastUser.forced,
             });
         },
 
@@ -564,7 +915,7 @@ export const useAssistant = create<AssistantState>()(
   ),
 );
 
-function toSources(hits: Hit[]): SourceRef[] {
+function toSources(hits: Hit[], _withPicture = false): SourceRef[] {
   return hits.map((h, i) => ({
     n: i + 1,
     noteId: h.chunk.noteId,
@@ -573,7 +924,85 @@ function toSources(hits: Hit[]): SourceRef[] {
     folder: h.chunk.folder,
     blockId: h.chunk.blockIds[0] ?? null,
     text: h.chunk.text,
+    ...(h.chunk.id === PICTURE_ID ? { visual: true } : {}),
   }));
+}
+
+/** What the model sees of its earlier replies: checked text only, no boxes, no old [n]. */
+function modelHistory(m: ChatMsg): string {
+  if (m.role !== 'assistant') return m.content;
+  if (m.ownOnly) return '(That answer was general knowledge, not from the notes.)';
+  return historyForModel(m.shown ?? m.content) || '(no answer)';
+}
+
+const PICTURE_ID = '__picture';
+
+/** The attached picture of the student's work, as an excerpt (what Nib read of it, if anything). */
+function pictureChunk(transcript: string): Chunk {
+  return {
+    id: PICTURE_ID,
+    noteId: '',
+    title: 'The picture of your work you attached',
+    folder: '',
+    section: '',
+    text: transcript.trim() || '(see the attached picture)',
+    blockIds: [],
+    hash: PICTURE_ID,
+  };
+}
+
+/**
+ * Excerpts for a question about the open note: the whole note in order when
+ * it fits, otherwise the passage being asked about plus the best matches;
+ * then up to three related passages from the same class. Also returns the
+ * passages ranked for the coverage check.
+ */
+async function noteExcerpts(
+  note: NoteDoc | undefined,
+  content: NoteDoc['content'] | undefined,
+  query: string,
+  anchor: string | undefined,
+  classPath: string | null,
+  ctx: number,
+): Promise<{ hits: Hit[]; own: number; gate: Hit[] }> {
+  if (!note) return { hits: [], own: 0, gate: [] };
+  const chunks = chunkNote({ ...note, content: content ?? note.content }).filter((c) => c.text.trim() && !/^\[[^\]]*\]$/.test(c.text.trim()));
+  const budget = Math.floor(ctx * 0.45);
+  const cost = (c: Chunk) => estimateTokens(c.text) + 24;
+  let own = chunks;
+  if (chunks.reduce((a, c) => a + cost(c), 0) > budget || chunks.length > 30) {
+    const pick = new Set<Chunk>();
+    let used = 0;
+    const at = anchor ? chunks.find((c) => c.blockIds.includes(anchor)) : undefined;
+    if (at) {
+      pick.add(at);
+      used += cost(at);
+    }
+    for (const h of rankChunks(chunks, query, { k: chunks.length })) {
+      if (pick.has(h.chunk) || used + cost(h.chunk) > budget) continue;
+      pick.add(h.chunk);
+      used += cost(h.chunk);
+    }
+    own = chunks.filter((c) => pick.has(c));
+  }
+  let related: Chunk[] = [];
+  if (classPath) {
+    try {
+      const found = await searchLibrary(query, { kind: 'folder', path: classPath }, 6);
+      let used = 0;
+      for (const h of found) {
+        if (h.chunk.noteId === note.meta.id || h.keyword <= 0 || related.length >= 3) continue;
+        if (used + cost(h.chunk) > ctx * 0.15) break;
+        related.push(h.chunk);
+        used += cost(h.chunk);
+      }
+    } catch {
+      related = [];
+    }
+  }
+  const all = [...own, ...related];
+  const toHit = (chunk: Chunk): Hit => ({ chunk, score: 0, keyword: 0, semantic: null });
+  return { hits: all.map(toHit), own: own.length, gate: all.length ? rankChunks(all, query, { k: 5 }) : [] };
 }
 
 /** Keeps the best hits that fit in a token budget. */
@@ -662,7 +1091,7 @@ function withAttachmentText(question: string, attachments?: Attachment[]): strin
   for (const a of attachments ?? []) {
     if (a.text) parts.push(`${a.label}:\n"""\n${a.text.trim()}\n"""`);
   }
-  return parts.length ? `${parts.join('\n\n')}\n\n${question}` : question;
+  return parts.length ? `THE STUDENT'S WORK (you may refer to it; it is not a source of facts):\n${parts.join('\n\n')}\n\n${question}` : question;
 }
 
 export function friendlyError(e: unknown): string {

@@ -1,4 +1,5 @@
 import { parseJSONLoose } from './json';
+import { checkStatement, novelTokens, type VerifyCtx } from './verify';
 
 /** Parsing for the JSON study tools (flashcards, quiz) — tolerant of the shapes small models produce. */
 
@@ -47,4 +48,41 @@ export function parseStudyJSON(tool: string, text: string): { kind: 'flashcards'
     }))
     .filter((q) => q.q && q.choices.length >= 2 && q.answer >= 0 && q.answer < q.choices.length);
   return questions.length ? { kind: 'quiz', questions } : null;
+}
+
+/**
+ * Keeps only the cards and questions an excerpt backs. The answer — a card's
+ * back, a question's correct choice — must be supported by its source excerpt
+ * (re-sourced when the model named the wrong one); the question side may not
+ * invent names or numbers. A wrong choice identical to the key makes a
+ * question unfair, so it is dropped.
+ */
+export function verifyStudy(
+  parsed: { kind: 'flashcards'; cards: Card[] } | { kind: 'quiz'; questions: QuizQ[] },
+  ctx: VerifyCtx,
+): { json: string; dropped: number } {
+  const allNotes = [...ctx.excerpts.values()].map((e) => `${e.title ?? ''} ${e.section ?? ''}\n${e.text}`).join('\n');
+  const backed = (answer: string, ask: string, source?: number) => {
+    if (novelTokens(ask, allNotes).length) return null;
+    const c = checkStatement(answer, source ? [source] : [], { ...ctx, context: '' });
+    // Shown without a caution label, so it must be fully backed (loosely matched isn't enough).
+    return c.verdict === 'supported' ? (c.repaired ?? source ?? c.cites[0]) : null;
+  };
+  if (parsed.kind === 'flashcards') {
+    const cards = parsed.cards.flatMap((c) => {
+      const src = backed(c.back, c.front, c.source);
+      return src ? [{ ...c, source: src }] : [];
+    });
+    return { json: JSON.stringify({ cards }), dropped: parsed.cards.length - cards.length };
+  }
+  const questions = parsed.questions.flatMap((q) => {
+    const src = backed(q.choices[q.answer], q.q, q.source);
+    if (!src) return [];
+    const key = q.choices[q.answer].trim().toLowerCase();
+    if (q.choices.some((ch, i) => i !== q.answer && ch.trim().toLowerCase() === key)) return [];
+    // The explanation is shown as from the notes too: keep it only if it is.
+    const explain = q.explain && checkStatement(q.explain, [src], { ...ctx, context: '' }).verdict === 'supported' ? q.explain : undefined;
+    return [{ ...q, source: src, explain }];
+  });
+  return { json: JSON.stringify({ questions }), dropped: parsed.questions.length - questions.length };
 }

@@ -64,7 +64,7 @@ export function suggestSources(hw: NoteDoc, notes: Record<string, NoteDoc>, k = 
   if (!qTokens.size) return [];
   const query = [...qTokens].join(' ');
   const candidates = Object.values(notes).filter(
-    (n) => !n.meta.trashed && !n.meta.homework && n.meta.id !== hw.meta.id && !n.meta.tags.includes('guide') && !inHomeworkFolder(n),
+    (n) => !n.meta.trashed && !n.meta.homework && !n.meta.generated && n.meta.id !== hw.meta.id && !n.meta.tags.includes('guide') && !inHomeworkFolder(n),
   );
   const chunks = candidates.flatMap(chunkNote);
   if (!chunks.length) return [];

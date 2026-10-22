@@ -69,6 +69,7 @@ export const SEED_CLASSES: Record<string, FolderMeta> = {
   Biology: { kind: 'class', code: 'BIO 110', instructor: 'Dr. Chen', term: 'Fall 2026', color: '#1f9d4c', icon: 'dna' },
   Physics: { kind: 'class', code: 'PHYS 7A', instructor: 'Dr. Okafor', term: 'Fall 2026', color: '#7346e6', icon: 'atom' },
   History: { kind: 'class', code: 'HIST 12', instructor: 'Ms. Patel', term: 'Fall 2026', color: '#e35d14', icon: 'landmark' },
+  'Spanish II': { kind: 'class', code: 'SPAN 2', instructor: 'Sra. Morales', term: 'Fall 2026', color: '#d6336c', icon: 'languages' },
 };
 
 export function buildSeedNotes(): NoteDoc[] {
@@ -341,7 +342,54 @@ export function buildSeedNotes(): NoteDoc[] {
     { homework: { sources: [calc.meta.id], folders: [], due: startOfDay(now) + 2 * day + 23 * 3_600_000 + 59 * 60_000 } },
   );
 
-  return [welcome, calc, bio, phys, hist, hw];
+  // A class organised by chapter (a subfolder per unit), for Review.
+  const unit = 'Spanish II/Unidad 3 — El pasado';
+  const pretImp = note(
+    'Pretérito vs. imperfecto',
+    unit,
+    ['spanish', 'grammar'],
+    doc(
+      p(i('Unidad 3 · clase del martes')),
+      h(2, 'El pretérito'),
+      p('Use the ', b('preterite'), ' for completed actions with a clear beginning or end: ', i('Ayer comí paella.'), ' (Yesterday I ate paella.)'),
+      ul(
+        ['Regular ', b('-ar'), ' endings: ', b('-é, -aste, -ó, -amos, -aron'), ' — ', i('hablé, hablaste, habló')],
+        ['Regular ', b('-er/-ir'), ' endings: ', b('-í, -iste, -ió, -imos, -ieron'), ' — ', i('comí, viviste, salió')],
+        ['Trigger words: ', i('ayer, anoche, el año pasado, de repente, una vez')],
+      ),
+      h(2, 'El imperfecto'),
+      p('Use the ', b('imperfect'), ' for habits, ongoing background and descriptions in the past: ', i('De niño, jugaba al fútbol.'), ' (As a child, I used to play soccer.)'),
+      ul(
+        [b('-ar'), ' endings: ', b('-aba, -abas, -aba, -ábamos, -aban'), ' — ', i('hablaba')],
+        [b('-er/-ir'), ' endings: ', b('-ía, -ías, -ía, -íamos, -ían'), ' — ', i('comía, vivía')],
+        ['Only three irregular verbs: ', b('ser'), ' (era), ', b('ir'), ' (iba), ', b('ver'), ' (veía).'],
+        ['Trigger words: ', i('siempre, todos los días, mientras, de niño, a menudo')],
+      ),
+      callout('tip', p(b('Interrupted action:'), ' the imperfect sets the scene and the preterite interrupts it — ', i('Leía cuando sonó el teléfono.'))),
+    ),
+    4 * 3_600_000,
+    { color: '#d6336c' },
+  );
+  const vocab = note(
+    'Vocabulario — la niñez',
+    unit,
+    ['spanish', 'vocab'],
+    doc(
+      p('Words for talking about childhood (use them with the imperfect).'),
+      ul(
+        [b('la niñez'), ' — childhood'],
+        [b('el juguete'), ' — toy'],
+        [b('portarse bien / mal'), ' — to behave well / badly'],
+        [b('pelearse'), ' — to fight'],
+        [b('el vecindario'), ' — neighbourhood'],
+        [b('la guardería'), ' — daycare / nursery school'],
+      ),
+    ),
+    6 * 3_600_000,
+    { color: '#d6336c' },
+  );
+
+  return [welcome, calc, bio, phys, hist, hw, pretImp, vocab];
 }
 
 function startOfDay(t: number) {

@@ -264,6 +264,8 @@ export async function chatJSON<T>(
   validate: (raw: unknown) => T | null,
   parse: (text: string) => unknown,
 ): Promise<{ value: T; result: RobustResult }> {
+  // A thinking model spends its token budget reasoning; JSON tasks need only the answer.
+  if (req.think === undefined && useAI.getState().models.find((m) => m.name === req.model)?.thinking) req = { ...req, think: false };
   const first = await chatRobust({ ...req, json: true });
   const v1 = validate(parse(first.text));
   if (v1 !== null) return { value: v1, result: first };

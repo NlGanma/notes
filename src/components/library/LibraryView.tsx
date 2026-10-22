@@ -23,7 +23,7 @@ import { LIBRARY_KEY, useAssistant, type ChatMsg, type SourceRef } from '../../s
 import { useLibrary } from '../../state/library';
 import { chunkVault, type Scope } from '../../lib/ai/rag';
 import { STUDY_TOOLS, type StudyTool } from '../../lib/ai/prompts';
-import { MessageView } from '../ai/Message';
+import { MessageView, shownMarkdown } from '../ai/Message';
 import { Popover } from '../common/Popover';
 import { Flashcards, Quiz, parseStudyJSON } from './StudyTools';
 import { cx, plural } from '../../lib/util';
@@ -255,12 +255,16 @@ export function LibraryView() {
           />
           <div className="library-composer-row">
             <label
-              className={cx('strict-toggle', ai.strictLibrary && 'is-on')}
-              title="When on, answers use only your notes — nothing from the model’s general knowledge"
+              className={cx('strict-toggle', ai.outsideKnowledge === 'never' && 'is-on')}
+              title="Answers always come from your notes. When they don’t cover a question, Nib says so — and, unless this is on, adds the AI’s own answer in a box marked “proceed with caution”."
             >
               <ShieldCheck size={14} />
-              Only from my notes
-              <input type="checkbox" checked={ai.strictLibrary} onChange={(e) => useAI.getState().set({ strictLibrary: e.target.checked })} />
+              Never use the AI’s own knowledge
+              <input
+                type="checkbox"
+                checked={ai.outsideKnowledge === 'never'}
+                onChange={(e) => useAI.getState().set({ outsideKnowledge: e.target.checked ? 'never' : 'auto' })}
+              />
             </label>
             <span className="grow" />
             {streaming ? (
@@ -375,15 +379,29 @@ function LibraryMessage({
         )}
         {msg.status === 'done' && parsed?.kind === 'flashcards' && <Flashcards cards={parsed.cards} sources={msg.sources ?? []} onOpen={onOpen} />}
         {msg.status === 'done' && parsed?.kind === 'quiz' && <Quiz questions={parsed.questions} sources={msg.sources ?? []} onOpen={onOpen} />}
-        {msg.status === 'done' && !parsed && <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry} />}
+        {msg.status === 'done' && !!msg.dropped && (
+          <div className="msg-added">
+            {parsed
+              ? `Left out ${msg.dropped} ${msg.dropped === 1 ? 'item' : 'items'} that no passage of your notes backed.`
+              : 'None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.'}
+          </div>
+        )}
+        {msg.status === 'done' && !parsed && !msg.dropped && <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry} />}
         {msg.status === 'stopped' && <MessageView msg={{ ...msg, content: '' }} onRegenerate={onRetry} />}
       </div>
     );
   }
 
   return (
-    <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry} onContinue={() => useAssistant.getState().continueReply(LIBRARY_KEY, msg.id)}>
-      {msg.status !== 'streaming' && msg.sources && msg.sources.length > 0 && <SourcesList content={msg.content} sources={msg.sources} />}
+    <MessageView
+      msg={msg}
+      citations
+      onCite={onCite}
+      onRegenerate={onRetry}
+      onContinue={() => useAssistant.getState().continueReply(LIBRARY_KEY, msg.id)}
+      onForce={() => useAssistant.getState().forceNotes(LIBRARY_KEY)}
+    >
+      {msg.status !== 'streaming' && !msg.ownOnly && msg.sources && msg.sources.length > 0 && <SourcesList content={shownMarkdown(msg)} sources={msg.sources} />}
     </MessageView>
   );
 }

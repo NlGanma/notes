@@ -22,7 +22,7 @@ export interface VaultState {
   /** Bumped whenever note content changes (for search / index invalidation). */
   revision: number;
   init(root?: string): Promise<void>;
-  createNote(opts?: { folder?: string; title?: string; content?: JSONContent; tags?: string[] }): NoteDoc;
+  createNote(opts?: { folder?: string; title?: string; content?: JSONContent; tags?: string[]; generated?: boolean }): NoteDoc;
   updateContent(id: string, content: JSONContent): void;
   updateMeta(id: string, patch: Partial<NoteMeta>): void;
   duplicateNote(id: string): NoteDoc | null;
@@ -127,6 +127,7 @@ export const useVault = create<VaultState>((set, get) => {
           created: now,
           updated: now,
           paper: useSettings.getState().paper,
+          ...(opts.generated ? { generated: true } : {}),
         },
         content: normalizeDocJSON(structuredClone(opts.content ?? EMPTY_DOC) as never),
       };
@@ -152,6 +153,7 @@ export const useVault = create<VaultState>((set, get) => {
         title: `${src.meta.title || 'Untitled'} copy`,
         content: structuredClone(src.content),
         tags: [...src.meta.tags],
+        generated: src.meta.generated,
       });
       // A copy of homework is homework too — otherwise it would count as class notes and be cited as a source.
       if (src.meta.homework) get().updateMeta(copy.meta.id, { homework: structuredClone(src.meta.homework) });

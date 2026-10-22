@@ -301,7 +301,7 @@
   cursor: default;
 }
 .callout[data-variant='outside'] .callout-body::before {
-  content: 'Not from your notes — general knowledge';
+  content: 'Not from your notes · the AI’s own knowledge — proceed with caution';
   display: block;
   font: 600 11px/1.6 var(--font-ui);
   letter-spacing: 0.04em;

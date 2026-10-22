@@ -22,7 +22,7 @@ import { useVault } from '../../state/vault';
 import { useAI, visionModel } from '../../state/ai';
 import { useAssistant, type ChatMsg } from '../../state/assistant';
 import { useTools } from '../../state/tools';
-import { MessageView } from './Message';
+import { MessageView, shownMarkdown } from './Message';
 import { SourcesList, useCitePreview } from './Citations';
 import { homeworkSources } from '../../lib/homework';
 import { linkNotes } from '../../lib/commands';
@@ -284,14 +284,15 @@ export function AssistantPanel() {
           <MessageView
             key={m.id}
             msg={m}
-            citations={m.grounding === 'homework'}
+            citations={!!m.grounding && m.grounding !== 'transform'}
             onCite={(n, el) => cite.show(n, el, m.sources)}
-            onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, m.content, anchorFor(messages, m), m.sources?.length) : undefined}
+            onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, shownMarkdown(m), anchorFor(messages, m), m.sources?.length) : undefined}
             onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
             onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
+            onForce={m === lastBot && noteId ? () => useAssistant.getState().forceNotes(noteId) : undefined}
           >
-            {m.grounding === 'homework' && m.status !== 'streaming' && m.sources && m.sources.length > 0 && (
-              <SourcesList content={m.content} sources={m.sources} label="From your notes" />
+            {(m.grounding === 'homework' || m.grounding === 'note') && m.status !== 'streaming' && !m.ownOnly && m.sources && m.sources.length > 0 && (
+              <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />
             )}
           </MessageView>
         ))}

@@ -20,7 +20,28 @@ const MODELS = [
 // Fault injection for the test harness: POST /__mock {fail, status, truncate, firstTokenMs}
 // makes the next chat requests fail, stop early (done_reason "length") or start slowly.
 const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0 };
-const stats = { chat: 0, failed: 0 };
+const stats = { chat: 0, failed: 0, kinds: [], last: [] };
+
+/** Which feature a request came from (for tests: e.g. "no notes prompt was sent"). */
+function kindOf(messages) {
+  const system = messages.find((m) => m.role === 'system')?.content ?? '';
+  const last = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  if (/so you are answering that part from general knowledge/i.test(system)) return 'general';
+  if (/Check your answer against the excerpts/.test(last)) return 'verify';
+  const task = /^Nib task: ([\w-]+)/m.exec(system + '\n' + last)?.[1];
+  if (task) return task;
+  if (/Mastery Engine/i.test(system)) return 'mastery';
+  if (/come from the note the student has open|The student has their note/i.test(system)) return 'note';
+  if (/homework helper/i.test(system)) return 'homework';
+  if (/library assistant/i.test(system)) return 'library';
+  if (/careful editor/i.test(system)) return 'transform';
+  return 'other';
+}
+function record(messages) {
+  stats.kinds.push(kindOf(messages));
+  if (stats.kinds.length > 200) stats.kinds.shift();
+  stats.last = messages.map((m) => ({ role: m.role, content: String(m.content ?? '').slice(0, 4000) }));
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -52,7 +73,7 @@ function pngSize(b64) {
 
 function parseExcerpts(system) {
   const out = [];
-  const re = /\[(\d+)\] \(([^)]*)\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|$)/g;
+  const re = /\[(\d+)\] \(([^)]*)\)\n([\s\S]*?)(?=\n\n\[\d+\] \(|\n\nEND OF EXCERPTS|$)/g;
   let m;
   while ((m = re.exec(system))) out.push({ n: Number(m[1]), where: m[2], text: m[3].trim() });
   return out;
@@ -68,6 +89,53 @@ function firstSentences(text, n = 2) {
     .trim();
   const parts = clean.match(/[^.!?]+[.!?]+/g) ?? [clean];
   return parts.slice(0, n).join(' ').trim();
+}
+
+/** Content words (4+ letters) a sentence shares with an excerpt. */
+const content = (t) => new Set(words(t).filter((w) => w.length > 3));
+function overlap(a, b) {
+  const B = content(b);
+  return [...content(a)].filter((w) => B.has(w)).length;
+}
+function bestExcerpt(ex, text) {
+  let best = null;
+  for (const e of ex) {
+    const s = overlap(text, `${e.where} ${e.text}`);
+    if (s > (best?.s ?? 0)) best = { e, s };
+  }
+  return best;
+}
+
+/**
+ * What a well-behaved small model does: cite each sentence with the excerpt
+ * it comes from (when one shares at least two words with it).
+ */
+function citeEach(text, ex) {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!line.trim() || /^\s*(#|\$\$|```|:::)/.test(line)) return line;
+      return line
+        .split(/(?<=[.!?])\s+(?=[A-Z$*✓✗])/)
+        .map((sent) => {
+          if (/\[\d+\]/.test(sent) || /\?\s*$/.test(sent)) return sent;
+          const b = bestExcerpt(ex, sent);
+          if (!b || b.s < 2) return sent;
+          return /[.!?]$/.test(sent) ? `${sent.slice(0, -1)} [${b.e.n}]${sent.slice(-1)}` : `${sent} [${b.e.n}]`;
+        })
+        .join(' ');
+    })
+    .join('\n');
+}
+
+/** The first line of an excerpt that states something (not its heading). */
+function firstFact(e) {
+  return (
+    e.text
+      .split('\n')
+      .map((l) => l.replace(/^[-*>\d.\s]+/, '').trim())
+      .find((l) => l && !l.startsWith('#') && !/^\[Handwritten/.test(l) && l.length > 20) ?? ''
+  );
 }
 
 // ------------------------------------------------------------------ replies
@@ -89,6 +157,23 @@ function reply(messages) {
   }
   const q = last.content;
   const images = last.images ?? [];
+
+  // Double-check: quote the excerpt line behind each statement (the app verifies the quote).
+  if (/Check your answer against the excerpts/.test(q)) {
+    const all = messages.map((m) => m.content).join('\n\n');
+    const ex = parseExcerpts((all.split('EXCERPTS:')[1] ?? all).replace(/\n\nEND OF EXCERPTS[\s\S]*?(?=\n\n\[\d+\] \(|$)/g, ''));
+    const statements = [...q.matchAll(/^(\d+)\. (.*)$/gm)].map((m) => ({ n: Number(m[1]), text: m[2] }));
+    const checks = statements.map(({ n, text }) => {
+      let best = null;
+      for (const e of ex)
+        for (const line of e.text.split('\n')) {
+          const s = overlap(text, line);
+          if (s >= 3 && s > (best?.s ?? 0)) best = { e, line, s };
+        }
+      return best ? { n, excerpt: best.e.n, quote: best.line.replace(/^[-*>\d.\s]+/, '').replace(/\*\*/g, '').trim() } : { n, excerpt: 0, quote: 'none' };
+    });
+    return JSON.stringify({ checks });
+  }
 
   if (/Transcribe the handwriting/i.test(q)) {
     const { w, h } = images[0] ? pngSize(images[0]) : { w: 0, h: 0 };
@@ -113,6 +198,77 @@ function reply(messages) {
     return '**Problem Set 5**\n1. Use the squeeze theorem to find $\\lim_{x \\to 0} x^2 \\cos(1/x)$.\n2. Is $f(x) = \\frac{x^2-4}{x-2}$ continuous at $x = 2$? Explain.';
   }
 
+  // The one call allowed to use general knowledge (the app boxes and labels all of it).
+  if (/so you are answering that part from general knowledge/i.test(system)) {
+    const what = /Answer only this: (.*)/.exec(system)?.[1] ?? q;
+    if (/h[oô]pital/i.test(what + q))
+      return "L'Hôpital's rule: if $\\lim f = \\lim g = 0$, then $\\lim \\frac{f}{g} = \\lim \\frac{f'}{g'}$. Here $\\lim_{x \\to 0} \\frac{1-\\cos x}{x^2} = \\lim_{x \\to 0} \\frac{\\sin x}{2x} = \\frac{1}{2}$. Check with your teacher whether you're expected to use it yet.";
+    if (/photosynth/i.test(what + q)) return 'In general, photosynthesis is how plants turn light, water and carbon dioxide into sugar and oxygen.';
+    if (/peru/i.test(what + q)) return 'The capital of Peru is Lima.';
+    return `In general, ${what.replace(/[?.]+$/, '')} is usually covered in textbooks; I'm not sure how your class treats it, so check with your teacher.`;
+  }
+
+  // Per-note assistant: the open note as numbered excerpts; replies cite them.
+  if (/come from the note the student has open|The student has their note/i.test(system)) {
+    const more = /MORE EXCERPTS[^\n]*\n([\s\S]*?\n\nEND OF EXCERPTS)/.exec(q)?.[1] ?? '';
+    const ex = [...parseExcerpts(system.split('EXCERPTS:')[1] ?? ''), ...parseExcerpts(more)];
+    // The question itself, without the app's instructions and reminder.
+    const asked = q.replace(/\n*\(Only the excerpts[\s\S]*$/, '').replace(/\n*These words from the question[^\n]*/, '').split('\n\n').pop() ?? q;
+    const title = /note the student has open, "([^"]*)"|has their note "([^"]*)"/.exec(system)?.slice(1).find(Boolean) ?? 'this note';
+    const find = (re) => ex.find((e) => re.test(e.text) || re.test(e.where));
+    const c = (e) => (e ? ` [${e.n}]` : '');
+    const cont = find(/Removable discontinuity|continuous at/i);
+    const sq = find(/squeeze/i);
+    if (/Act as a tutor/i.test(q)) {
+      return `You're finding $\\lim_{x \\to 3} \\frac{x^2-9}{x-3}$, the example your notes call a removable discontinuity at $x=3$${c(cont)}.\n\n✓ Cancelling $(x-3)$ is how that hole gets filled${c(cont)}.\n\n**Hint:** your notes say $f$ is continuous at $a$ when $\\lim_{x\\to a} f(x) = f(a)$${c(cont)}. After cancelling, what do you get when you substitute $x = 3$?\n\nTry it and tell me what you get.`;
+    }
+    if (/Check the student's work step by step/i.test(q)) {
+      return `1. $\\frac{x^2-9}{x-3}$ is the removable discontinuity at $x=3$ from your notes ✓${c(cont)}\n2. Cancelling $(x-3)$ fills the hole your notes describe ✓${c(cont)}\n3. $\\lim_{x\\to3}(x+3)$ — not finished yet: your notes say the limit has to equal $f(a)$ ✓${c(cont)}\n\n**Verdict:** everything so far follows your notes — just finish the last step.`;
+    }
+    if (/Solve the problem completely/i.test(q)) {
+      return `1. Your notes call $\\frac{x^2-9}{x-3}$ a removable discontinuity at $x=3$: a hole that can be filled${c(cont)}.\n2. $= \\lim_{x \\to 3} (x+3)$\n3. $= 3 + 3 = 6$\n\n$$\\boxed{6}$$\n\n**Key idea:** removable discontinuity, as your notes name it${c(cont)}.`;
+    }
+    if (/Summari[sz]e/i.test(q)) {
+      return ex
+        .filter((e) => firstFact(e))
+        .slice(0, 4)
+        .map((e) => `- ${firstFact(e)} [${e.n}]`)
+        .join('\n');
+    }
+    if (/Quiz me/i.test(q)) {
+      const e = ex.find((x) => firstFact(x));
+      return `Let's start. **Question 1:** in your own words, what does your note say about ${(e?.where.split('›').pop() ?? 'this').replace(/"/g, '').trim()}?`;
+    }
+    if (/examples my notes give/i.test(q)) {
+      const e = ex.find((x) => /\(([A-Z][^)]{8,})\)|e\.g\.|example/i.test(x.text));
+      if (!e) return 'NOT IN NOTES: an example of this';
+      const line = e.text.split('\n').find((l) => /\(([A-Z][^)]{8,})\)|e\.g\.|example/i.test(l)) ?? firstFact(e);
+      return `Your notes give this example: ${line.replace(/\*\*/g, '')} [${e.n}]`;
+    }
+    if (/Explain this|Explain what this part/i.test(q)) {
+      const lines = [];
+      if (sq) {
+        lines.push(`- The **squeeze theorem**: if $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [${sq.n}].`);
+        lines.push(`- The classic use in your notes is $\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$, which will be on the exam [${sq.n}].`);
+      } else {
+        for (const e of ex.filter((x) => firstFact(x)).slice(0, 2)) lines.push(`- ${firstFact(e)} [${e.n}]`);
+      }
+      return `Here's the idea in plain words, based on **${title}**:\n\n${lines.join('\n')}`;
+    }
+    // A question: answer from the best-matching excerpt, or say what isn't there.
+    const b = bestExcerpt(ex, asked);
+    if (!b || !b.s) return `NOT IN NOTES: ${asked.trim()}`;
+    let out = `According to your note, ${firstSentences(b.e.text, 2).replace(/^./, (ch) => ch.toLowerCase())} [${b.e.n}]`;
+    // Like a careful model: name the question's words that no excerpt mentions.
+    const QWORDS = new Set('what does note notes about explain mean means tell give show please your with into from that this have will would could should which when where there their them they then than were been being know want help'.split(' '));
+    const inNotes = content(ex.map((e) => `${e.where} ${e.text}`).join(' '));
+    const missing = [...content(asked)].filter((w) => !QWORDS.has(w) && !inNotes.has(w) && !/^power|^rule/.test(w));
+    if (missing.length) out += `\n\nNOT IN NOTES: ${missing.join(' ')}`;
+    // A deliberate slip, so tests can see it contained: a rule the notes never mention.
+    if (/power rule/i.test(q)) out += `\n\nThe power rule says the derivative of $x^n$ is $nx^{n-1}$ [${b.e.n}].`;
+    return out;
+  }
+
   // Homework helper: answers strictly from the linked notes, with an :::outside block for the rest.
   if (/homework helper/i.test(system)) {
     const notesPart = system.split("THE STUDENT'S NOTES")[1] ?? '';
@@ -127,7 +283,7 @@ function reply(messages) {
       return "You haven't linked any notes to this homework yet, so nothing here can come from your class notes.\n\n:::outside\nIn general, a limit describes the value a function approaches as $x$ gets close to a point. Link the lecture that covers this problem and I'll answer from it instead.\n:::";
     }
     if (/h[oô]pital|1 - \\\\?cos|problem 4/i.test(q)) {
-      return `Your notes don't cover L'Hôpital's rule — Lecture 4 only covers limit laws, the squeeze theorem and continuity.\n\nWhat your notes do give you here: the limit laws${c(laws)} and the squeeze theorem${c(sq)}.\n\n:::outside\n**L'Hôpital's rule:** if $\\lim f = \\lim g = 0$, then $\\lim \\frac{f}{g} = \\lim \\frac{f'}{g'}$. Here $\\lim_{x \\to 0} \\frac{1-\\cos x}{x^2} = \\lim_{x \\to 0} \\frac{\\sin x}{2x} = \\frac{1}{2}$.\n:::\n\nAsk your teacher whether you're expected to use it yet.`;
+      return `Your notes don't cover L'Hôpital's rule — Lecture 4 only covers limit laws, the squeeze theorem and continuity.\n\nWhat your notes do give you here: the limit laws${c(laws)} and the squeeze theorem${c(sq)}.\n\nNOT IN NOTES: L'Hôpital's rule\n\nAsk your teacher whether you're expected to use it yet.`;
     }
     if (/continuous|discontinu|x\^2-9|problem 2/i.test(q)) {
       return `Your notes define continuity at $a$ by three conditions: $f(a)$ is defined, $\\lim_{x\\to a} f(x)$ exists, and the two are equal${c(cont)}.\n\nThey also name this exact example: $\\frac{x^2-9}{x-3}$ has a removable discontinuity at $x=3$ — a hole that can be filled${c(cont)}.`;
@@ -156,45 +312,35 @@ function reply(messages) {
       return JSON.stringify({ cards });
     }
     if (/"questions"/.test(q)) {
-      return JSON.stringify({
-        questions: [
-          {
-            q: 'According to the squeeze theorem, if $g(x) \\le f(x) \\le h(x)$ and $\\lim g = \\lim h = L$, then…',
-            choices: ['$\\lim f$ does not exist', '$\\lim f = L$', '$\\lim f = 0$', '$f$ is continuous'],
-            answer: 1,
-            explain: 'The function is "squeezed" between two functions with the same limit, so it shares that limit.',
-            source: ex[0]?.n ?? 1,
-          },
-          {
-            q: 'What is $\\lim_{x \\to 0} \\frac{\\sin x}{x}$?',
-            choices: ['$0$', '$\\infty$', '$1$', 'It does not exist'],
-            answer: 2,
-            explain: 'This classic limit equals 1; your notes say to know the unit-circle proof.',
-            source: ex[1]?.n ?? 1,
-          },
-          {
-            q: 'Which organelle is the site of cellular respiration?',
-            choices: ['Golgi apparatus', 'Ribosome', 'Lysosome', 'Mitochondrion'],
-            answer: 3,
-            explain: 'Mitochondria carry out cellular respiration and make ATP.',
-            source: ex[2]?.n ?? 1,
-          },
-        ],
+      // Every question is built from a line of an excerpt; wrong choices are lines from other excerpts.
+      const facts = ex.map((e) => ({ e, f: firstFact(e) })).filter((x) => x.f.length > 24);
+      const questions = facts.slice(0, 5).map(({ e, f }, i) => {
+        const short = (t) => (t.length <= 100 ? t : t.slice(0, t.lastIndexOf(' ', 100)) + '…');
+        const others = facts.filter((x) => x.e !== e).map((x) => short(x.f));
+        const choices = [short(f), ...others.slice(i, i + 3), ...others.slice(0, Math.max(0, 3 - others.slice(i, i + 3).length))].slice(0, 4);
+        const answer = i % choices.length;
+        [choices[0], choices[answer]] = [choices[answer], choices[0]];
+        return {
+          q: `Which of these is in your notes on ${e.where.split('›').pop().replace(/"/g, '').trim()}?`,
+          choices,
+          answer,
+          explain: f,
+          source: e.n,
+        };
       });
+      return JSON.stringify({ questions: questions.filter((x) => x.choices.length >= 2) });
     }
-    if (!ex.length) return "I couldn't find that in your notes.";
+    if (!ex.length) return 'NOT IN NOTES: anything about this';
     const qWords = new Set(words(q));
     const scored = ex.map((e) => ({ e, s: words(e.text + ' ' + e.where).filter((w) => qWords.has(w)).length })).sort((a, b) => b.s - a.s);
-    if (!scored[0].s)
-      return `I couldn't find that in your notes. They do cover ${ex
-        .slice(0, 2)
-        .map((e) => e.where.split('›').pop().trim())
-        .join(' and ')}.`;
+    if (!scored[0].s) return `NOT IN NOTES: ${q.split('\n\n')[0]}`;
     const [a, b] = scored;
     let out = `According to your notes, ${firstSentences(a.e.text, 2).replace(/^./, (c) => c.toLowerCase())} [${a.e.n}]`;
     if (b && b.s) out += `\n\nYour notes also mention: ${firstSentences(b.e.text, 1)} [${b.e.n}]`;
     if (/squeeze/i.test(q))
       out += '\n\n$$\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1$$\n\nThe professor flagged this as one that **will be on the exam** [' + a.e.n + '].';
+    // A deliberate slip (a cited sentence the notes don't say), so tests can see it contained.
+    if (/who (discovered|invented|proved)/i.test(q)) out += `\n\nIt was first proved by Archimedes in 250 BC [${a.e.n}].\n\nNOT IN NOTES: who discovered it`;
     return out;
   }
 
@@ -300,6 +446,7 @@ const server = http.createServer(async (req, res) => {
     if (!m) return json(res, { error: `model "${body.model}" not found, try pulling it first` }, 404);
     if (body.messages?.some((x) => x.images?.length) && !m.caps.includes('vision')) return json(res, { error: 'model does not support images' }, 400);
     stats.chat++;
+    record(body.messages ?? []);
     if (faults.fail > 0) {
       faults.fail--;
       stats.failed++;
@@ -369,6 +516,7 @@ const server = http.createServer(async (req, res) => {
     }));
     log(`${body.model} ${msgs.length} msgs`);
     stats.chat++;
+    record(msgs);
     if (faults.fail > 0) {
       faults.fail--;
       stats.failed++;

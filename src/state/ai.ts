@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_URLS, detectServers, listModels, pickDefaults, pingServer, type ModelInfo, type ProviderConfig, type ProviderKind } from '../lib/ai/providers';
+import type { OutsideKnowledge } from '../lib/ai/policy';
 
 export interface AISettings {
   provider: ProviderKind;
@@ -14,8 +15,13 @@ export interface AISettings {
   numCtx: number;
   /** Read handwriting in the background so it is searchable. */
   autoTranscribe: boolean;
-  /** Library answers only from your notes (no outside knowledge). */
-  strictLibrary: boolean;
+  /**
+   * When the notes don't cover a question: `auto` says so, then answers from the
+   * model's own knowledge in a box marked "proceed with caution"; `never` only says so.
+   */
+  outsideKnowledge: OutsideKnowledge;
+  /** Ask the model to quote the passage behind loosely matched sentences (checked in code). */
+  doubleCheck: boolean;
   /** Treat the chat model as vision-capable even if detection says otherwise. */
   forceVision: boolean;
 }
@@ -48,10 +54,11 @@ export const useAI = create<AIState>()(
       chatModel: '',
       visionModel: '',
       embedModel: '',
-      temperature: 0.4,
+      temperature: 0.2,
       numCtx: 16384,
       autoTranscribe: true,
-      strictLibrary: true,
+      outsideKnowledge: 'auto',
+      doubleCheck: true,
       forceVision: false,
       status: 'unknown',
       models: [],
@@ -123,6 +130,17 @@ export const useAI = create<AIState>()(
     }),
     {
       name: 'nib.ai',
+      version: 2,
+      // v1 had a "strict library" switch and a livelier default temperature.
+      migrate: (old, version) => {
+        const o = (old ?? {}) as Record<string, unknown>;
+        if (version < 2) {
+          delete o.strictLibrary;
+          o.outsideKnowledge = 'auto';
+          if (o.temperature === 0.4) o.temperature = 0.2;
+        }
+        return o as never;
+      },
       partialize: (s) => ({
         provider: s.provider,
         baseUrl: s.baseUrl,
@@ -133,7 +151,8 @@ export const useAI = create<AIState>()(
         temperature: s.temperature,
         numCtx: s.numCtx,
         autoTranscribe: s.autoTranscribe,
-        strictLibrary: s.strictLibrary,
+        outsideKnowledge: s.outsideKnowledge,
+        doubleCheck: s.doubleCheck,
         forceVision: s.forceVision,
         serverLabel: s.serverLabel,
       }),

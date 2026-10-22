@@ -148,7 +148,19 @@ function stripCitations(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-const OUTSIDE_OPEN = /^\s*:{3,}\s*(?:outside|general(?:[- ]knowledge)?|not[- ]from[- ](?:your[- ]|the[- ])?notes)\b[^\n]*$/i;
+const OUTSIDE_OPEN = /^\s*:{3,}\s*(?:outside|general(?:[- ]knowledge)?|own(?:[- ]knowledge)?|not[- ]from[- ](?:your[- ]|the[- ])?notes)\b[^\n]*$/i;
+
+/** Labels the app prints itself (the model never writes them). */
+export const OWN_HEAD = 'Not from your notes · the AI’s own knowledge — proceed with caution';
+export const AUTO_HEAD = 'Not found in your notes · treat this as the AI’s own knowledge — proceed with caution';
+export const OWN_TAG = 'not in your notes';
+
+// Inline markers the notes-only check puts around statements in lists, quotes
+// and tables (private-use characters: never typed by people or models).
+export const OWN_OPEN = '\uE000';
+export const OWN_CLOSE = '\uE001';
+export const WEAK_OPEN = '\uE002';
+export const WEAK_CLOSE = '\uE003';
 const FENCE_CLOSE = /^\s*:{3,}\s*$/;
 
 /**
@@ -161,7 +173,8 @@ export function normalizeOutside(src: string): string {
   let open = false;
   for (let i = 0; i < lines.length; i++) {
     if (!open && OUTSIDE_OPEN.test(lines[i])) {
-      lines[i] = ':::outside';
+      // Boxes Nib made itself (unsupported sentences it moved) keep their flag.
+      lines[i] = /^\s*:{3,}\s*outside\s+auto\b/i.test(lines[i]) ? ':::outside auto' : ':::outside';
       open = true;
     } else if (open && FENCE_CLOSE.test(lines[i])) {
       lines[i] = ':::';
@@ -174,13 +187,15 @@ export function normalizeOutside(src: string): string {
 /** Block rule for `:::outside … :::` containers. */
 function outsideBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
   const lineText = (l: number) => state.src.slice(state.bMarks[l] + state.tShift[l], state.eMarks[l]);
-  if (!/^:::outside\s*$/.test(lineText(startLine))) return false;
+  const head = /^:::outside(?:\s+(auto))?\s*$/.exec(lineText(startLine));
+  if (!head) return false;
   if (silent) return true;
   let line = startLine + 1;
   while (line < endLine && !/^:::\s*$/.test(lineText(line))) line++;
   const open = state.push('outside_open', 'div', 1);
   open.block = true;
   open.map = [startLine, line];
+  open.info = head[1] ?? '';
   const oldParent = state.parentType;
   const oldMax = state.lineMax;
   state.parentType = 'outside' as never;
@@ -199,8 +214,10 @@ function build(withCitations: boolean) {
   md.inline.ruler.before('escape', 'math_inline', mathInline);
   md.block.ruler.before('fence', 'math_block', mathBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
   md.block.ruler.before('fence', 'outside', outsideBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
-  md.renderer.rules.outside_open = () =>
-    '<div class="outside-notes"><div class="outside-head"><span class="outside-icon" aria-hidden="true"></span>Not from your notes · general knowledge</div>\n';
+  md.renderer.rules.outside_open = (tokens, idx) =>
+    tokens[idx].info === 'auto'
+      ? `<div class="outside-notes is-auto"><div class="outside-head"><span class="outside-icon" aria-hidden="true"></span>${AUTO_HEAD}</div>\n`
+      : `<div class="outside-notes"><div class="outside-head"><span class="outside-icon" aria-hidden="true"></span>${OWN_HEAD}</div>\n`;
   md.renderer.rules.outside_close = () => '</div>\n';
   md.renderer.rules.math_inline = (tokens, idx) => renderMath(tokens[idx].content, false);
   md.renderer.rules.math_display_inline = (tokens, idx) => `<span class="md-display">${renderMath(tokens[idx].content, true)}</span>`;
@@ -242,7 +259,17 @@ export function citedInAnswer(src: string, maxCite?: number): Set<number> {
  * `maxCite` (the number of excerpts) so only real excerpt numbers do.
  */
 export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite?: number } = {}): string {
-  return (opts.citations ? cited : plain).render(normalizeOutside(src), { maxCite: opts.maxCite });
+  return inlineMarkers((opts.citations ? cited : plain).render(normalizeOutside(src), { maxCite: opts.maxCite }));
+}
+
+/** Statements the notes-only check marked inside lists, quotes and tables. */
+function inlineMarkers(html: string): string {
+  if (!/[\uE000-\uE003]/.test(html)) return html;
+  return html
+    .replace(/\uE000/g, `<span class="own-inline" title="${OWN_HEAD}">`)
+    .replace(/\uE001/g, `</span><span class="own-tag" title="${OWN_HEAD}">${OWN_TAG}</span>`)
+    .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note — check it">')
+    .replace(/\uE003/g, '</span>');
 }
 
 /**
@@ -263,5 +290,10 @@ export function markdownToEditorHTML(src: string, opts: { stripCitations?: boole
   md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
   md.renderer.rules.outside_close = () => '</div></div>\n';
   if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
-  return md.render(normalizeOutside(src), { maxCite: opts.maxCite });
+  // Inline own-knowledge marks stay visible in the note as words.
+  return md
+    .render(normalizeOutside(src), { maxCite: opts.maxCite })
+    .replace(/\uE000/g, '')
+    .replace(/\uE001/g, ' <em>(not from your notes — the AI’s own knowledge)</em>')
+    .replace(/[\uE002\uE003]/g, '');
 }

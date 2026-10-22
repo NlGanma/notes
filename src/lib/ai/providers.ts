@@ -35,6 +35,8 @@ export interface ChatRequest {
   json?: boolean;
   /** Upper bound on generated tokens. */
   maxTokens?: number;
+  /** false: ask a thinking model (Ollama) to answer directly — JSON tasks don't need its reasoning. */
+  think?: boolean;
   signal?: AbortSignal;
   onToken?(text: string): void;
   onThinking?(text: string): void;
@@ -222,6 +224,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
         stream: true,
         keep_alive: '15m',
         ...(req.json ? { format: 'json' } : {}),
+        ...(req.think === false ? { think: false } : {}),
         options: {
           ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
           ...(req.numCtx ? { num_ctx: req.numCtx } : {}),

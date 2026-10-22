@@ -40,7 +40,7 @@ await mock({ fail: 0, truncate: 0, firstTokenMs: 0 });
 // ---------------------------------------------------------------- classes
 await page.waitForSelector('.tree-row.is-class', { timeout: 15000 });
 const classRows = await page.locator('.tree-row.is-class').allTextContents();
-check(classRows.length === 4, `the demo notebooks are classes (${classRows.map((t) => t.replace(/\d+$/, '').trim()).join(', ')})`);
+check(classRows.length === 5, `the demo notebooks are classes (${classRows.map((t) => t.replace(/\d+$/, '').trim()).join(', ')})`);
 check((await page.textContent('.nav-item:has-text("Homework") .nav-count')) === '1', 'Homework shows one assignment to do');
 
 await page.click('.side-section-head button[title="New class"]');

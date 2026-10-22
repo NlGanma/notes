@@ -244,7 +244,7 @@ function AISection() {
           ))}
         </select>
       </Field>
-      <Field label="Creativity" hint={`${ai.temperature.toFixed(1)} — lower is more precise.`}>
+      <Field label="Creativity" hint={`${ai.temperature.toFixed(1)} — lower is more precise. Answers from your notes always run at 0.15 or below.`}>
         <input
           className="slider"
           type="range"
@@ -263,10 +263,16 @@ function AISection() {
           hint="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
         />
         <Toggle
-          checked={ai.strictLibrary}
-          onChange={(v) => ai.set({ strictLibrary: v })}
-          label="Ask your notes: only use my notes"
-          hint="Never mix in the model’s general knowledge."
+          checked={ai.outsideKnowledge === 'auto'}
+          onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
+          label="When my notes don’t cover a question, answer from the AI’s own knowledge"
+          hint="Nib says first that your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
+        />
+        <Toggle
+          checked={ai.doubleCheck}
+          onChange={(v) => ai.set({ doubleCheck: v })}
+          label="Double-check loosely matched sentences"
+          hint="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
         />
         <Toggle
           checked={ai.forceVision}

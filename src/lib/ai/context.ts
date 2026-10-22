@@ -58,7 +58,7 @@ export function blockToText(n: JSONContent, depth = 0): string {
       return (n.content ?? []).map((c) => '> ' + blockToText(c, depth)).join('\n');
     case 'callout': {
       const v = String(n.attrs?.variant ?? 'note');
-      const label = v === 'ai' ? 'AI note' : v === 'outside' ? 'General knowledge (not from class)' : v[0].toUpperCase() + v.slice(1);
+      const label = v === 'ai' ? 'AI note' : v === 'outside' ? 'Not from your notes (the AI’s own knowledge)' : v[0].toUpperCase() + v.slice(1);
       return `> **${label}:** ` + (n.content ?? []).map((c) => blockToText(c, depth)).join('\n> ');
     }
     case 'codeBlock':

@@ -35,6 +35,15 @@ export function Flashcards({ cards: initial, sources, onOpen }: { cards: Card[];
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [known, setKnown] = useState<Set<number>>(new Set());
+  // A new set of cards starts fresh.
+  const [forCards, setForCards] = useState(initial);
+  if (forCards !== initial) {
+    setForCards(initial);
+    setCards(initial);
+    setI(0);
+    setFlipped(false);
+    setKnown(new Set());
+  }
   const card = cards[i];
   const go = (d: number) => {
     setFlipped(false);
@@ -47,7 +56,7 @@ export function Flashcards({ cards: initial, sources, onOpen }: { cards: Card[];
       content.push({ type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: c.front.replace(/\$/g, '') }] });
       content.push({ type: 'paragraph', content: [{ type: 'text', text: c.back }] });
     }
-    const doc = useVault.getState().createNote({ title: 'Flashcards', tags: ['flashcards'], content: { type: 'doc', content } });
+    const doc = useVault.getState().createNote({ title: 'Flashcards', tags: ['flashcards'], content: { type: 'doc', content }, generated: true });
     useUI.getState().openNote(doc.meta.id, { newTab: true });
   };
 
@@ -120,8 +129,14 @@ export function Flashcards({ cards: initial, sources, onOpen }: { cards: Card[];
 
 export function Quiz({ questions, sources, onOpen }: { questions: QuizQ[]; sources: SourceRef[]; onOpen(s: SourceRef): void }) {
   const [answers, setAnswers] = useState<(number | null)[]>(() => questions.map(() => null));
-  const score = answers.filter((a, i) => a === questions[i].answer).length;
-  const done = answers.every((a) => a !== null);
+  // A new set of questions starts fresh.
+  const [forQs, setForQs] = useState(questions);
+  if (forQs !== questions) {
+    setForQs(questions);
+    setAnswers(questions.map(() => null));
+  }
+  const score = answers.filter((a, i) => a === questions[i]?.answer).length;
+  const done = answers.length === questions.length && answers.every((a) => a !== null);
   const letters = useMemo(() => ['A', 'B', 'C', 'D', 'E'], []);
   return (
     <div className="quiz">

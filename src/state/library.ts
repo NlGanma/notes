@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { buildBm25, chunkVault, decodeVector, encodeVector, rankChunks, type Chunk, type Hit, type Scope } from '../lib/ai/rag';
+import { buildBm25, chunkVault, decodeVector, encodeVector, rankChunks, tokenize, type Chunk, type Hit, type Scope } from '../lib/ai/rag';
+import { calibrateSemantic, idfOf, type SemanticCalib, type VaultStats } from '../lib/ai/policy';
 import { embed } from '../lib/ai/providers';
 import { providerConfig, useAI } from './ai';
 import { useVault } from './vault';
@@ -142,4 +143,35 @@ export function sampleLibrary(scope: Scope = { kind: 'all' }, k = 12): Hit[] {
     }
   }
   return out;
+}
+
+// ------------------------------------------------------------------ grounding statistics
+
+let statsCache: { notes: unknown; stats: VaultStats; inVault: (t: string) => boolean } | null = null;
+
+/**
+ * Word statistics over every passage in the vault (IDF for the notes-only
+ * check and the coverage gate). Recomputed only when the notes change.
+ */
+export function vaultStats(): { stats: VaultStats; idf: (t: string) => number; inVault: (t: string) => boolean } {
+  const notes = useVault.getState().notes;
+  if (!statsCache || statsCache.notes !== notes) {
+    // Class material only: homework and AI-written notes must not make a word count as "in the notes".
+    const chunks = chunkVault(Object.values(notes), { kind: 'all' });
+    const df = new Map<string, number>();
+    for (const c of chunks) for (const t of new Set(tokenize(`${c.title} ${c.section} ${c.text}`))) df.set(t, (df.get(t) ?? 0) + 1);
+    const prefixes = new Set([...df.keys()].filter((t) => t.length >= 6).map((t) => t.slice(0, 5)));
+    statsCache = { notes, stats: { N: chunks.length, df }, inVault: (t) => df.has(t) || (t.length >= 6 && prefixes.has(t.slice(0, 5))) };
+  }
+  return { stats: statsCache.stats, idf: idfOf(statsCache.stats), inVault: statsCache.inVault };
+}
+
+let calibCache: { size: number; model: string; calib: SemanticCalib | null } | null = null;
+
+/** How similar unrelated passages are under the current embedding model (for the coverage gate). */
+export function semanticCalib(): SemanticCalib | null {
+  const { vectors, model } = useLibrary.getState();
+  if (!calibCache || calibCache.size !== vectors.size || calibCache.model !== model)
+    calibCache = { size: vectors.size, model, calib: calibrateSemantic([...vectors.values()]) };
+  return calibCache.calib;
 }

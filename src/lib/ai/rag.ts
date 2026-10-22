@@ -66,8 +66,9 @@ export function chunkNote(note: NoteDoc): Chunk[] {
 export function chunkVault(notes: NoteDoc[], scope: Scope = { kind: 'all' }): Chunk[] {
   const inScope = notes.filter((n) => {
     if (n.meta.trashed) return false;
-    // Homework holds the student's questions, not class material — only searched when picked explicitly.
-    if (n.meta.homework && scope.kind !== 'note' && scope.kind !== 'notes') return false;
+    // Homework holds the student's questions, and AI-written notes (saved flashcards) the model's words —
+    // neither is class material, so they are only searched when picked explicitly.
+    if ((n.meta.homework || n.meta.generated) && scope.kind !== 'note' && scope.kind !== 'notes') return false;
     switch (scope.kind) {
       case 'all':
         return true;
@@ -91,17 +92,26 @@ export function chunkVault(notes: NoteDoc[], scope: Scope = { kind: 'all' }): Ch
 // ------------------------------------------------------------------ BM25
 
 const STOP = new Set(
-  'a an and are as at be but by for from has have he her his i if in into is it its of on or our she so than that the their them then there these they this to was we were what when where which who why will with you your do does did can could would should about how not no yes also just more most very'.split(
-    ' ',
-  ),
+  (
+    'a an and are as at be but by for from has have he her his i if in into is it its of on or our she so than that the their them then there these they this to was we were what when where which who why will with you your do does did can could would should about how not no yes also just more most very ' +
+    // Spanish (and other Romance) function words, so language notes are matched on their content.
+    'el la los las un una unos unas de del al en y e o u que es por para con se su sus lo le les mi tu me te nos'
+  ).split(' '),
 );
 
+/**
+ * Words for matching: lowercased, accents folded ("niño" → "nino", "está" →
+ * "esta") so typed answers and notes match with or without them, any
+ * script's letters kept (Greek math symbols included), stop words dropped.
+ */
 export function tokenize(text: string): string[] {
   const out: string[] = [];
   for (let w of text
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
     .toLowerCase()
     .replace(/\\([a-z]+)/g, ' $1 ')
-    .split(/[^a-z0-9α-ωθ]+/)) {
+    .split(/[^\p{L}\p{N}]+/u)) {
     if (!w || STOP.has(w) || (w.length < 2 && !/\d/.test(w))) continue;
     // Light stemming so "limits" matches "limit" and "derivatives" matches "derivative".
     if (w.length > 5 && /(ations?|ings?|edly|ed|ly)$/.test(w)) w = w.replace(/(ations?|ings?|edly|ed|ly)$/, '');
@@ -223,11 +233,11 @@ function rankOf(scores: number[]): number[] {
   return rank;
 }
 
-export function formatExcerpts(hits: Hit[]): string {
+export function formatExcerpts(hits: Hit[], start = 1): string {
   return hits
     .map((h, i) => {
       const where = [h.chunk.folder, `"${h.chunk.title}"`, h.chunk.section].filter(Boolean).join(' › ');
-      return `[${i + 1}] (${where})\n${h.chunk.text.trim()}`;
+      return `[${i + start}] (${where})\n${h.chunk.text.trim()}`;
     })
     .join('\n\n');
 }

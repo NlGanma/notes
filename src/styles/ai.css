@@ -1274,3 +1274,130 @@
 .grounding-item.is-uncited.is-on {
   box-shadow: inset 0 0 0 1px rgba(201, 138, 4, 0.45);
 }
+
+/* ------------------------------------------------------------ notes-only check */
+/* Boxes Nib made itself: sentences it couldn't match to the notes. */
+.md .outside-notes.is-auto {
+  background: #fdf6ec;
+  box-shadow: inset 0 0 0 1px #efd9b4;
+  border-left: 2px dashed #d7a24a;
+}
+/* List items, quote lines and table rows it couldn't match (lists stay intact). */
+.md .own-inline {
+  background: linear-gradient(transparent 8%, rgba(232, 160, 20, 0.14) 8%, rgba(232, 160, 20, 0.14) 92%, transparent 92%);
+  border-radius: 2px;
+}
+.md .own-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 16px;
+  vertical-align: 1px;
+  color: #94600a;
+  background: #fbf0d9;
+  cursor: help;
+}
+.md.show-uncited .weak-claim {
+  background: linear-gradient(transparent 60%, rgba(232, 160, 20, 0.22) 60%);
+  border-radius: 2px;
+}
+.md .weak-claim {
+  text-decoration: underline dotted rgba(201, 138, 4, 0.5);
+  text-underline-offset: 3px;
+}
+/* While a grounded answer streams it hasn't been checked yet: it looks provisional. */
+.md.is-unchecked {
+  color: var(--text-2);
+}
+.msg-checking {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.grounding-item.is-repaired {
+  background: var(--bg-subtle);
+  color: var(--text-3);
+}
+.msg-added {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #8a5d00;
+  background: var(--warning-soft);
+}
+.msg-added svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* "Your notes don't cover this" — written by the app, above the answer. */
+.coverage-banner {
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.coverage-banner.is-none {
+  background: #fbf3e2;
+  box-shadow: inset 0 0 0 1px #eedfc2;
+  color: #6e4a06;
+}
+.coverage-banner.is-partial {
+  background: var(--bg-subtle);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-2);
+}
+.coverage-title {
+  font-weight: 650;
+  color: #8a5d00;
+  margin-bottom: 1px;
+}
+.coverage-gaps {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+.coverage-gaps li {
+  margin: 1px 0;
+}
+.coverage-nearest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+.coverage-nearest-label {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-right: 2px;
+}
+.coverage-chip {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 0;
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.coverage-chip:hover {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.coverage-force {
+  margin-top: 6px;
+  font-size: 12px;
+}
