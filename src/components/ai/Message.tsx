@@ -72,7 +72,8 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
     collapsed: LABELS.collapsed,
     partial: LABELS.partial,
     mayCover: LABELS.mayCover,
-    noExample: msg.ownOnly && msg.content ? LABELS.noneBody : '',
+    // The example from the AI's own knowledge streams into `shown`.
+    noExample: msg.ownOnly && (msg.shown || msg.content) ? LABELS.noneBody : '',
   }[b];
   const none = b !== 'partial';
   return (
@@ -104,7 +105,7 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
         </button>
       )}
       {b === 'noLinked' && onLink && msg.status !== 'streaming' && (
-        <button className="link-btn coverage-force" onClick={onLink}>
+        <button className="link-btn coverage-link" onClick={onLink}>
           <Link2 size={12} /> Link notes…
         </button>
       )}
@@ -226,7 +227,8 @@ export const MessageView = memo(function MessageView({
           }}
         />
       )}
-      {streaming && md && <span className="caret" />}
+      {/* Also while all that arrived is a formula still being written (not shown yet). */}
+      {streaming && (md || msg.content) && <span className="caret" />}
       {unchecked && md && <div className="msg-checking">Every sentence is checked against your notes when the answer is done.</div>}
       {msg.added && msg.added.length > 0 && (
         <div className="msg-added">

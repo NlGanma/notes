@@ -55,6 +55,15 @@ test('an answer from the AI’s own knowledge carries its banner and box — and
   assert.ok(!/grounding-item/.test(html), 'no pill repeating it');
 });
 
+test('no example in the notes: the banner says the example below is the AI’s own (and says nothing more with own knowledge off)', () => {
+  const given = render(msg({ ownOnly: true, coverage: 'none', banner: 'noExample', shown: ':::outside\nFor example, the Golgi packs proteins.\n:::' }));
+  assert.match(given, /don’t include an example of this/);
+  assert.match(given, /the answer below is from the AI’s own general knowledge, not your notes — proceed with caution/);
+  const off = render(msg({ ownOnly: true, coverage: 'none', banner: 'noExample' }));
+  assert.match(off, /don’t include an example of this/);
+  assert.ok(!/answer below/.test(off), 'no answer below to speak of');
+});
+
 test('“sources added by Nib” is the green pill’s tooltip, not a pill of its own', () => {
   const html = render(msg({ content: 'x', shown: 'Sum: $\\lim(f+g) = \\lim f + \\lim g$ [1].', check: { claims: 1, supported: 1, weak: 0, contained: 0, outside: 0, repaired: 1 } }));
   assert.ok(!/added by Nib/.test(text(html)), 'no pill');
@@ -86,6 +95,8 @@ test('a formula still being written is left out, not shown as raw TeX', () => {
   assert.equal(shownMarkdown(cut), 'Sum: $\\lim(f+g)$. Product: [1]');
   // A finished answer is shown as it is.
   assert.equal(shownMarkdown(msg({ content: 'x', shown: 'It costs $5' })), 'It costs $5');
+  // All that arrived is a formula still open: the caret still shows something is coming.
+  assert.match(render(msg({ status: 'streaming', content: '$\\lim_{x' })), /class="caret"/);
 });
 
 test('an error says what happened and offers Retry right there', () => {
