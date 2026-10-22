@@ -120,7 +120,7 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
     <div className="tree-folder">
       <div
         className={cx('tree-row is-folder', isClass && 'is-class', isActive && 'is-active', drop && 'is-drop')}
-        style={{ paddingLeft: 8 + depth * 14, ...(cls ? { ['--class' as string]: cls.color } : {}) }}
+        style={{ paddingLeft: depth * 24, ...(cls ? { ['--class' as string]: cls.color } : {}) }}
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData(DRAG_FOLDER, path);
@@ -162,7 +162,7 @@ function FolderRow({ path, depth, folders, byFolder }: { path: string; depth: nu
           }}
           aria-label={expanded ? 'Collapse' : 'Expand'}
         >
-          <ChevronRight size={18} />
+          <ChevronRight size={16} />
         </button>
         {cls ? (
           <ClassBadge cls={cls} size={18} />

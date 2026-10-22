@@ -171,14 +171,16 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     };
   });
 
-  // Fit the page to the window.
+  // Fit the page to the window, but never below 70% (11px body text): past that the text can't be read, so a
+  // narrower column scrolls sideways instead, as Google Docs does. 70% still fits the 1024px window with the
+  // assistant open and the drawer as a rail.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const measure = () => {
       if (!el.clientWidth) return;
       const avail = el.clientWidth - 48;
-      const next = Math.min(1, Math.max(0.45, avail / pageWidth));
+      const next = Math.min(1, Math.max(0.7, avail / pageWidth));
       // Ignore sub-pixel jitter so resizing can never ping-pong.
       setFit((cur) => (Math.abs(cur - next) < 0.004 ? cur : next));
     };

@@ -224,6 +224,14 @@
   border-radius: 4px;
   background: #f1f1ef;
   --callout-icon: #787774;
+  /* The box already covers the ruled lines: equations inside keep its tint. */
+  --math-bg: transparent;
+}
+/* On the ruled page a callout spans whole ruled cells, covering the lines behind it. */
+.page .nib-editor > .callout {
+  margin-top: calc(var(--line) * -0.25);
+  padding-top: calc(var(--line) / 2);
+  padding-bottom: calc(var(--line) / 2);
 }
 :is(.nib-editor, .doc-body, .thumb-body) .callout-body {
   flex: 1;
@@ -314,6 +322,10 @@
 }
 :is(.doc-body, .thumb-body) .math-display .katex-display {
   margin: 0;
+}
+/* Opaque so ruled paper doesn't strike through an equation in export and print either. */
+:is(.doc-body, .thumb-body) .math-display {
+  background: var(--math-bg, var(--paper, #fff));
 }
 .katex {
   font-size: 1.06em;

@@ -87,16 +87,19 @@ export function Switch({ checked, disabled, onChange, label }: { checked: boolea
   );
 }
 
-/** A small progress ring: the share of a total, in one colour. */
-export function Ring({ value, total, tone }: { value: number; total: number; tone: 'fresh' | 'learning' | 'mastered' }) {
-  const r = 11;
+/** A small progress dial: the share of a total, in one colour, with the count inside (like the summary donut). */
+export function Ring({ value, total, tone, children }: { value: number; total: number; tone: 'fresh' | 'learning' | 'mastered'; children?: ReactNode }) {
+  const r = 14.5;
   const len = 2 * Math.PI * r;
   const part = total ? Math.min(1, value / total) : 0;
   return (
-    <svg className={cx('rv-ring', `is-${tone}`)} width="28" height="28" viewBox="0 0 28 28" aria-hidden>
-      <circle cx="14" cy="14" r={r} className="rv-ring-track" />
-      {part > 0 && <circle cx="14" cy="14" r={r} className="rv-ring-fill" strokeDasharray={`${part * len} ${len}`} transform="rotate(-90 14 14)" />}
-    </svg>
+    <span className="rv-ring-wrap">
+      <svg className={cx('rv-ring', `is-${tone}`)} width="32" height="32" viewBox="0 0 32 32" aria-hidden>
+        <circle cx="16" cy="16" r={r} className="rv-ring-track" />
+        {part > 0 && <circle cx="16" cy="16" r={r} className="rv-ring-fill" strokeDasharray={`${part * len} ${len}`} transform="rotate(-90 16 16)" />}
+      </svg>
+      <span className="rv-ring-n">{children}</span>
+    </span>
   );
 }
 

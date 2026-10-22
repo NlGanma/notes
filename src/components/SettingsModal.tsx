@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, ShieldCheck, HardDrive, X } from 'lucide-react';
+import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, HardDrive, X } from 'lucide-react';
 import { Modal } from './common/Modal';
 import { useUI, type SettingsSection } from '../state/ui';
 import { useAI } from '../state/ai';
@@ -168,9 +168,6 @@ function AISection() {
       <h2>Local AI</h2>
       <p className="settings-lead">
         Nib talks only to a model running on your own machine. Your notes never leave it.
-        <span className="privacy">
-          <ShieldCheck size={16} /> Private by design
-        </span>
       </p>
 
       <Field label="Connection">

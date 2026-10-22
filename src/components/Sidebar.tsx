@@ -5,7 +5,9 @@ import {
   ChevronUp,
   Clock,
   FileText,
+  FolderClosed,
   FolderPlus,
+  GraduationCap,
   Home,
   LibraryBig,
   ListTodo,
@@ -13,6 +15,7 @@ import {
   Settings,
   Star,
   Tag,
+  Tags,
   Target,
   Trash2,
 } from 'lucide-react';
@@ -26,7 +29,7 @@ import { openContextMenu } from './common/ContextMenu';
 import { cx } from '../lib/util';
 import { MOD, SHIFT } from '../lib/platform';
 
-/** A navigation-drawer item (Google Classroom): a 40px row whose selection is a full pill. */
+/** A navigation-drawer item (Google Classroom): a 48px row whose selection is a full pill. */
 function NavItem({
   icon,
   label,
@@ -89,14 +92,29 @@ function ClassRow({ cls }: { cls: ClassInfo }) {
   );
 }
 
-/** A collapsible group header (Classroom's "Enrolled ⌃"). */
-function Section({ id, label, onLabel, children, action }: { id: string; label: string; onLabel?(): void; children: React.ReactNode; action?: React.ReactNode }) {
+/** A collapsible group header (Classroom's "Enrolled ⌃"): its icon and label sit in the items' columns. */
+function Section({
+  id,
+  icon,
+  label,
+  onLabel,
+  children,
+  action,
+}: {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  onLabel?(): void;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   const open = useUI((s) => s.expanded[`section:${id}`] !== false);
   const toggle = () => useUI.getState().set({ expanded: { ...useUI.getState().expanded, [`section:${id}`]: !open } });
   return (
     <div className={cx('side-section', !open && 'is-collapsed')}>
       <div className="side-section-head">
         <button className="side-section-label" onClick={onLabel ?? toggle}>
+          <span className="nav-icon">{icon}</span>
           {label}
         </button>
         {action}
@@ -166,7 +184,7 @@ export function Sidebar() {
           />
         </nav>
 
-        <Section id="classes" label="Classes" onLabel={() => useUI.getState().setView({ kind: 'classes' })}>
+        <Section id="classes" icon={<GraduationCap size={20} />} label="Classes" onLabel={() => useUI.getState().setView({ kind: 'classes' })}>
           <NavItem icon={<ListTodo size={20} />} label="Homework" view={{ kind: 'homework' }} count={homework || undefined} />
           {classes.map((c) => (
             <ClassRow key={c.path} cls={c} />
@@ -183,6 +201,7 @@ export function Sidebar() {
 
         <Section
           id="notes"
+          icon={<FolderClosed size={20} />}
           label="Notes"
           action={
             <button className="side-section-chev" onClick={() => void newFolder('')} aria-label="New folder" title="New folder">
@@ -197,7 +216,7 @@ export function Sidebar() {
         </Section>
 
         {tags.length > 0 && (
-          <Section id="tags" label="Labels">
+          <Section id="tags" icon={<Tags size={20} />} label="Labels">
             <TagList tags={tags} />
           </Section>
         )}

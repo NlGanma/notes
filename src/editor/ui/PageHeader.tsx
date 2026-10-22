@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
-import { Hash, X } from 'lucide-react';
+import { ClipboardList, Hash, X } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
-import { classForFolder, classInfo, HOMEWORK_SUBFOLDER } from '../../lib/classes';
+import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, themeVars } from '../../lib/classes';
 import { openContextMenu } from '../../components/common/ContextMenu';
 import { HomeworkBar } from './HomeworkBar';
 
@@ -191,8 +191,32 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
     </div>
   );
 
+  const titleEl = (
+    <textarea
+      ref={titleRef}
+      className="page-title"
+      value={title}
+      rows={1}
+      placeholder="Untitled"
+      spellCheck={false}
+      onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
+      onBlur={commitTitle}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          commitTitle();
+          focusBody(editor, e.key === 'Enter');
+        }
+      }}
+    />
+  );
+
   return (
-    <header className={cx('page-header', note.meta.homework && 'is-homework')} data-ui>
+    <header
+      className={cx('page-header', note.meta.homework && 'is-homework')}
+      style={note.meta.homework && cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
+      data-ui
+    >
       {/* Homework shows its class, teacher and dates in its own Classroom-style meta line. */}
       {!note.meta.homework && (
         <div className="page-meta">
@@ -224,23 +248,17 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
           <span className="crumb-date">{editedAt(note.meta.updated)}</span>
         </div>
       )}
-      <textarea
-        ref={titleRef}
-        className="page-title"
-        value={title}
-        rows={1}
-        placeholder="Untitled"
-        spellCheck={false}
-        onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
-        onBlur={commitTitle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            commitTitle();
-            focusBody(editor, e.key === 'Enter');
-          }
-        }}
-      />
+      {note.meta.homework ? (
+        // Classroom's assignment page: the class-colour circle beside the title.
+        <div className="hw-title-row">
+          <span className="item-circle is-40">
+            <ClipboardList size={24} />
+          </span>
+          {titleEl}
+        </div>
+      ) : (
+        titleEl
+      )}
       {note.meta.homework ? <HomeworkBar note={note} tags={tagsRow} /> : tagsRow}
     </header>
   );

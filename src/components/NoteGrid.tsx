@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { Fragment, memo, useMemo } from 'react';
 import { ArrowDownUp, Check, ChevronRight, ClipboardList, FileText, Folder, FolderPlus, LayoutGrid, List, MoreVertical, Plus, RotateCcw, Star, Tag, Trash2 } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useUI, type View } from '../state/ui';
@@ -57,6 +57,19 @@ function viewTitle(v: View): string {
   }
 }
 
+/** Google Drive's Recent sections, newest first. The week starts on Sunday. */
+function recentGroup(t: number): string {
+  const now = new Date();
+  const day = (n: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - n).getTime();
+  const d = new Date(t);
+  if (t >= day(0)) return 'Today';
+  if (t >= day(1)) return 'Yesterday';
+  if (t >= day(now.getDay())) return 'Earlier this week';
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) return 'Earlier this month';
+  if (d.getFullYear() === now.getFullYear()) return 'Earlier this year';
+  return 'Older';
+}
+
 /** The class a note belongs to, for its avatar letter and theme. */
 function useClassOf(n: NoteDoc) {
   const folderMeta = useVault((s) => s.folderMeta);
@@ -100,8 +113,31 @@ export function NoteGrid({ view }: { view: View }) {
     return [];
   }, [folders, folderMeta, view]);
 
+  // Recent splits into time sections; the list is already newest first, so each section is one run.
+  const groups = useMemo(
+    () =>
+      view.kind !== 'recent'
+        ? null
+        : list.reduce(
+            (out, n) => {
+              const label = recentGroup(n.meta.updated);
+              const last = out[out.length - 1];
+              if (last?.label === label) last.notes.push(n);
+              else out.push({ label, notes: [n] });
+              return out;
+            },
+            [] as { label: string; notes: NoteDoc[] }[],
+          ),
+    [list, view.kind],
+  );
+
   const folderCount = (path: string) =>
     Object.values(notes).filter((n) => !n.meta.trashed && (n.meta.folder === path || n.meta.folder.startsWith(path + '/'))).length;
+  const folderStyle = (f: string) => (folderMeta[f]?.color ? { color: folderMeta[f]!.color, fill: folderMeta[f]!.color } : undefined);
+  const openFolder = (f: string) => {
+    useUI.getState().setView({ kind: 'folder', path: f });
+    useUI.getState().toggleFolder(f, true);
+  };
 
   const title = viewTitle(view);
   const folderPath = view.kind === 'folder' ? view.path : '';
@@ -111,8 +147,17 @@ export function NoteGrid({ view }: { view: View }) {
   return (
     <div className="screen notes-view">
       <div className="screen-head">
-        {view.kind === 'folder' && view.path.includes('/') ? (
+        {view.kind === 'folder' ? (
           <nav className="crumbs" aria-label="Breadcrumb">
+            {/* Plain folders start from All notes (Drive's "My Drive ›"); a class's subfolders start from the class. */}
+            {!classForFolder(view.path, folderMeta) && (
+              <span className="crumb-step">
+                <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'home' })}>
+                  All notes
+                </button>
+                <ChevronRight size={20} className="crumb-sep" />
+              </span>
+            )}
             {view.path
               .split('/')
               .slice(0, -1)
@@ -198,7 +243,7 @@ export function NoteGrid({ view }: { view: View }) {
             </div>
           )}
 
-          {subfolders.length > 0 && (
+          {gridMode === 'grid' && subfolders.length > 0 && (
             <>
               <h2 className="notes-section">Folders</h2>
               <div className="folder-grid">
@@ -208,15 +253,12 @@ export function NoteGrid({ view }: { view: View }) {
                     className="folder-tile notebook"
                     role="button"
                     tabIndex={0}
-                    onClick={() => {
-                      useUI.getState().setView({ kind: 'folder', path: f });
-                      useUI.getState().toggleFolder(f, true);
-                    }}
+                    onClick={() => openFolder(f)}
                     onKeyDown={(e) => e.key === 'Enter' && useUI.getState().setView({ kind: 'folder', path: f })}
                     onContextMenu={(e) => openContextMenu(e, folderMenu(f))}
                     title={`${f.split('/').pop()} · ${plural(folderCount(f), 'note')}`}
                   >
-                    <Folder size={22} className="folder-tile-icon" style={folderMeta[f]?.color ? { color: folderMeta[f]!.color, fill: folderMeta[f]!.color } : undefined} />
+                    <Folder size={20} className="folder-tile-icon" style={folderStyle(f)} />
                     <span className="folder-tile-name">{f.split('/').pop()}</span>
                     <button
                       className="icon-btn folder-tile-more"
@@ -236,16 +278,30 @@ export function NoteGrid({ view }: { view: View }) {
 
           {list.length === 0 && subfolders.length === 0 ? (
             <EmptyState view={view} />
-          ) : list.length === 0 ? null : gridMode === 'grid' ? (
-            <>
-              {subfolders.length > 0 && <h2 className="notes-section">Notes</h2>}
-              <div className="note-grid">
-                {list.map((n) => (
-                  <NoteCard key={n.meta.id} note={n} trash={view.kind === 'trash'} />
-                ))}
-              </div>
-            </>
+          ) : gridMode === 'grid' ? (
+            list.length === 0 ? null : groups ? (
+              groups.map((g) => (
+                <Fragment key={g.label}>
+                  <h2 className="notes-section">{g.label}</h2>
+                  <div className="note-grid">
+                    {g.notes.map((n) => (
+                      <NoteCard key={n.meta.id} note={n} trash={false} />
+                    ))}
+                  </div>
+                </Fragment>
+              ))
+            ) : (
+              <>
+                {subfolders.length > 0 && <h2 className="notes-section">Notes</h2>}
+                <div className="note-grid">
+                  {list.map((n) => (
+                    <NoteCard key={n.meta.id} note={n} trash={view.kind === 'trash'} />
+                  ))}
+                </div>
+              </>
+            )
           ) : (
+            // Drive's list: folders are rows too, first, under the one column header.
             <div className="note-list" role="table">
               <div className="note-list-head" role="row">
                 <span className="note-list-name">Name</span>
@@ -253,9 +309,52 @@ export function NoteGrid({ view }: { view: View }) {
                 <span className="note-list-date">{view.kind === 'trash' ? 'Trashed' : 'Last edited'}</span>
                 <span className="note-list-more" />
               </div>
-              {list.map((n) => (
-                <NoteListRow key={n.meta.id} note={n} trash={view.kind === 'trash'} />
+              {subfolders.map((f) => (
+                <div
+                  key={f}
+                  className="note-row is-folder"
+                  role="row"
+                  tabIndex={0}
+                  onClick={() => openFolder(f)}
+                  onKeyDown={(e) => e.key === 'Enter' && openFolder(f)}
+                  onContextMenu={(e) => openContextMenu(e, folderMenu(f))}
+                  title={`${f.split('/').pop()} · ${plural(folderCount(f), 'note')}`}
+                >
+                  <span className="note-list-name">
+                    <Folder size={20} className="folder-tile-icon" style={folderStyle(f)} />
+                    <span className="note-row-title">{f.split('/').pop()}</span>
+                  </span>
+                  <span className="note-list-where">
+                    <Folder size={16} className="note-card-folder-icon" />
+                    <span className="note-list-where-text">{view.kind === 'folder' ? view.path.split('/').pop() : 'Notes'}</span>
+                  </span>
+                  <span className="note-list-date" />
+                  <span className="note-list-more">
+                    <button
+                      className="icon-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openContextMenu(e, folderMenu(f));
+                      }}
+                      aria-label="More"
+                    >
+                      <MoreVertical size={20} />
+                    </button>
+                  </span>
+                </div>
               ))}
+              {groups
+                ? groups.map((g) => (
+                    <Fragment key={g.label}>
+                      <div className="note-list-group" role="row">
+                        {g.label}
+                      </div>
+                      {g.notes.map((n) => (
+                        <NoteListRow key={n.meta.id} note={n} trash={false} />
+                      ))}
+                    </Fragment>
+                  ))
+                : list.map((n) => <NoteListRow key={n.meta.id} note={n} trash={view.kind === 'trash'} />)}
             </div>
           )}
         </div>
@@ -379,7 +478,10 @@ export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) 
         <span className={cx('note-row-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
         {note.meta.pinned && <Star size={14} className="note-row-star" />}
       </span>
-      <span className="note-list-where">{where}</span>
+      <span className="note-list-where">
+        {cls ? <span className="class-letter is-small">{cls.name.charAt(0).toUpperCase()}</span> : <Folder size={16} className="note-card-folder-icon" />}
+        <span className="note-list-where-text">{where}</span>
+      </span>
       <span className="note-list-date">{edited(note.meta.updated)}</span>
       <span className="note-list-more">
         <button

@@ -16,8 +16,8 @@ import { Popover } from '../../components/common/Popover';
 import { toast } from '../../components/common/toast';
 import { DuePicker } from '../../components/homework/DuePicker';
 import { openLinkPicker } from '../../components/homework/LinkNotesDialog';
-import { dueLine, folderName, shortDate } from '../../components/homework/sources';
-import { cx, formatRelativeTime, plural } from '../../lib/util';
+import { dueLine, editedLabel, folderName, shortDate } from '../../components/homework/sources';
+import { cx, plural } from '../../lib/util';
 
 /** One attachment of "Your work": a 56px tile with a thumbnail cell, title, type line and remove button. */
 function Attachment({
@@ -212,7 +212,7 @@ export function HomeworkBar({ note, tags }: { note: NoteDoc; /** The page's hash
         {[
           '',
           cls?.instructor,
-          `Added ${shortDate(note.meta.created)}${edited ? ` (Edited ${formatRelativeTime(note.meta.updated).replace(/^Just/, 'just')})` : ''}`,
+          `Added ${shortDate(note.meta.created)}${edited ? ` (Edited ${editedLabel(note.meta.updated)})` : ''}`,
         ]
           .filter((x) => x !== undefined)
           .join(' • ')}

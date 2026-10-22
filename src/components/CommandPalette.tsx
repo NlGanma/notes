@@ -109,8 +109,9 @@ function Palette() {
           id: `note:${n.meta.id}`,
           group: term ? 'Notes' : 'Recent notes',
           label: n.meta.title || 'Untitled',
-          sub: [n.meta.folder, formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
-          icon: <FileText size={20} style={n.meta.color ? { color: n.meta.color } : undefined} />,
+          sub: [n.meta.folder.split('/').join(' › '), formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
+          // The same Docs-blue type glyph as every other note list.
+          icon: n.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />,
           run: () => useUI.getState().openNote(n.meta.id, { newTab: true }),
         });
       }

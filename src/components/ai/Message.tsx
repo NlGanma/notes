@@ -1,6 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Brain,
   Check,
   ChevronRight,
   CircleAlert,
@@ -198,7 +197,6 @@ export const MessageView = memo(function MessageView({
     <div className={cx('msg is-bot', streaming && 'is-streaming')}>
       {msg.thinking && (
         <button className={cx('msg-thinking', showThinking && 'is-open')} onClick={() => setShowThinking((v) => !v)}>
-          <Brain size={13} />
           {streaming && !msg.content ? 'Thinking…' : 'Reasoning'}
           <ChevronRight size={12} className="chev" />
         </button>

@@ -70,6 +70,16 @@
 .btn.is-tonal:hover:not(:disabled) {
   box-shadow: var(--shadow-xs);
 }
+/* The variants set their own label colour, so restate GM3's disabled 38% after them. */
+.btn.is-ghost:disabled,
+.btn.is-secondary:disabled,
+.btn.is-ai:disabled,
+.btn.is-tonal:disabled {
+  color: rgba(31, 31, 31, 0.38);
+}
+.btn.is-tonal:disabled {
+  background: rgba(31, 31, 31, 0.12);
+}
 .btn.is-danger {
   background: var(--danger);
   color: #fff;
@@ -164,10 +174,19 @@
 /* GM3 segmented button. */
 .seg {
   display: inline-flex;
+  position: relative;
   border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
   overflow: hidden;
   flex: none;
+}
+/* The outline is drawn above the segments, so the selected fill can't cover it. */
+.seg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  pointer-events: none;
 }
 .seg button {
   height: 36px;
@@ -383,10 +402,6 @@
 .menu-item:disabled {
   color: rgba(31, 31, 31, 0.38);
 }
-.menu-item.is-danger,
-.menu-item.is-danger svg {
-  color: var(--danger);
-}
 .menu-item.is-checked {
   background: var(--bg-selected);
   color: var(--on-selected);
@@ -441,7 +456,7 @@
 }
 .modal {
   background: var(--bg);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-l);
   max-height: calc(100vh - 48px);
   max-width: 100%;
@@ -734,7 +749,6 @@
    white panel; each setting is a row with its name on the left and the control,
    then a line of help, on the right. */
 .modal.settings {
-  border-radius: var(--radius-2xl);
   background: var(--bg-shell);
 }
 .settings-layout {
@@ -820,15 +834,6 @@
   margin: 0 0 20px;
   line-height: 20px;
   max-width: 620px;
-}
-.privacy {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-  color: var(--success);
-  font-weight: 500;
-  vertical-align: top;
 }
 .field {
   display: grid;
@@ -972,7 +977,8 @@
   border-radius: var(--radius-s);
   font-size: 12px;
   color: var(--text-2);
-  width: 64px;
+  width: 72px;
+  white-space: nowrap;
 }
 .paper-pick .paper-swatch {
   width: 36px;

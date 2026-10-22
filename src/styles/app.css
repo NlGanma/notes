@@ -89,7 +89,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 8px 0 0;
+  padding: 0 16px 0 0;
   background: var(--bg-shell);
   position: relative;
   z-index: 30;
@@ -153,8 +153,10 @@
   align-items: center;
   gap: 8px;
   height: 40px;
-  max-width: 240px;
-  min-width: 112px;
+  max-width: 320px;
+  /* When the strip is tight, inactive tabs shrink to their icon (Chrome's tab strip); the title stays in the tooltip. */
+  min-width: 52px;
+  overflow: hidden;
   padding: 0 6px 0 14px;
   border-radius: var(--radius-pill);
   color: var(--text-2);
@@ -167,6 +169,7 @@
   background: var(--bg-hover);
 }
 .tab.is-active {
+  min-width: 144px;
   background: var(--bg-selected);
   color: var(--on-selected);
 }
@@ -296,7 +299,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 0 16px;
+  padding: 12px 0 16px;
   scrollbar-width: thin;
 }
 .nav {
@@ -308,12 +311,12 @@
   padding-top: 8px;
 }
 
-/* A drawer item: a 40px pill inset 12px from both edges. */
+/* A drawer item: a 48px pill inset 12px from both edges. */
 .nav-item {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 40px;
+  height: 48px;
   margin: 0 12px;
   padding: 0 12px 0 12px;
   border-radius: var(--radius-pill);
@@ -360,8 +363,10 @@
 }
 
 /* A class: its first letter on the theme's light tone, then name over code · term. */
+/* Class rows also carry .tree-row (for the tests); keep the drawer's 16px gap so names share the label column. */
 .nav-item.nav-class {
   height: 48px;
+  gap: 16px;
 }
 .class-letter {
   width: 24px;
@@ -400,28 +405,32 @@
   color: #004a77;
 }
 
-/* A group with a header row (Classroom's "Enrolled ⌃"). */
+/* A group with a header row (Classroom's "Enrolled ⌃"): its icon and label sit in the items' columns. */
 .side-section {
   padding: 8px 0;
 }
 .side-section-head {
   display: flex;
   align-items: center;
-  height: 40px;
+  height: 48px;
   margin: 0 12px;
-  padding: 0 4px 0 12px;
+  padding: 0 4px 0 0;
 }
 .side-section-label {
   flex: 1;
-  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 40px;
+  padding: 0 12px;
   text-align: left;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-2);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-pill);
 }
 .side-section-label:hover {
-  color: var(--text);
+  background: var(--bg-hover);
 }
 .side-section-chev {
   width: 32px;
@@ -464,11 +473,17 @@
 .sidebar.is-rail .nav-count,
 .sidebar.is-rail .side-section-head,
 .sidebar.is-rail .tree,
-.sidebar.is-rail .tag-pill {
+.sidebar.is-rail .tag-pill,
+.sidebar.is-rail .nav-item.is-dense {
   display: none;
 }
 .sidebar.is-rail .side-section {
   padding: 0;
+}
+/* A flex column, like .nav, so the items' margins don't collapse: one 48px pitch down the rail. */
+.sidebar.is-rail .side-section-body {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Plain folders: Google Drive's expandable tree. */
@@ -478,11 +493,12 @@
 .tree.is-drop {
   background: var(--accent-tint);
 }
+/* Same height and columns as a .nav-item: the arrow sits just left of the folder in the icon column. */
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
+  gap: 16px;
+  height: 48px;
   margin: 0 12px;
   padding-right: 12px;
   border-radius: var(--radius-pill);
@@ -504,12 +520,13 @@
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .tree-chevron {
-  width: 24px;
+  width: 16px;
   height: 24px;
+  margin-right: -16px;
   display: grid;
   place-items: center;
   color: var(--text-2);
-  border-radius: 50%;
+  border-radius: 8px;
   transition: transform 0.15s var(--ease);
   flex: none;
 }
@@ -544,6 +561,15 @@
 
 .notes-body {
   padding: 8px 24px 64px;
+}
+/* Line the header's controls up with the grid's right edge, and keep the layout toggle's segments equal. */
+.notes-view .screen-head {
+  padding-right: 24px;
+}
+.notes-view .seg button {
+  width: 64px;
+  min-width: 0;
+  padding: 0;
 }
 .notes-toolbar {
   display: flex;
@@ -584,14 +610,14 @@
 /* Folder tiles: tinted pills with the folder glyph, name and ⋮. */
 .folder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(204px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
 .folder-tile {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   height: 48px;
   padding: 0 4px 0 16px;
   border-radius: var(--radius-l);
@@ -734,13 +760,14 @@
   transform-origin: 0 0;
   --line: 32px;
 }
+/* The editor's page title, scaled: thumbnails are renders of the real page. */
 .thumb-title {
   font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0;
   margin-bottom: 24px;
-  line-height: 1.15;
+  line-height: 36px;
 }
 
 /* List layout: Drive's Name | Location | Last edited | ⋮ table. */
@@ -750,7 +777,7 @@
 .note-list-head,
 .note-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 220px) 140px 48px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 104px 48px;
   align-items: center;
   gap: 16px;
   padding: 0 0 0 16px;
@@ -800,6 +827,36 @@
 .note-list-more {
   display: flex;
   justify-content: center;
+}
+/* Location: the class letter or a folder glyph, then the place (Drive's list). */
+.note-row .note-list-where {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.note-row .note-list-where .note-card-folder-icon {
+  margin: 0 2px;
+}
+.note-list-where-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Recent's time groups ("Today", "Yesterday", …), under the one column header. */
+.note-list-group {
+  display: flex;
+  align-items: flex-end;
+  height: 48px;
+  padding: 0 0 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.note-grid + .notes-section {
+  margin-top: 24px;
 }
 
 /* Narrow content (assistant open on a laptop): headers stack, actions wrap. */

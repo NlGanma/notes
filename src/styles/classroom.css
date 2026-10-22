@@ -464,9 +464,6 @@
   width: 40px;
   height: 40px;
 }
-.class-card.is-archived .class-card-head {
-  filter: grayscale(0.6);
-}
 
 /* Banner art: a darker circle arcing in from the right, with the class icon on it. */
 .class-art {
@@ -761,6 +758,8 @@
   display: flex;
   align-items: center;
   min-height: 56px;
+  /* Titles and row icons share a 24px inset; 10px on the right puts the topic ⋮ on the row ⋮ axis. */
+  padding: 0 10px 0 24px;
   box-shadow: inset 0 -1px 0 var(--border);
   margin-bottom: 4px;
 }
@@ -779,7 +778,7 @@
   color: var(--text-2) !important;
 }
 .topic-empty {
-  padding: 16px 8px;
+  padding: 16px 24px;
   font-size: 14px;
   color: var(--text-2);
 }
@@ -788,12 +787,14 @@
   align-items: center;
   gap: 16px;
   height: 56px;
-  padding: 0 4px 0 8px;
-  border-radius: var(--radius-s);
+  padding: 0 8px 0 24px;
   cursor: pointer;
 }
 .cw-row:hover {
   background: rgba(31, 31, 31, 0.04);
+}
+.cw-row + .cw-row {
+  box-shadow: inset 0 1px 0 var(--border);
 }
 .cw-row-title {
   flex: 1;
@@ -825,7 +826,7 @@
   opacity: 1;
 }
 .study-page {
-  max-width: 720px;
+  max-width: 980px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
@@ -837,7 +838,7 @@
 /* NotebookLM's Studio tiles (shared with Ask your notes), larger here as the page's whole content. */
 .study-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .study-tiles .studio-tile {
@@ -909,11 +910,15 @@
 .gselect:focus-within .gselect-label {
   color: var(--accent);
 }
-.gselect-arrow {
+.gselect::after {
+  content: '';
   position: absolute;
-  right: 12px;
-  top: 18px;
-  color: var(--text-2);
+  right: 19px;
+  top: 50%;
+  margin-top: -2px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--text-2);
   pointer-events: none;
 }
 
@@ -1029,7 +1034,7 @@
   place-items: center;
   font-size: 22px;
   line-height: 28px;
-  color: #3c4043;
+  color: var(--text);
 }
 .hw-gutter.is-today .hw-gutter-day {
   border-radius: 50%;
@@ -1038,17 +1043,16 @@
   font-size: 16px;
 }
 .hw-gutter.is-past .hw-gutter-day {
-  color: #70757a;
+  color: var(--text-3);
 }
 .hw-gutter-caps {
   display: flex;
   flex-direction: column;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 500;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: #70757a;
+  letter-spacing: 0.1px;
+  color: var(--text-2);
 }
 
 /* ------------------------------------------------------------------ fields and dialogs */

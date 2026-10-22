@@ -320,6 +320,11 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
             {f.slice(path.length + 1)}
           </button>
         ))}
+        {loose.length > 0 && (homework.length > 0 || topics.length > 0) && (
+          <button className="topic-link" onClick={() => anchor('topic-notes')}>
+            Notes
+          </button>
+        )}
       </nav>
       <div className="cw-main">
         <div className="cw-toolbar">
@@ -364,7 +369,7 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
           );
         })}
         {loose.length > 0 && (
-          <section className={cx('topic', (homework.length > 0 || topics.length > 0) && 'is-loose')}>
+          <section className={cx('topic', (homework.length > 0 || topics.length > 0) && 'is-loose')} id="topic-notes">
             {(homework.length > 0 || topics.length > 0) && (
               <div className="topic-head">
                 <h2 className="topic-title">Notes</h2>

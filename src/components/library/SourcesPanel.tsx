@@ -12,7 +12,7 @@ import { chunkNote } from '../../lib/ai/rag';
 import { renderMarkdown } from '../../lib/ai/markdown';
 import { isScan, questionFor, topicsOf, type Notebook } from './notebook';
 
-/** NotebookLM's neutral checkbox: grey fill and a dark tick, the same in every row so they form one column. */
+/** The app's checkbox, as in Review and Link notes, the same in every row so they form one column. */
 function Tick({ state, label, onChange }: { state: 'on' | 'off' | 'some'; label: string; onChange(on: boolean): void }) {
   return (
     <button

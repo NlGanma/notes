@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { NoteGrid } from './components/NoteGrid';
@@ -94,6 +94,22 @@ export function App() {
     else if (v.kind === 'note' && !valid.includes(v.id)) ui.set({ tabs: [...valid, v.id] });
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
   }, [ready, notes, folderMeta, folders]);
+
+  // Under 1280px the drawer, the page and the assistant don't all fit (at 1024 the page shrank to 45%):
+  // fold the drawer to its rail while they're open, as Gmail does for Gemini, and unfold it after.
+  // Only a drawer folded here is unfolded again; the menu button still opens it as usual.
+  const crowded = (assistant && view.kind === 'note') || view.kind === 'library';
+  const autoRail = useRef(false);
+  useEffect(() => {
+    const ui = useUI.getState();
+    if (crowded && ui.sidebar && window.matchMedia('(max-width: 1279px)').matches) {
+      autoRail.current = true;
+      ui.set({ sidebar: false });
+    } else if (!crowded && autoRail.current) {
+      autoRail.current = false;
+      ui.set({ sidebar: true });
+    }
+  }, [crowded]);
 
   if (!ready) {
     return (

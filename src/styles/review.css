@@ -128,15 +128,8 @@
 }
 .rv-code {
   flex: none;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  display: inline-grid;
-  place-items: center;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--text-2);
-  background: var(--bg-subtle);
+  color: var(--text-3);
 }
 .rv-sub {
   flex: none;
@@ -306,10 +299,10 @@
 }
 .rv-bucket {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  height: 40px;
+  height: 44px;
   margin: 0 -8px;
   padding: 0 8px;
   border-radius: var(--radius-s);
@@ -322,14 +315,28 @@ button.rv-bucket:hover:not(:disabled) {
 .rv-bucket-label {
   font-size: 14px;
 }
-.rv-bucket-n {
-  font-size: 16px;
+/* The count sits inside its ring, like the summary donut, so the row reads as a dial, not a radio button. */
+.rv-ring-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+.rv-ring-wrap svg {
+  display: block;
+}
+.rv-ring-n {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 .rv-ring {
   fill: none;
-  stroke-width: 4;
+  stroke-width: 3;
 }
 .rv-ring-track {
   stroke: var(--rv-track);
@@ -552,9 +559,9 @@ button.rv-bucket:hover:not(:disabled) {
 }
 .rv-progress {
   flex: 1;
-  height: 12px;
-  border-radius: 6px;
-  background: var(--bg-subtle);
+  height: 16px;
+  border-radius: 8px;
+  background: var(--rv-track);
   overflow: hidden;
   display: flex;
 }
@@ -587,6 +594,10 @@ button.rv-bucket:hover:not(:disabled) {
   border-radius: var(--radius-xl);
   background: var(--bg-subtle);
   animation: rv-rise 0.16s var(--ease);
+}
+/* Nothing left to show at the bottom (a written "Don't know?"), so no empty slot above the sheet. */
+.rv-card.is-feedback:not(:has(.rv-ask, .rv-self-result)) {
+  min-height: 0;
 }
 @keyframes rv-rise {
   from {
@@ -696,11 +707,9 @@ button.rv-bucket:hover:not(:disabled) {
   gap: 8px;
   margin-top: 16px;
 }
-.rv-ask-actions .rv-idk {
-  margin-right: auto;
-}
-.rv-ask-actions .grow + .rv-idk {
-  margin-right: 0;
+/* Alone under the choices, the text button's label lines up with the tiles' right edge. */
+.rv-ask-actions > .rv-idk:only-child {
+  margin-right: -12px;
 }
 .rv-check-btn {
   height: 40px;
@@ -1208,8 +1217,8 @@ kbd.rv-key {
   color: var(--rv-right);
 }
 .rv-sheet-action {
-  align-self: start;
-  padding-top: 4px;
+  align-self: center;
+  padding-top: 0;
 }
 .btn.rv-next {
   height: 48px;
@@ -1331,7 +1340,7 @@ kbd.rv-key {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
   margin-top: 32px;
-  align-items: start;
+  align-items: stretch;
 }
 .rv-scard {
   padding: 20px 24px 24px;
@@ -1544,7 +1553,7 @@ kbd.rv-key {
 }
 .rv-class-row {
   display: grid;
-  grid-template-columns: 24px minmax(120px, 200px) minmax(80px, 1fr) 44px auto;
+  grid-template-columns: 24px minmax(100px, 180px) minmax(80px, 1fr) 44px minmax(248px, max-content);
   align-items: center;
   column-gap: 16px;
   min-height: 56px;
@@ -1667,11 +1676,20 @@ kbd.rv-key {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rv-summary-grid {
-    grid-template-columns: minmax(0, 1fr);
+  /* The setup card is full width here, so the three buckets sit side by side instead of a sparse list. */
+  .rv-buckets {
+    flex-direction: row;
+    column-gap: 16px;
+  }
+  .rv-bucket {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 @container review (max-width: 720px) {
+  .rv-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .rv-card {
     padding: 20px 24px 24px;
   }
@@ -1716,6 +1734,12 @@ kbd.rv-key {
   }
   .rv-code {
     display: none;
+  }
+  .rv-buckets {
+    flex-direction: column;
+  }
+  .rv-bucket {
+    flex: none;
   }
   .rv-row.is-chapter .rv-cell-main,
   .rv-row.is-note.is-flat .rv-cell-main,

@@ -246,7 +246,6 @@ export function HomeworkView({ filter = 'todo' }: { filter?: Tab }) {
                 </option>
               ))}
             </select>
-            <ChevronDown size={20} className="gselect-arrow" />
           </label>
 
           {shown.length ? (

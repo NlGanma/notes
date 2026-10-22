@@ -28,7 +28,7 @@ import { SourcesList, useCitePreview } from './Citations';
 import { homeworkSources } from '../../lib/homework';
 import { linkNotes, reviewNote } from '../../lib/commands';
 import { isReviewable } from '../../lib/review/tree';
-import { ClipboardList, Compass, Link2, SearchCheck, Wand2 } from 'lucide-react';
+import { ClipboardList, Compass, Link2, ListOrdered, SearchCheck } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
 import { NOTE_STARTERS } from '../../lib/ai/prompts';
@@ -55,7 +55,7 @@ const HOMEWORK_STARTERS: { icon: React.ReactNode; label: string; mode: 'explain'
   },
   { icon: <Lightbulb size={18} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
   { icon: <SearchCheck size={18} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
-  { icon: <Wand2 size={18} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
+  { icon: <ListOrdered size={18} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
 ];
 
 /** Inserts a reply into the note as an "assistant" callout, right after the block it was about. */
@@ -212,10 +212,6 @@ export function AssistantPanel() {
             <div className="asst-hw-card">
               <div className="asst-hw-head">
                 <ClipboardList size={18} /> Strictly from your notes
-              </div>
-              <div className="asst-hw-text">
-                Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in an
-                amber box marked as <b>the AI’s own knowledge</b>.
               </div>
               <div className="asst-hw-sources">
                 {linked.slice(0, 4).map((n) => (

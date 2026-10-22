@@ -96,7 +96,7 @@
 }
 .hw-atts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 8px;
   margin-top: 16px;
 }
@@ -451,7 +451,7 @@
   min-width: 0;
   overflow-y: auto;
   padding: 24px 48px;
-  background: #f8f9fa;
+  background: var(--bg-shell);
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -481,12 +481,12 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  background: #f8f9fa;
+  background: var(--bg-field);
   box-shadow: inset 0 -1px 0 var(--text-2);
   transition: background 0.15s var(--ease);
 }
 .hw-instr:hover {
-  background: #f1f3f4;
+  background: #e9eef6;
 }
 .hw-instr.is-focused {
   box-shadow: inset 0 -2px 0 var(--accent);
@@ -667,14 +667,14 @@
   height: 48px;
   padding: 0 44px 0 16px;
   border-radius: var(--radius-xs);
-  background: #f8f9fa;
+  background: var(--bg-field);
   font-size: 14px;
   color: var(--text);
   text-align: left;
   transition: background 0.15s var(--ease);
 }
 .hw-select:hover {
-  background: #f1f3f4;
+  background: #e9eef6;
 }
 .hw-select::after {
   content: '';
@@ -726,11 +726,7 @@ button.hw-select:focus-visible {
 .hw-select.is-filled {
   height: 56px;
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  background: var(--bg-field);
   box-shadow: inset 0 -1px 0 var(--text-2);
-}
-.hw-select.is-filled:hover {
-  background: #e9eef6;
 }
 .hw-select.is-filled select {
   font-size: 16px;
@@ -832,8 +828,9 @@ button.hw-select:focus-visible {
   flex: none;
 }
 .link-head-title {
-  flex: 0 1 auto;
-  max-width: 340px;
+  flex: none;
+  /* Leaves room for the mark, four gaps, the search at its minimum and the close button. */
+  max-width: calc(100% - 364px);
   margin-right: 12px;
   font-size: 16px;
   line-height: 24px;
@@ -844,14 +841,14 @@ button.hw-select:focus-visible {
 }
 .link-search {
   flex: 0 1 476px;
-  min-width: 200px;
+  min-width: 240px;
   height: 48px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 4px 0 16px;
   border-radius: var(--radius-s);
-  background: #f1f3f4;
+  background: var(--bg-field);
   color: var(--text-2);
   transition:
     background 0.15s var(--ease),

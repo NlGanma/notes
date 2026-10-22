@@ -26,6 +26,7 @@
 .toolbar-dock {
   position: sticky;
   top: 0;
+  left: 0;
   z-index: 25;
   padding: 8px 8px 0;
   margin-bottom: 24px;
@@ -67,6 +68,28 @@
 }
 .page-header.is-homework {
   padding-top: 40px;
+}
+/* Classroom's assignment page: a 40px class-colour circle, then the title in the class colour; the rows under it
+   sit in the column right of the circle. (The "Your work" card and help below stay full width.) */
+.hw-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.hw-title-row .item-circle {
+  margin-top: 8px;
+}
+.hw-title-row .page-title {
+  flex: 1;
+  min-width: 0;
+}
+.page-header.is-homework .page-title {
+  font-size: 32px;
+  line-height: 40px;
+  color: var(--class-dark, var(--text));
+}
+.hw-bar > :is(.hw-meta, .hw-meta-row, .page-tags, .hw-rule) {
+  margin-left: 56px;
 }
 .page-meta {
   display: flex;
@@ -466,19 +489,20 @@
 .ink-block.tool-text {
   cursor: text;
 }
+/* An empty handwriting area is plain ruled paper with one grey placeholder on its first line. */
 .ink-block-hint {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--text-3);
-  font-size: 13px;
-  border: 1px dashed var(--outline-variant);
-  border-radius: 4px;
+  inset: 0 0 auto 0;
+  height: var(--line, 32px);
+  line-height: var(--line, 32px);
+  font-size: 14px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 .page.is-inking .ink-block-hint {
-  border-color: rgba(11, 87, 208, 0.35);
   color: var(--accent);
 }
 
@@ -639,13 +663,16 @@
 .math-block-node {
   position: relative;
 }
+/* Opaque, like the callout: the ruled lines must not strike through an equation. (A callout sets --math-bg
+   to transparent, since it already covers the lines.) */
 .math-block {
   position: relative;
   border-radius: 4px;
   padding: 6px 0;
+  background: var(--math-bg, var(--paper, #fff));
 }
 .math-block.is-selected {
-  background: rgba(11, 87, 208, 0.08);
+  background: linear-gradient(rgba(11, 87, 208, 0.08), rgba(11, 87, 208, 0.08)), var(--math-bg, var(--paper, #fff));
 }
 .math-block.is-editing {
   background: var(--bg-subtle);
@@ -801,6 +828,10 @@
 }
 .tb-tool-ink.is-hl {
   height: 3px;
+}
+/* GoodNotes: only the selected tool shows its ink colour. */
+.tb-tool:not(.is-active) .tb-tool-ink {
+  display: none;
 }
 /* Marks and format buttons: Docs' 32px squares; "on" is the primary container with a blue glyph. */
 .tb-btn.is-mark,
@@ -1207,11 +1238,12 @@
 .fmt-styles {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 2px;
 }
 .fmt-style {
   height: 36px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 18px;
   color: var(--text);
   white-space: nowrap;

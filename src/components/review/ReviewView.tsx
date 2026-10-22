@@ -129,19 +129,22 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
 
               <div className="rv-buckets">
                 <button className="rv-bucket" disabled={!stats.fresh || selected.size < 2} onClick={() => narrow('fresh')} title="Review only the notes with ideas not studied yet">
-                  <Ring value={stats.fresh} total={stats.total} tone="fresh" />
+                  <Ring value={stats.fresh} total={stats.total} tone="fresh">
+                    {selected.size ? stats.fresh : '–'}
+                  </Ring>
                   <span className="rv-bucket-label">Not studied</span>
-                  <span className="rv-bucket-n">{selected.size ? stats.fresh : '–'}</span>
                 </button>
                 <button className="rv-bucket" disabled={!stats.learning || selected.size < 2} onClick={() => narrow('learning')} title="Review only the notes with ideas you’re still learning">
-                  <Ring value={stats.learning} total={stats.total} tone="learning" />
+                  <Ring value={stats.learning} total={stats.total} tone="learning">
+                    {selected.size ? stats.learning : '–'}
+                  </Ring>
                   <span className="rv-bucket-label">Still learning</span>
-                  <span className="rv-bucket-n">{selected.size ? stats.learning : '–'}</span>
                 </button>
                 <div className="rv-bucket">
-                  <Ring value={stats.mastered} total={stats.total} tone="mastered" />
+                  <Ring value={stats.mastered} total={stats.total} tone="mastered">
+                    {selected.size ? stats.mastered : '–'}
+                  </Ring>
                   <span className="rv-bucket-label">Mastered</span>
-                  <span className="rv-bucket-n">{selected.size ? stats.mastered : '–'}</span>
                 </div>
               </div>
               {selected.size > 0 && (

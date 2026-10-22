@@ -74,8 +74,6 @@ const MAKING: Record<StudyTool, string> = {
   quiz: 'Writing your quiz from your notes…',
 };
 
-const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
 /** "Today • 10:21 AM", NotebookLM's separator above a conversation. */
 function dayStamp(at: number): string {
   const d = new Date(at);
@@ -159,7 +157,7 @@ export function LibraryView() {
           return {
             msg: m,
             tool,
-            title: m.scopeLabel ? `${m.scopeLabel} ${noun}` : capital(noun),
+            title: `${m.scopeLabel || 'All notes'} ${noun}`,
             notes: new Set((m.sources ?? []).map((s) => s.noteId)).size,
             busy: m.status === 'streaming',
             failed: m.status === 'error' || m.status === 'stopped' || (json && m.status === 'done' && !parsed),

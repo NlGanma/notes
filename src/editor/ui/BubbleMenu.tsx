@@ -127,7 +127,20 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
 
   useEffect(() => {
     if (!show) return;
-    const r = posToDOMRect(editor.view, st.from, st.to);
+    // Centre on the selection's box. posToDOMRect spans first caret to last caret, which on a multi-line
+    // selection can sit far off-centre; a DOM range measures the text itself.
+    let r: { left: number; width: number; top: number; bottom: number } = posToDOMRect(editor.view, st.from, st.to);
+    try {
+      const a = editor.view.domAtPos(st.from);
+      const b = editor.view.domAtPos(st.to);
+      const range = document.createRange();
+      range.setStart(a.node, a.offset);
+      range.setEnd(b.node, b.offset);
+      const box = range.getBoundingClientRect();
+      if (box.width || box.height) r = box;
+    } catch {
+      /* keep the caret-to-caret rect */
+    }
     const el = ref.current;
     const w = el?.querySelector('.bubble-row')?.getBoundingClientRect().width ?? 460;
     const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
@@ -135,7 +148,8 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
     let top = r.top - 36 - 8;
     if (top < 120) top = r.bottom + 8;
     setPos({ left, top });
-  }, [show, st.from, st.to, editor]);
+    // mouseDown: measure the real bar width once it renders after the drag ends.
+  }, [show, st.from, st.to, editor, mouseDown]);
 
   if (!show || mouseDown) return null;
 

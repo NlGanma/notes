@@ -15,13 +15,14 @@ import { cx } from '../../lib/util';
 import { toast } from '../common/toast';
 
 /** Decorative art for a class banner or card header: a big circle arcing in from the right with the class icon on it. */
-export function ClassArt({ icon, h }: { icon: ClassInfo['icon']; h: number }) {
+export function ClassArt({ icon, h, compact }: { icon: ClassInfo['icon']; h: number; compact?: boolean }) {
   const d = h * 1.6;
-  const s = Math.round(h * 0.55);
+  // On a card the teacher avatar covers the header's bottom-right, so the glyph is smaller and sits higher.
+  const s = Math.round(h * (compact ? 0.4 : 0.55));
   return (
     <span className="class-art" aria-hidden>
       <span className="class-art-circle" style={{ width: d, height: d, right: -(d / 2 - h * 0.18), top: h * 0.85 - d / 2 }} />
-      <span className="class-art-icon" style={{ right: h * 0.32 - s / 2, top: h * 0.5 - s / 2 }}>
+      <span className="class-art-icon" style={compact ? { right: h * 0.24, top: h * 0.14 } : { right: h * 0.32 - s / 2, top: h * 0.5 - s / 2 }}>
         <ClassGlyph icon={icon} size={s} />
       </span>
       <span className="class-art-dot" style={{ right: h * 0.95, top: h * 0.22 }} />
@@ -80,7 +81,7 @@ export function ClassCard({ cls, due }: { cls: ClassInfo; due: NoteDoc[] }) {
       data-class={cls.name}
     >
       <div className="class-card-head" onClick={open} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && open()}>
-        <ClassArt icon={cls.icon} h={100} />
+        <ClassArt icon={cls.icon} h={100} compact />
         <div className="class-card-name">{cls.name}</div>
         {section && <div className="class-card-section">{section}</div>}
         {cls.instructor && <div className="class-card-teacher">{cls.instructor}</div>}

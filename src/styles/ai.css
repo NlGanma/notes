@@ -37,9 +37,9 @@
   min-width: 0;
 }
 .assistant-name {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 24px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text);
 }
 /* The note's name gives way (ellipsis) before the buttons do, in a narrow panel. */
@@ -147,11 +147,7 @@
 }
 /* Homework: what "strictly from your notes" means, and which notes. */
 .asst-hw-card {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: var(--radius-l);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--border);
+  margin: 16px 0 24px;
 }
 .asst-hw-head {
   display: flex;
@@ -164,16 +160,6 @@
 }
 .asst-hw-head svg {
   color: var(--text-2);
-}
-.asst-hw-text {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--text-2);
-}
-.asst-hw-text b {
-  font-weight: 500;
-  color: var(--text);
 }
 .asst-hw-sources {
   display: flex;
@@ -400,20 +386,20 @@
   padding: 0 14px 0 10px;
   margin-right: 4px;
   border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--border);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
   font-size: 14px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--accent);
   white-space: nowrap;
   flex: none;
 }
-.msg-save svg {
-  color: var(--text-2);
-}
+/* Also beats .msg-act:hover, which the Assistant's Insert button (.msg-act.msg-save) carries. */
 .msg-save:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 .msg-save:disabled {
+  box-shadow: inset 0 0 0 1px rgba(31, 31, 31, 0.12);
   color: var(--text-3);
 }
 .followups {
@@ -1095,9 +1081,9 @@
 :is(.library, .assistant) .sources {
   margin-top: 12px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 :is(.library, .assistant) .sources-label {
   margin: 0 2px 0 0;
@@ -1106,7 +1092,7 @@
   color: var(--text-3);
 }
 :is(.library, .assistant) .sources-list {
-  display: contents;
+  gap: 8px;
 }
 :is(.library, .assistant) .source {
   height: 28px;
@@ -1140,6 +1126,29 @@
 }
 :is(.library, .assistant) .source-sec {
   font-size: 12px;
+}
+/* The Assistant's sources: one 48px row each, title over section (Gemini's side panel source rows). */
+.assistant .sources-list {
+  flex-direction: column;
+  gap: 4px;
+}
+.assistant .source {
+  height: auto;
+  min-height: 48px;
+  padding: 6px 12px 6px 8px;
+  border-radius: var(--radius-l);
+}
+.assistant .source-text {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.assistant .source-title {
+  font-size: 14px;
+  line-height: 20px;
+}
+.assistant .source-sec {
+  line-height: 16px;
 }
 :is(.library, .assistant) .msg-typing span {
   background: var(--text-3);
