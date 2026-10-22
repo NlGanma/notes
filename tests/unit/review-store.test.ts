@@ -1,0 +1,215 @@
+import { test, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { useVault } from '../../src/state/vault';
+import { useAI } from '../../src/state/ai';
+import { conceptsOf, useReview } from '../../src/state/review';
+import { buildSeedNotes, SEED_CLASSES } from '../../src/lib/vault/seed';
+import { isReviewable } from '../../src/lib/review/tree';
+import { DAY, freshState, isMastered, type Confidence } from '../../src/lib/review/mastery';
+import type { NoteDoc, VaultBackend } from '../../src/lib/vault/types';
+
+/** The Review store driven the way a student would, on the demo notes, with the model offline. */
+
+const clock = { now: Date.UTC(2026, 9, 1, 9) };
+Date.now = () => clock.now;
+
+const backend: VaultBackend = {
+  kind: 'browser',
+  label: 'memory',
+  load: async () => ({ notes: [], folders: [], folderMeta: {} }),
+  saveNote: async () => undefined,
+  deleteNote: async () => undefined,
+  createFolder: async () => undefined,
+  renameFolder: async () => undefined,
+  deleteFolder: async () => undefined,
+  saveFolderMeta: async () => undefined,
+  readKV: async () => null,
+  writeKV: async () => undefined,
+};
+
+const review = () => useReview.getState();
+const notes = () => useVault.getState().notes;
+const byTitle = (t: string) => Object.values(notes()).find((n) => n.meta.title.startsWith(t))!;
+
+beforeEach(() => {
+  const seed = buildSeedNotes();
+  useVault.setState({
+    backend,
+    notes: Object.fromEntries(seed.map((n) => [n.meta.id, n])),
+    folders: [...new Set(seed.map((n) => n.meta.folder).filter(Boolean))],
+    folderMeta: SEED_CLASSES,
+    ready: true,
+  });
+  useAI.setState({ status: 'offline', chatModel: '' });
+  useReview.setState({
+    loaded: true,
+    file: { version: 1, modelConcepts: {}, extracted: {}, states: {}, questions: {}, bad: [], sessions: [] },
+    session: null,
+    current: null,
+    summary: null,
+    opts: { length: 15, mix: true, askConfidence: true },
+  });
+});
+
+/** Answers the current question: right (the notes' own answer) or wrong. */
+async function answer(right: boolean, conf: Confidence | null = 'unsure') {
+  const it = review().current!.item;
+  clock.now += 20_000;
+  if (it.format === 'mcq') review().choose(right ? it.correct! : (it.correct! + 1) % it.choices!.length, conf);
+  else if (it.format === 'rate') {
+    await review().submit('(self-check)', conf);
+    review().selfGrade(right ? 1 : 0);
+  } else if (it.format === 'cloze' || it.format === 'recall') await review().submit(right ? it.expected! : 'banana', conf);
+  else {
+    await review().submit(right ? (it.points ?? [it.fact]).join('; ').replace(/\*\*|==/g, '') : 'banana split', conf);
+    if (review().current?.phase === 'self') review().selfGrade(right ? 1 : 0);
+  }
+}
+
+function editNote(n: NoteDoc, edit: (content: NoteDoc['content']) => void) {
+  const content = structuredClone(n.content);
+  edit(content);
+  useVault.setState({ notes: { ...notes(), [n.meta.id]: { ...n, content } } });
+}
+
+test('a student who knows everything masters every idea in the notes, however few questions its notes allow', async () => {
+  const ids = Object.values(notes())
+    .filter(isReviewable)
+    .map((n) => n.meta.id);
+  const asks: Record<string, number> = {};
+  for (let day = 0; day < 12; day++) {
+    review().setOpts({ length: 25 });
+    review().start(ids);
+    while (review().session && review().current) {
+      asks[review().current!.concept.id] = (asks[review().current!.concept.id] ?? 0) + 1;
+      await answer(true, 'sure');
+      review().next();
+    }
+    review().closeSummary();
+    clock.now += DAY;
+  }
+  const { states } = review().file;
+  const all = ids.flatMap((id) => conceptsOf(notes()[id]));
+  const unmastered = all.filter((c) => !states[c.id] || !isMastered(states[c.id], c.cap, c.needs)).map((c) => c.name);
+  assert.deepEqual(unmastered, []);
+  assert.ok(Math.max(...Object.values(asks)) <= 10, `no idea is asked endlessly (${Math.max(...Object.values(asks))})`);
+});
+
+test('a session moves on when its notes change under it (an idea renamed or removed)', async () => {
+  const calc = byTitle('Lecture 4');
+  review().start([calc.meta.id]);
+  await answer(true);
+  editNote(calc, (doc) => {
+    const walk = (node: NoteDoc['content']) => {
+      if (node.type === 'heading') for (const t of node.content ?? []) if (t.text) t.text += ' (rev)';
+      node.content?.forEach(walk);
+    };
+    walk(doc);
+  });
+  const live = new Set(conceptsOf(notes()[calc.meta.id]).map((c) => c.id));
+  for (let i = 0; i < 4 && review().session; i++) {
+    const before = review().current!.shownAt;
+    clock.now += 1000;
+    review().next();
+    if (!review().session) break;
+    assert.notEqual(review().current!.shownAt, before, 'Next shows another question');
+    assert.ok(live.has(review().current!.concept.id), 'one about the notes as they are now');
+    assert.ok(review().session!.working.every((id) => live.has(id)), 'nothing stale is kept in the working set');
+    await answer(true);
+  }
+});
+
+test('a note trashed mid-session drops out of it', async () => {
+  const calc = byTitle('Lecture 4');
+  const cells = byTitle('Cell Structure');
+  review().start([calc.meta.id, cells.meta.id]);
+  useVault.setState({ notes: { ...notes(), [cells.meta.id]: { ...cells, meta: { ...cells.meta, trashed: Date.now() } } } });
+  for (let i = 0; i < 6 && review().session; i++) {
+    await answer(true);
+    review().next();
+    if (review().current) assert.equal(review().current!.concept.noteId, calc.meta.id);
+  }
+});
+
+test('“I was right” recounts the answer as right: no re-ask, no miss, and out of the working set once mastered', async () => {
+  const pret = byTitle('Pretérito');
+  const c = conceptsOf(pret).find((x) => x.name === 'El pretérito')!;
+  // One more right answer masters it.
+  const st = { ...freshState(clock.now), p: 0.99, attempts: 6, correct: 5, best: 2, level: 2 as const, codeCorrect: 2, correctKeys: ['a', 'b'], last: clock.now - 1000, due: clock.now };
+  useReview.setState({ file: { ...review().file, states: { [c.id]: st } } });
+  review().start([pret.meta.id]);
+  assert.equal(review().current!.concept.id, c.id);
+  await answer(false, 'sure');
+  assert.equal(review().misconceptions.length, 1);
+  review().override();
+  const sess = review().session!;
+  assert.ok(review().current!.feedback!.mastered);
+  assert.ok(!sess.working.includes(c.id), 'a mastered idea leaves room for the next one');
+  assert.ok(!sess.reask.some((r) => r.c === c.id));
+  assert.equal(sess.misses[c.id] ?? 0, 0);
+  assert.equal(sess.history.at(-1)!.s, 0.8);
+  assert.equal(review().misconceptions.length, 0, 'it was no misconception');
+});
+
+test('Report undoes the answer and the question is never asked again, in any phrasing', async () => {
+  const vocab = byTitle('Vocabulario');
+  review().start([vocab.meta.id]);
+  const cur = review().current!;
+  const before = review().file.states[cur.concept.id];
+  // A phrasing the model wrote for this item, cached earlier.
+  const cacheKey = `${cur.item.key}#${cur.concept.chunkHash}`;
+  useReview.setState({ file: { ...review().file, questions: { [cacheKey]: [{ prompt: 'Which word means childhood?', points: [], fact: cur.item.fact }] } } });
+  await answer(false, 'sure');
+  assert.equal(review().session!.misses[cur.concept.id], 1);
+  review().report();
+  const sess = review().session!;
+  assert.equal(sess.history.length, 0, 'the answer is not counted');
+  assert.equal(sess.misses[cur.concept.id] ?? 0, 0);
+  assert.ok(!sess.reask.some((r) => r.c === cur.concept.id));
+  assert.equal(review().misconceptions.length, 0);
+  assert.deepEqual(review().file.states[cur.concept.id], before);
+  assert.equal(review().file.questions[cacheKey], undefined, 'its cached phrasing is gone');
+  // However long the session runs, that item never comes back.
+  for (let i = 0; i < 30 && review().session; i++) {
+    assert.notEqual(review().current!.item.key, cur.item.key);
+    await answer(i % 3 !== 0);
+    review().next();
+  }
+  review().end();
+  assert.ok(!review().summary || review().summary!.items >= 0);
+});
+
+test('when nothing else is due, a learned idea is reviewed instead of the same one asked twice in a row', async () => {
+  const vocab = byTitle('Vocabulario');
+  const cs = conceptsOf(vocab);
+  const target = cs[0];
+  // Everything else was learned and isn't due for days.
+  const learned = { ...freshState(clock.now), p: 0.99, attempts: 4, correct: 4, streak: 4, best: 0, codeCorrect: 4, correctKeys: ['a', 'b'], last: clock.now - DAY, due: clock.now + 5 * DAY, interval: 7 };
+  useReview.setState({ file: { ...review().file, states: Object.fromEntries(cs.slice(1).map((c) => [c.id, learned])) } });
+  review().start([vocab.meta.id]);
+  const seq: string[] = [];
+  for (let i = 0; i < 8 && review().session; i++) {
+    seq.push(review().current!.concept.id);
+    await answer(review().current!.concept.id !== target.id);
+    review().next();
+  }
+  assert.equal(seq[0], target.id);
+  for (let i = 1; i < seq.length; i++) assert.notEqual(seq[i], seq[i - 1], `asked twice in a row at ${i}`);
+});
+
+test('a right answer after a hint comes back later in the session, without the hint', async () => {
+  const calc = byTitle('Lecture 4');
+  review().start([calc.meta.id]);
+  for (let i = 0; i < 6 && review().current!.item.format === 'mcq'; i++) {
+    await answer(true);
+    review().next();
+  }
+  const c = review().current!.concept;
+  review().showHint();
+  await answer(true);
+  const fb = review().current!.feedback!;
+  assert.equal(fb.verdict, 'right');
+  assert.match(fb.note ?? '', /hint/);
+  assert.ok(review().session!.reask.some((r) => r.c === c.id), 'it is asked again later');
+  assert.ok(review().session!.history.at(-1)!.s < 0.8, 'and counted as partly known');
+});

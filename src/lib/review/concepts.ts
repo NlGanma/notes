@@ -1,7 +1,7 @@
 import type { NoteDoc } from '../vault/types';
 import { chunkNote, tokenize, type Chunk } from '../ai/rag';
 import { hashString } from '../util';
-import type { Level } from './mastery';
+import type { Level, MasteryNeeds } from './mastery';
 
 /**
  * What Review quizzes on: the ideas a note teaches, found in the note itself.
@@ -40,6 +40,8 @@ export interface Concept {
   partners: string[];
   /** Highest level the notes support for this concept. */
   cap: Level;
+  /** What mastering it can ask for, given the items its notes allow. */
+  needs?: MasteryNeeds;
   /** Too little in the notes to ask more than recall. */
   thin: boolean;
   origin: 'heuristic' | 'model';

@@ -249,6 +249,8 @@ await page.click('.rv-summary-actions .btn.is-primary');
 
 // ---------------------------------------------------------------- model-phrased questions
 // Questions the model phrased were cached only if they passed the checks; the next session uses them.
+// Phrasing runs in the background, so wait for it to finish before reading the cache.
+await page.waitForFunction(() => !window.__nib.scheduler.busy, null, { timeout: 30000 });
 const cached = await page.evaluate(() => Object.values(window.__nib.review.getState().file.questions).flat());
 check((await stats()).kinds.includes('mastery-question'), 'the Mastery Engine phrased questions for the higher levels');
 check(cached.length > 0 && !cached.some((q) => /Napoleon|1805/.test(q.prompt)), `…and only the ones that passed the checks were kept (${cached.length})`);

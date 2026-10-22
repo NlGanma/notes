@@ -1,5 +1,5 @@
 import type { Concept } from './concepts';
-import { isDue, isMastered, percent, recall, statusOf, type Confidence, type ConceptState, type Level } from './mastery';
+import { isDue, isMastered, percent, recall, statusOf, type Confidence, type ConceptState, type Level, type MasteryNeeds } from './mastery';
 
 /**
  * Choosing the next question. Pure and seeded, so sessions are reproducible.
@@ -9,6 +9,8 @@ import { isDue, isMastered, percent, recall, statusOf, type Confidence, type Con
  * - A miss comes back 3 items later (2 when the student was sure) as a
  *   different item; a third miss ends it for today ("needs study").
  * - Due concepts get one question; right means done for the session.
+ * - Never the same concept twice in a row while another can be asked: when
+ *   nothing else is due or new, one learned before is reviewed instead.
  * - Mixing classes: never 3 in a row from one class while another has
  *   something to ask; look-alike concepts in a class may follow each other
  *   (that's where telling them apart is learned).
@@ -33,6 +35,7 @@ export interface PoolEntry {
   kind: Concept['kind'];
   exam: boolean;
   cap: Level;
+  needs?: MasteryNeeds;
   partners: string[];
 }
 
@@ -55,6 +58,8 @@ export interface SessionState {
   needsStudy: string[];
   /** Due concepts answered right this session (done until next time). */
   doneDue: string[];
+  /** Concepts with nothing left to ask this session (their notes changed, or every item was reported). */
+  skipped: string[];
   /** Concepts asked at least once this session. */
   asked: string[];
   history: { c: string; key: string; group: string; s: number; conf: Confidence | null; at: number }[];
@@ -74,9 +79,20 @@ export function newSession(id: string, seed: number, noteIds: string[], opts: Se
     misses: {},
     needsStudy: [],
     doneDue: [],
+    skipped: [],
     asked: [],
     history: [],
     startedAt: now,
+  };
+}
+
+/** The session without a concept that can't be asked any more. */
+export function skipConcept(sess: SessionState, id: string): SessionState {
+  return {
+    ...sess,
+    working: sess.working.filter((c) => c !== id),
+    reask: sess.reask.filter((r) => r.c !== id),
+    skipped: sess.skipped.includes(id) ? sess.skipped : [...sess.skipped, id],
   };
 }
 
@@ -100,9 +116,9 @@ export function pickNext(
   const byId = new Map(pool.map((p) => [p.id, p]));
   const last = sess.history.at(-1);
   const lastEntry = last && byId.get(last.c);
-  const gone = new Set([...sess.needsStudy, ...sess.doneDue]);
+  const gone = new Set([...sess.needsStudy, ...sess.doneDue, ...sess.skipped]);
   const isNew = (p: PoolEntry) => !states[p.id]?.attempts && !sess.working.includes(p.id);
-  const mastered = (p: PoolEntry) => !!states[p.id] && isMastered(states[p.id]!, p.cap);
+  const mastered = (p: PoolEntry) => !!states[p.id] && isMastered(states[p.id]!, p.cap, p.needs);
 
   // Mixing classes: after two in a row from one class, the next comes from another if possible.
   const lastTwo = sess.history.slice(-2);
@@ -141,6 +157,14 @@ export function pickNext(
 
   // Hard rules: not the same concept twice in a row; not three in a row from one class.
   let pickable = candidates.filter((p) => p.id !== last?.c);
+  // Nothing else is due or new: review an idea learned before (one not asked yet this session first)
+  // rather than ask the same one again at once. It's asked once, like a due one, and an early review
+  // earns no longer interval. Only when every other idea is done for today is one asked twice in a row.
+  if (!pickable.length) {
+    const spare = pool.filter((p) => p.id !== last?.c && !gone.has(p.id) && !!states[p.id]?.attempts);
+    pickable = spare.filter((p) => !sess.asked.includes(p.id));
+    if (!pickable.length) pickable = spare;
+  }
   if (!pickable.length) pickable = candidates;
   if (tooMany && pickable.some(allowed)) pickable = pickable.filter(allowed);
 
@@ -249,7 +273,7 @@ export function summarize(
   for (const p of pool) {
     const g = groups.get(p.group) ?? { key: p.group, name: p.groupName, color: p.color, mastered: 0, learning: 0, newCount: 0, total: 0, percent: 0, nextDue: null };
     const st = after[p.id];
-    const status = statusOf(st, p.cap, sess.needsStudy.includes(p.id));
+    const status = statusOf(st, p.cap, sess.needsStudy.includes(p.id), p.needs);
     g.total++;
     if (status === 'mastered' || status === 'solid') g.mastered++;
     else if (status === 'new') g.newCount++;
@@ -271,7 +295,9 @@ export function summarize(
     items: sess.history.length,
     correct: sess.history.filter((h) => h.s >= 0.8).length,
     byClass: [...groups.values()],
-    masteredToday: pool.filter((p) => touched.has(p.id) && after[p.id] && isMastered(after[p.id]!, p.cap) && !(before[p.id] && isMastered(before[p.id]!, p.cap))).map((p) => p.id),
+    masteredToday: pool
+      .filter((p) => touched.has(p.id) && after[p.id] && isMastered(after[p.id]!, p.cap, p.needs) && !(before[p.id] && isMastered(before[p.id]!, p.cap, p.needs)))
+      .map((p) => p.id),
     improved: pool
       .filter((p) => touched.has(p.id))
       .map((p) => ({ id: p.id, before: percent(before[p.id], now), after: percent(after[p.id], now) }))

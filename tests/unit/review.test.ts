@@ -116,6 +116,39 @@ test('a lapse loses mastery and shortens the interval; reviews come back at grow
   assert.equal(st.lapses, 1);
 });
 
+test('needing a hint for a mastered idea is a softer lapse: the interval halves and it is back tomorrow', () => {
+  const now = 200 * DAY;
+  const mastered = { ...freshState(now), p: 0.99, attempts: 8, correct: 8, streak: 4, best: 2, codeCorrect: 4, correctKeys: ['a', 'b'], last: now - 16 * DAY, due: now, interval: 16, masteredAt: now - 40 * DAY, durable: true };
+  assert.ok(isMastered(mastered, 0));
+  const hinted = recordAnswer(mastered, { s: 1, graded: 'typed', level: 0, key: 'a', conf: 'sure', hint: true, answer: 'la niñez', firstInSession: true }, 0, now);
+  // Not mastered any more, and every part of the record says so.
+  assert.ok(!isMastered(hinted, 0));
+  assert.equal(hinted.durable, false);
+  assert.equal(hinted.masteredAt, undefined);
+  assert.equal(hinted.interval, 8);
+  assert.equal(hinted.due, now + DAY);
+  assert.equal(hinted.lapses, 0, 'recognised with a cue is not forgotten');
+  assert.equal(hinted.misconception, undefined, 'a right answer is no misconception');
+  // Forgotten outright is a full lapse.
+  const missed = recordAnswer(mastered, { s: 0, graded: 'typed', level: 0, key: 'a', conf: 'sure', answer: 'el niño', firstInSession: true }, 0, now);
+  assert.equal(missed.interval, 5);
+  assert.equal(missed.lapses, 1);
+  assert.equal(missed.misconception, 'el niño');
+});
+
+test('mastery asks only for what an idea’s notes allow: one item if there is one, code grading if any item can be', () => {
+  const now = 300 * DAY;
+  let st = freshState(now);
+  for (let i = 0; i < 3; i++) st = recordAnswer(st, { s: 1, graded: 'typed', level: 0, key: 'only', conf: 'unsure' }, 0, now + i * 600_000, { keys: 1, code: true });
+  assert.ok(isMastered(st, 0, { keys: 1, code: true }), 'a lone definition, right three times');
+  assert.ok(!isMastered(st, 0), '…but not by the full rule (two different items)');
+  let f = freshState(now);
+  for (const [i, key] of ['rate', 'explain', 'apply', 'apply'].entries())
+    f = recordAnswer(f, { s: 1, graded: i ? 'rubric' : 'self', level: Math.min(i, 2) as Level, key, conf: 'unsure' }, 2, now + i * 600_000, { keys: 2, code: false });
+  assert.ok(isMastered(f, 2, { keys: 2, code: false }), 'a formula is only ever self-checked or rubric-graded');
+  assert.ok(!isMastered(f, 2));
+});
+
 test('reviewing early earns no extra interval; recall is 0.9 on the due date', () => {
   const now = 50 * DAY;
   const { st } = run([{ level: 0 }, { level: 1, graded: 'rubric' }, { level: 2, graded: 'rubric' }], 3, now);

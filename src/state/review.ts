@@ -8,10 +8,10 @@ import { expandProof } from '../lib/ai/quote';
 import { classForFolder, classInfo } from '../lib/classes';
 import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
 import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
-import { assertGroundedItem, blankOut, buildItem, mulberry32, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
+import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
 import { gradeShort, isDontKnow, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
-import { freshState, isDue, isMastered, recordAnswer, type Confidence, type ConceptState } from '../lib/review/mastery';
-import { newSession, pickNext, requeue, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
+import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type Level } from '../lib/review/mastery';
+import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
 import { conceptsTask, gradeTask, LEVEL_HINT, MASTERY_ENGINE_PROMPT, nudgeTask, questionTask, SCHEMAS } from '../lib/review/prompts';
 import { debounce, hashString, uid } from '../lib/util';
 import type { NoteDoc } from '../lib/vault/types';
@@ -83,6 +83,8 @@ export interface Current {
   firstInSession: boolean;
   wasDue: boolean;
   stateBefore: ConceptState;
+  /** The session before this answer was counted (so "I was right" and "Report" can recount or undo it). */
+  sessBefore?: SessionState;
   overridden?: boolean;
   shownAt: number;
 }
@@ -151,9 +153,21 @@ function groupOf(note: NoteDoc) {
   };
 }
 
+/** Concepts are worked out again only when the note, the model's findings or the class's language change. */
+const conceptCache = new WeakMap<NoteDoc, { modelConcepts: ReviewFile['modelConcepts']; language: boolean; concepts: Concept[] }>();
+
 /** Every concept of a note: from its structure, plus any the model found in passages the rules missed. */
 export function conceptsOf(note: NoteDoc, file: ReviewFile = useReview.getState().file): Concept[] {
-  const heur = heuristicConcepts(note, { languageClass: groupOf(note).language });
+  const language = groupOf(note).language;
+  const hit = conceptCache.get(note);
+  if (hit && hit.modelConcepts === file.modelConcepts && hit.language === language) return hit.concepts;
+  const concepts = readConcepts(note, file, language);
+  conceptCache.set(note, { modelConcepts: file.modelConcepts, language, concepts });
+  return concepts;
+}
+
+function readConcepts(note: NoteDoc, file: ReviewFile, language: boolean): Concept[] {
+  const heur = heuristicConcepts(note, { languageClass: language });
   const live = new Set(chunkNote(note).map((c) => c.hash));
   const fromModel = Object.values(file.modelConcepts)
     .filter((c) => c.noteId === note.meta.id && live.has(c.chunkHash) && !heur.some((h) => h.id === c.id))
@@ -167,7 +181,7 @@ export function conceptsOf(note: NoteDoc, file: ReviewFile = useReview.getState(
   }
   const all = [...heur.filter((h) => h.facts.length), ...fromModel];
   for (const c of all) c.partners = all.filter((o) => o !== c && o.chunkHash === c.chunkHash).map((o) => o.id);
-  for (const c of all) Object.assign(c, capOf(c));
+  for (const c of all) Object.assign(c, capOf(c), { needs: masteryNeeds(c) });
   return all;
 }
 
@@ -177,7 +191,7 @@ export function noteMastery(note: NoteDoc, now = Date.now()): number | null {
   const cs = conceptsOf(note);
   const seen = cs.filter((c) => states[c.id]?.attempts);
   if (!seen.length) return null;
-  const done = cs.filter((c) => states[c.id] && isMastered(states[c.id], c.cap)).length;
+  const done = cs.filter((c) => states[c.id] && isMastered(states[c.id], c.cap, c.needs)).length;
   return Math.round((done / cs.length) * 100) || Math.min(99, Math.round((seen.length / cs.length) * 20));
 }
 
@@ -326,7 +340,7 @@ export const useReview = create<ReviewState>((set, get) => {
 
   /** A model-phrased question for a level-1+ item, prefetched in the background and cached if it passes. */
   const phrase = async (item: Item, c: Concept) => {
-    if (!online() || item.level < 1 || item.format === 'rate') return;
+    if (!online() || item.level < 1 || item.format === 'rate' || get().file.bad.includes(item.key)) return;
     const ch = chunkOf(c);
     if (!ch) return;
     const cacheKey = `${item.key}#${c.chunkHash}`;
@@ -370,7 +384,8 @@ export const useReview = create<ReviewState>((set, get) => {
       const ok = validateQuestion(value, item, ch.text, c.name);
       if (!ok) return;
       const file = get().file;
-      if ((file.questions[cacheKey] ?? []).some((q) => q.prompt === ok.prompt)) return;
+      // Reported while it was being phrased.
+      if (file.bad.includes(item.key) || (file.questions[cacheKey] ?? []).some((q) => q.prompt === ok.prompt)) return;
       const list = [...(file.questions[cacheKey] ?? []), { prompt: ok.prompt, points: ok.points ?? [], fact: ok.fact }].slice(-3);
       save({ ...file, questions: { ...file.questions, [cacheKey]: list } });
     } catch {
@@ -446,10 +461,7 @@ export const useReview = create<ReviewState>((set, get) => {
         parseJSONLoose,
       );
       const n = value.nudge.trim();
-      const known = new Set(tokenize(`${blanked} ${item.prompt} ${answer} what does do your notes say look line about which how why`));
-      const novel = tokenize(n).filter((w) => !known.has(w) && w.length > 3);
-      const leaks = (item.expected && n.toLowerCase().includes(item.expected.toLowerCase())) || (f?.key && n.toLowerCase().includes(f.key.toLowerCase()));
-      if (/\?\s*$/.test(n) && n.split(/\s+/).length <= 25 && !leaks && novel.length <= 1) setHint(n);
+      if (validateNudge(n, { item, blanked, answer, key: f?.key })) setHint(n);
     } catch {
       /* the cue stays */
     }
@@ -461,7 +473,8 @@ export const useReview = create<ReviewState>((set, get) => {
     const out: PoolMeta[] = [];
     for (const id of noteIds) {
       const note = noteOf(id);
-      if (!note) continue;
+      // Deleted or trashed since it was picked.
+      if (!note || !isReviewable(note)) continue;
       const g = groupOf(note);
       conceptsOf(note).forEach((c, order) =>
         out.push({
@@ -475,6 +488,7 @@ export const useReview = create<ReviewState>((set, get) => {
           kind: c.kind,
           exam: !!c.exam,
           cap: c.cap,
+          needs: c.needs,
           partners: c.partners,
           name: c.name.replace(/\*\*/g, ''),
           thin: c.thin,
@@ -484,7 +498,30 @@ export const useReview = create<ReviewState>((set, get) => {
     return out;
   };
 
-  const buildFor = (c: Concept, st: ConceptState): Item => {
+  /** The session's ideas as the notes are now: edits and newly found ideas count, removed ones drop out. */
+  const refresh = () => {
+    const sess = get().session;
+    if (!sess) return;
+    const pool = poolFor(sess.noteIds);
+    const live = new Set(pool.map((p) => p.id));
+    const keep = (id: string) => live.has(id);
+    set({ pool, session: { ...sess, working: sess.working.filter(keep), reask: sess.reask.filter((r) => keep(r.c)), needsStudy: sess.needsStudy.filter(keep) } });
+  };
+
+  /** Asks the next question, passing over ideas with nothing left to ask; ends the session when none is left. */
+  const advance = () => {
+    for (;;) {
+      const sess = get().session;
+      if (!sess) return;
+      const id = sess.index >= sess.opts.length ? null : pickNext(sess, get().pool, get().file.states, Date.now(), rng);
+      if (!id) return finish();
+      if (show(id)) return;
+      set({ session: skipConcept(sess, id) });
+    }
+  };
+
+  /** The item to ask about a concept now, or null when there's none (every one it allows was reported). */
+  const buildFor = (c: Concept, st: ConceptState): Item | null => {
     const note = noteOf(c.noteId);
     const meta = get().pool.find((p) => p.id === c.id);
     const siblings = get()
@@ -497,18 +534,25 @@ export const useReview = create<ReviewState>((set, get) => {
       .map((p) => conceptById(p.id))
       .filter((x): x is Concept => !!x);
     const ch = chunkOf(c);
+    // The grounding invariant can't be checked without the passage.
+    if (!ch) return null;
     const asked = get().session?.history.filter((h) => h.c === c.id).map((h) => h.key) ?? [];
-    const avoid = [...asked, ...st.recent.map((r) => r.key), ...get().file.bad];
+    const bad = get().file.bad;
+    const avoid = [...asked, ...st.recent.map((r) => r.key), ...bad];
     const ctx = {
       title: note?.meta.title ?? '',
       siblings: [...siblings, ...partners],
       avoid,
+      exclude: bad,
       rng,
       languageClass: note ? groupOf(note).language : false,
       firstExposure: !st.attempts,
-      chunkText: ch?.text ?? '',
+      chunkText: ch.text,
     };
     let item = buildItem(c, st.level, ctx);
+    // A reported item is never asked again (in any phrasing): one a rung lower instead.
+    for (let lvl = Math.min(st.level, c.cap) - 1; bad.includes(item.key) && lvl >= 0; lvl--) item = buildItem(c, lvl as Level, ctx);
+    if (bad.includes(item.key)) return null;
     // A cached question the model phrased (and the checks passed).
     const cached = get().file.questions[`${item.key}#${c.chunkHash}`];
     if (cached?.length && item.level >= 1) {
@@ -517,20 +561,23 @@ export const useReview = create<ReviewState>((set, get) => {
     }
     // The grounding invariant: never show an item whose answer isn't the note's own text.
     const siblingTexts = ctx.siblings.flatMap((s) => s.facts.map((f) => f.text));
-    if (ch && !assertGroundedItem(item, ch.text, siblingTexts)) {
+    if (!assertGroundedItem(item, ch.text, siblingTexts)) {
       console.warn('review item dropped (not grounded)', item.key);
       item = buildItem(c, 0, { ...ctx, firstExposure: false });
+      if (bad.includes(item.key) || !assertGroundedItem(item, ch.text, siblingTexts)) return null;
     }
     return item;
   };
 
-  const show = (conceptIdToAsk: string) => {
+  /** Shows a concept's next question; false when it has none left to ask. */
+  const show = (conceptIdToAsk: string): boolean => {
     const c = conceptById(conceptIdToAsk);
     const sess = get().session;
-    if (!c || !sess) return;
+    if (!c || !sess) return false;
     const now = Date.now();
     const st = get().file.states[c.id] ?? freshState(now);
     const item = buildFor(c, st);
+    if (!item) return false;
     set({
       current: {
         item,
@@ -539,7 +586,8 @@ export const useReview = create<ReviewState>((set, get) => {
         hintUsed: false,
         revealed: false,
         firstInSession: !sess.asked.includes(c.id),
-        wasDue: isDue(get().file.states[c.id], now) && !sess.working.includes(c.id),
+        // Learned before and not being learned in this session: a review (one question; right means done for today).
+        wasDue: !!st.attempts && !sess.working.includes(c.id),
         stateBefore: st,
         shownAt: now,
       },
@@ -549,9 +597,18 @@ export const useReview = create<ReviewState>((set, get) => {
     const nc = peek ? conceptById(peek) : null;
     if (nc) {
       const nst = get().file.states[nc.id] ?? freshState(now);
-      if (nst.level >= 1) void phrase(buildFor(nc, nst), nc);
+      const upcoming = nst.level >= 1 ? buildFor(nc, nst) : null;
+      if (upcoming) void phrase(upcoming, nc);
     }
     if (item.level >= 1 && item.origin === 'template') void phrase(item, c);
+    return true;
+  };
+
+  /** The misconceptions without the one this answer added. */
+  const withoutMisconception = (cur: Current) => {
+    const list = get().misconceptions;
+    const last = list.at(-1);
+    return cur.feedback?.hypercorrect && last?.conceptId === cur.concept.id ? list.slice(0, -1) : list;
   };
 
   const apply = (g: Grade, graded: Item['graded']) => {
@@ -560,30 +617,31 @@ export const useReview = create<ReviewState>((set, get) => {
     if (!cur || !sess) return;
     const now = Date.now();
     const c = cur.concept;
-    const meta = get().pool.find((p) => p.id === c.id)!;
+    // The session's own entry for the concept, so mastery is judged the same way here and in the scheduler.
+    const meta = get().pool.find((p) => p.id === c.id);
+    if (!meta) return;
     const conf = cur.conf ?? null;
-    const after = recordAnswer(
-      cur.stateBefore,
-      { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: cur.answer, firstInSession: cur.firstInSession },
-      c.cap,
-      now,
-    );
-    const mastered = isMastered(after, c.cap);
+    const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: cur.answer, firstInSession: cur.firstInSession };
+    const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
+    const mastered = isMastered(after, meta.cap, meta.needs);
     const file = get().file;
     save({ ...file, states: { ...file.states, [c.id]: after } });
     const verdict = verdictOf(g.s);
     const missed = cur.item.points?.filter((p) => verdict !== 'right' && !(cur.answer && quickRubric(cur.answer, [p])?.s));
     const hypercorrect = verdict === 'wrong' && conf === 'sure';
     if (hypercorrect && cur.answer) set({ misconceptions: [...get().misconceptions, { conceptId: c.id, wrote: cur.answer.slice(0, 80), notesSay: cur.item.fact }] });
+    // Right after a hint counts as partly known: it comes back later in the session, without one.
+    const hinted = cur.hintUsed && verdict === 'right';
     set({
-      session: requeue(sess, meta, { key: cur.item.key, s: g.s, conf, mastered, wasDue: cur.wasDue }, now),
+      session: requeue(sess, meta, { key: cur.item.key, s: scoreOf(answer), conf, mastered, wasDue: cur.wasDue }, now),
       current: {
         ...cur,
+        sessBefore: sess,
         phase: 'feedback',
         feedback: {
           s: g.s,
           verdict,
-          note: g.note,
+          note: g.note ?? (hinted ? 'With a hint — it comes back later without one.' : undefined),
           missed,
           hypercorrect,
           lucky: verdict === 'right' && conf === 'guess',
@@ -679,12 +737,7 @@ export const useReview = create<ReviewState>((set, get) => {
       const startStates: Record<string, ConceptState | undefined> = {};
       for (const p of pool) startStates[p.id] = get().file.states[p.id];
       set({ session, pool, summary: null, current: null, overrides: 0, misconceptions: [], startStates, selection: noteIds });
-      const first = pickNext(session, pool, get().file.states, now, rng);
-      if (!first) {
-        finish();
-        return;
-      }
-      show(first);
+      advance();
     },
 
     async submit(answer, conf) {
@@ -785,38 +838,31 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     next() {
-      const sess = get().session;
-      if (!sess) return;
-      const nextId = sess.index >= sess.opts.length ? null : pickNext(sess, get().pool, get().file.states, Date.now(), rng);
-      if (!nextId) {
-        finish();
-        return;
-      }
-      show(nextId);
+      if (!get().session) return;
+      refresh();
+      advance();
     },
 
     override() {
       const cur = get().current;
       const sess = get().session;
       if (!cur || !sess || cur.phase !== 'feedback' || cur.overridden || get().overrides >= 3 || cur.feedback?.verdict === 'right') return;
+      const meta = get().pool.find((p) => p.id === cur.concept.id);
+      if (!meta || !cur.sessBefore) return;
       const now = Date.now();
       const c = cur.concept;
       const s = Math.max(cur.feedback?.s ?? 0, 0.8);
-      const after = recordAnswer(
-        cur.stateBefore,
-        { s, graded: 'self', level: cur.item.level, key: cur.item.key, conf: cur.conf ?? null, answer: cur.answer, firstInSession: cur.firstInSession },
-        c.cap,
-        now,
-      );
+      const answer = { s, graded: 'self' as const, level: cur.item.level, key: cur.item.key, conf: cur.conf ?? null, hint: cur.hintUsed, answer: cur.answer, firstInSession: cur.firstInSession };
+      const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
+      const mastered = isMastered(after, meta.cap, meta.needs);
       const file = get().file;
       save({ ...file, states: { ...file.states, [c.id]: after } });
-      // The session sees it as right now: no re-ask, not a miss.
-      const history = sess.history.map((h, i) => (i === sess.history.length - 1 ? { ...h, s } : h));
-      const misses = { ...sess.misses, [c.id]: Math.max(0, (sess.misses[c.id] ?? 1) - 1) };
+      // The session counts the answer again, as right: no re-ask, not a miss, out of the working set once mastered.
       set({
         overrides: get().overrides + 1,
-        session: { ...sess, history, misses, reask: sess.reask.filter((r) => r.c !== c.id), needsStudy: sess.needsStudy.filter((x) => x !== c.id) },
-        current: { ...cur, overridden: true, feedback: { ...cur.feedback!, s, verdict: 'right', after: Math.round(after.p * 100), mastered: isMastered(after, c.cap) } },
+        misconceptions: withoutMisconception(cur),
+        session: requeue(cur.sessBefore, meta, { key: cur.item.key, s: scoreOf(answer), conf: answer.conf, mastered, wasDue: cur.wasDue }, now),
+        current: { ...cur, overridden: true, feedback: { ...cur.feedback!, s, verdict: 'right', hypercorrect: false, after: Math.round(after.p * 100), mastered } },
       });
     },
 
@@ -824,8 +870,11 @@ export const useReview = create<ReviewState>((set, get) => {
       const cur = get().current;
       if (!cur) return;
       const file = get().file;
-      // The answer doesn't count, and the item isn't asked again.
-      save({ ...file, bad: [...new Set([...file.bad, cur.item.key])], states: { ...file.states, [cur.concept.id]: cur.stateBefore } });
+      const { [`${cur.item.key}#${cur.concept.chunkHash}`]: _phrasings, ...questions } = file.questions;
+      const { [cur.concept.id]: _counted, ...states } = file.states;
+      // The answer doesn't count, and the item isn't asked again in any phrasing.
+      save({ ...file, bad: [...new Set([...file.bad, cur.item.key])], questions, states: cur.stateBefore.attempts ? { ...states, [cur.concept.id]: cur.stateBefore } : states });
+      if (cur.sessBefore) set({ session: cur.sessBefore, misconceptions: withoutMisconception(cur), overrides: get().overrides - (cur.overridden ? 1 : 0) });
       get().next();
     },
 

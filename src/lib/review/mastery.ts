@@ -136,12 +136,30 @@ export function recall(s: ConceptState, now: number): number {
 }
 
 /**
- * Mastered: probable enough, shown at the level the notes allow, the last
- * answer was right, right on two different items, and at least once graded
- * by code (so one lenient model grade can never master a concept).
+ * What mastering a concept can ask for, given the items its notes allow:
+ * right on two different items (one, when the notes give only one) and at
+ * least once graded by code (unless no item of it can be — a formula is
+ * only self-checked).
  */
-export function isMastered(s: ConceptState, cap: Level = 3): boolean {
-  return s.p >= MASTERY_P && s.best >= Math.min(MASTERY_LEVEL, cap) && s.streak >= 1 && s.correctKeys.length >= 2 && s.codeCorrect >= 1;
+export interface MasteryNeeds {
+  keys: number;
+  code: boolean;
+}
+export const FULL_NEEDS: MasteryNeeds = { keys: 2, code: true };
+
+/**
+ * Mastered: probable enough, shown at the level the notes allow, the last
+ * answer was right, right on different items, and graded by code (so one
+ * lenient model grade can never master a concept) — as far as its notes allow.
+ */
+export function isMastered(s: ConceptState, cap: Level = 3, needs: MasteryNeeds = FULL_NEEDS): boolean {
+  return (
+    s.p >= MASTERY_P &&
+    s.best >= Math.min(MASTERY_LEVEL, cap) &&
+    s.streak >= 1 &&
+    s.correctKeys.length >= Math.min(2, needs.keys) &&
+    s.codeCorrect >= (needs.code ? 1 : 0)
+  );
 }
 
 export function isDue(s: ConceptState | undefined, now: number): boolean {
@@ -162,12 +180,15 @@ export interface Answer {
   firstInSession?: boolean;
 }
 
+/** A right answer after a hint is partial evidence: it was recognised, not recalled. */
+export const scoreOf = (a: Pick<Answer, 's' | 'hint'>) => (a.hint ? Math.min(a.s, 0.6) : a.s);
+
 /** Applies one graded answer. `cap` is the highest level the notes support for this concept. */
-export function recordAnswer(prev: ConceptState, a: Answer, cap: Level, now: number): ConceptState {
-  const wasMastered = isMastered(prev, cap);
+export function recordAnswer(prev: ConceptState, a: Answer, cap: Level, now: number, needs: MasteryNeeds = FULL_NEEDS): ConceptState {
+  const wasMastered = isMastered(prev, cap, needs);
   let p = prev.p;
   if (a.firstInSession && prev.last) p = recall(prev, now);
-  const s = a.hint ? Math.min(a.s, 0.6) : a.s;
+  const s = scoreOf(a);
   p = bktUpdate(p, s, slipGuess(a.graded, a.conf), prev.retaught ? BKT.learnAfterReteach : BKT.learn);
   const right = s >= 0.8;
   const code = a.graded === 'typed' || a.graded === 'mcq';
@@ -183,17 +204,18 @@ export function recordAnswer(prev: ConceptState, a: Answer, cap: Level, now: num
     missesAtLevel: s < 0.5 ? prev.missesAtLevel + 1 : 0,
     last: now,
     retaught: false,
-    misconception: !right && a.conf === 'sure' && a.answer ? a.answer.slice(0, 80) : right ? undefined : prev.misconception,
+    // Sure and wrong (a right answer that needed a hint is no misconception).
+    misconception: a.s < 0.5 && a.conf === 'sure' && a.answer ? a.answer.slice(0, 80) : right ? undefined : prev.misconception,
     recent: [...prev.recent, { at: now, key: a.key, graded: a.graded, level: a.level, s, conf: a.conf, hint: !!a.hint }].slice(-12),
   };
   next.level = nextLevel(prev, next, a, cap);
-  return schedule(prev, next, a, cap, wasMastered, now);
+  return schedule(prev, next, a, cap, needs, wasMastered, now);
 }
 
 /** Up a rung after a right answer (once it's likely known), down one after two misses at a rung. */
 function nextLevel(prev: ConceptState, next: ConceptState, a: Answer, cap: Level): Level {
   let level = prev.level;
-  if (a.s >= 0.8 && a.conf !== 'guess' && (next.p >= 0.6 || next.streak >= 2)) level = Math.min(3, level + 1) as Level;
+  if (scoreOf(a) >= 0.8 && a.conf !== 'guess' && (next.p >= 0.6 || next.streak >= 2)) level = Math.min(3, level + 1) as Level;
   else if (next.missesAtLevel >= 2) {
     level = Math.max(0, level - 1) as Level;
     next.missesAtLevel = 0;
@@ -205,15 +227,17 @@ function nextLevel(prev: ConceptState, next: ConceptState, a: Answer, cap: Level
  * When to see the concept again. Not mastered: later this session after a
  * miss, tomorrow after a right answer. Mastered: 1, 3, 7, 16, 36, 80, 120
  * days — longer when sure, no growth when guessing, no credit for reviewing
- * early, and a lapse shrinks the interval.
+ * early, and a lapse shrinks the interval. Needing a hint for a mastered
+ * concept is a softer lapse: the interval halves and it's back tomorrow.
  */
-function schedule(prev: ConceptState, next: ConceptState, a: Answer, cap: Level, wasMastered: boolean, now: number): ConceptState {
-  const mastered = isMastered(next, cap);
-  const right = a.s >= 0.8;
+function schedule(prev: ConceptState, next: ConceptState, a: Answer, cap: Level, needs: MasteryNeeds, wasMastered: boolean, now: number): ConceptState {
+  const mastered = isMastered(next, cap, needs);
+  const right = scoreOf(a) >= 0.8;
   if (wasMastered && !right) {
     // Lapse: mastery is lost until earned again.
-    const interval = Math.max(1, Math.round(prev.interval * 0.3));
-    return { ...next, lapses: prev.lapses + 1, durable: false, masteredAt: undefined, interval, due: now + IN_SESSION };
+    const hinted = !!a.hint && a.s >= 0.8;
+    const interval = Math.max(1, Math.round(prev.interval * (hinted ? 0.5 : 0.3)));
+    return { ...next, lapses: prev.lapses + (hinted ? 0 : 1), durable: false, masteredAt: undefined, interval, due: now + (hinted ? DAY : IN_SESSION) };
   }
   if (!mastered) return { ...next, due: now + (next.streak > 0 ? DAY : IN_SESSION) };
   const masteredAt = next.masteredAt ?? now;
@@ -236,9 +260,9 @@ export function percent(s: ConceptState | undefined, now: number): number {
 
 export type Status = 'new' | 'learning' | 'mastered' | 'solid' | 'needs-study';
 
-export function statusOf(s: ConceptState | undefined, cap: Level, needsStudy = false): Status {
+export function statusOf(s: ConceptState | undefined, cap: Level, needsStudy = false, needs: MasteryNeeds = FULL_NEEDS): Status {
   if (!s || !s.attempts) return 'new';
   if (needsStudy) return 'needs-study';
-  if (isMastered(s, cap)) return s.durable ? 'solid' : 'mastered';
+  if (isMastered(s, cap, needs)) return s.durable ? 'solid' : 'mastered';
   return 'learning';
 }

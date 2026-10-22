@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { heuristicConcepts, notReviewable, type Concept } from '../../src/lib/review/concepts';
-import { assertGroundedItem, blankOut, buildItem, mulberry32, validateQuestion, type BuildCtx } from '../../src/lib/review/items';
+import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type BuildCtx } from '../../src/lib/review/items';
 import { gradeShort, isDontKnow, normalizeTex, quickRubric, scoreRubric } from '../../src/lib/review/grade';
 import { chunkNote } from '../../src/lib/ai/rag';
 import { DAY, freshState, isMastered, recordAnswer } from '../../src/lib/review/mastery';
@@ -12,9 +12,11 @@ const byTitle = (t: string) => seed.find((n) => n.meta.title.startsWith(t))!;
 const vocabNote = byTitle('Vocabulario');
 const pretNote = byTitle('Pretérito');
 const calcNote = byTitle('Lecture 4');
+const cellNote = byTitle('Cell Structure');
 const vocab = heuristicConcepts(vocabNote, { languageClass: true });
 const pret = heuristicConcepts(pretNote, { languageClass: true });
 const calc = heuristicConcepts(calcNote);
+const cells = heuristicConcepts(cellNote);
 const chunkOf = (noteId: string, c: Concept) =>
   chunkNote(seed.find((n) => n.meta.id === noteId)!).find((ch) => ch.hash === c.chunkHash)!.text;
 const ctxFor = (c: Concept, siblings: Concept[], o: Partial<BuildCtx> = {}): BuildCtx => ({
@@ -135,6 +137,72 @@ test('a model-phrased question is used only if the passage answers it, it gives 
   assert.ok(ok, 'an apply question that quotes the example is accepted');
   assert.equal(ok!.fact, apply.fact, '…and the answer shown is the idea, not the example');
   assert.notEqual(apply.fact, apply.source.text);
+});
+
+test('a model-phrased question may not name the idea its example shows, nor add a premise in plain words', () => {
+  const c = pret.find((x) => x.name === 'El pretérito')!;
+  const text = chunkOf(c.noteId, c);
+  const apply = buildItem(c, 2, ctxFor(c, pret));
+  const proof = 'Use the preterite for completed actions with a';
+  const ask = (question: string, item = apply, cc = c, t = text, p = proof) => validateQuestion({ question, proof: p, keyPoints: [] }, item, t, cc.name);
+  assert.equal(ask('Why is “Ayer comí paella” an example of the preterite for completed actions?'), null, 'the rule is the answer');
+  assert.equal(ask('Why is “Ayer comí paella” an example of completed actions with a clear end?'), null, 'most of the rule, without its key word');
+  assert.equal(ask('Which idea does “Ayer comí paella” show, according to El pretérito in your notes?'), null, 'the idea’s name is the answer');
+  assert.ok(ask('Which idea from your notes does “Ayer comí paella” show, and why?'), 'quoting the example is fine');
+  // Plain lowercase words can carry a false premise too.
+  const mito = cells.find((x) => x.name === 'Mitochondria')!;
+  const mt = chunkOf(mito.noteId, mito);
+  const explain = buildItem(mito, 1, ctxFor(mito, cells));
+  const mp = 'Mitochondria — site of cellular respiration; make';
+  assert.equal(ask('Why do mitochondria stop producing ATP when oxygen runs out at night?', explain, mito, mt, mp), null);
+  assert.ok(ask('In your own words, what do your notes say about Mitochondria?', explain, mito, mt, mp));
+});
+
+test('a hint from the model never gives the answer away, with or without accents and markdown', () => {
+  const c = vocab.find((x) => x.name === 'la niñez')!;
+  const item = buildItem(c, 0, ctxFor(c, vocab, { firstExposure: false }));
+  assert.equal(item.expected, 'la niñez');
+  const f = c.facts.find((x) => x.id === item.factId)!;
+  const nudge = (n: string) => validateNudge(n, { item, blanked: blankOut(f) ?? f.text, answer: 'el niño', key: f.key });
+  assert.ok(!nudge('Is it la ninez?'));
+  assert.ok(!nudge('Is it **la niñez**?'));
+  assert.ok(!nudge('Could the word be NIÑEZ?'));
+  assert.ok(!nudge('Think of the Spanish word for a time of life — which is it?'), 'adds words the notes don’t have');
+  assert.ok(!nudge('Look at your notes.'), 'not a question');
+  assert.ok(nudge('What does the line in your notes say about childhood?'));
+  // Applying an idea: the hint can't name it either.
+  const p = pret.find((x) => x.name === 'El pretérito')!;
+  const apply = buildItem(p, 2, ctxFor(p, pret));
+  const ex = p.facts.find((x) => x.id === apply.factId)!;
+  const hint = (n: string) => validateNudge(n, { item: apply, blanked: ex.text, answer: 'the imperfect', key: ex.key });
+  assert.ok(!hint('Is it the preterite?'));
+  assert.ok(hint('Which idea in your notes does Ayer comí paella show?'));
+});
+
+test('mastery needs follow what an idea’s notes allow; self-checked ideas take turns over their lines', () => {
+  const lone = calc.find((x) => x.name === 'Removable discontinuity')!;
+  assert.deepEqual(masteryNeeds(lone), { keys: 1, code: true }, 'a lone definition gives one question');
+  assert.deepEqual(masteryNeeds(calc.find((x) => x.name === 'Limit laws')!), { keys: 2, code: false }, 'formulas are self-checked');
+  assert.deepEqual(masteryNeeds(vocab.find((x) => x.name === 'la guardería')!), { keys: 2, code: true });
+  // Nothing to blank: each line of the notes in turn, not the same prompt again and again.
+  const facts = ['Every quantity that changes is treated as a function of time.', 'The units of the answer are the units of the quantity over time.'].map((text, i) => ({
+    id: `f${i}`,
+    text,
+    key: null,
+    example: false,
+    fromInk: false,
+    item: false,
+  }));
+  const c: Concept = { id: 'c', noteId: 'n', chunkHash: 'h', blockId: null, section: 'Related rates', name: 'Related rates', kind: 'fact', facts, partners: [], cap: 0, thin: false, origin: 'heuristic' };
+  const ctx: BuildCtx = { title: 'Lecture 6', siblings: [], avoid: [], rng: mulberry32(1), chunkText: facts.map((f) => f.text).join('\n') };
+  const first = buildItem(c, 0, ctx);
+  const second = buildItem(c, 0, { ...ctx, avoid: [first.key] });
+  assert.equal(first.format, 'rate');
+  assert.notEqual(first.key, second.key);
+  assert.notEqual(first.prompt, second.prompt);
+  assert.equal(masteryNeeds(c).keys, 2);
+  // A reported item comes back only when nothing else is left.
+  assert.equal(buildItem(c, 0, { ...ctx, avoid: [first.key, second.key], exclude: [first.key] }).key, second.key);
 });
 
 test('short answers: accents, articles and spelling get a note, not a zero', () => {
