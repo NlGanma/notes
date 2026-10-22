@@ -54,7 +54,8 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
 
 export async function shot(page, name, opts = {}) {
   const file = path.join(OUT, `${name}.png`);
-  await page.screenshot({ path: file, ...opts });
+  // Fades are finished first, so the picture shows the screen as it settles (not a card half faded in).
+  await page.screenshot({ path: file, animations: 'disabled', ...opts });
   return file;
 }
 
