@@ -93,6 +93,17 @@ test('the grounding invariant rejects an item whose answer the notes don’t con
   assert.ok(!assertGroundedItem({ ...item, choices: ['toy', 'Napoleon'] }, text), 'an invented choice');
 });
 
+test('alternatives that share words (“portarse bien / mal”) are read from the key, and the item is still grounded', () => {
+  const c = vocab.find((x) => x.name === 'portarse bien / mal')!;
+  const toSpanish = buildItem(c, 0, ctxFor(c, vocab, { firstExposure: false }));
+  const toEnglish = buildItem(c, 0, ctxFor(c, vocab, { firstExposure: false, avoid: [toSpanish.key] }));
+  assert.deepEqual(toSpanish.accept, ['portarse bien', 'portarse mal']);
+  assert.deepEqual(toEnglish.accept, ['to behave well', 'to behave badly']);
+  const text = chunkOf(c.noteId, c);
+  for (const item of [toSpanish, toEnglish]) assert.ok(assertGroundedItem(item, text), item.expected);
+  assert.ok(!assertGroundedItem({ ...toSpanish, accept: ['portarse fatal'] }, text), 'an alternative the key doesn’t give');
+});
+
 test('a blank never hides most of a line, and leaves enough to know what is asked', () => {
   const f = { id: 'f', text: 'The **imperfect** describes ongoing or repeated past actions.', key: 'imperfect', example: false, fromInk: false, item: false };
   assert.equal(blankOut(f), 'The _____ describes ongoing or repeated past actions.');
