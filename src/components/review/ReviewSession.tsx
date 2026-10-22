@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ArrowRight, Check, CircleHelp, Flag, Lightbulb, MessageCircleQuestion, ShieldCheck, Undo2, X } from 'lucide-react';
-import { useReview, type Current } from '../../state/review';
+import { factOf, useReview, type Current } from '../../state/review';
+import { sectionShown } from '../../lib/review/items';
 import { useAI } from '../../state/ai';
 import { useUI } from '../../state/ui';
 import { useAssistant } from '../../state/assistant';
@@ -58,6 +59,7 @@ export function ReviewSession() {
 
   if (!current) return null;
   const progress = Math.min(1, session.index / session.opts.length);
+  const section = sectionShown(current.item, factOf(current.item, current.concept)?.key);
 
   return (
     <div className="rv-session" style={meta?.color ? { ['--class' as string]: meta.color } : undefined}>
@@ -86,7 +88,7 @@ export function ReviewSession() {
           <span className="rv-class-chip">{meta?.groupName}</span>
           <span className="rv-where">
             {current.item.source.title}
-            {current.item.source.section ? ` › ${current.item.source.section}` : ''}
+            {section ? ` › ${section}` : ''}
           </span>
           <span className="grow" />
           <span className="rv-level" title={current.item.origin === 'model' ? 'AI-phrased question, checked against your notes' : 'Built from your notes'}>
@@ -191,11 +193,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
           ))}
         </div>
       )}
-      {current.hint && (
-        <div className="rv-hint">
-          <Lightbulb size={14} /> {current.hint}
-        </div>
-      )}
+      {current.hint && <Hint text={current.hint} />}
       <div className="rv-actions">
         {!current.hintUsed && item.format !== 'mcq' && (
           <button className="btn is-ghost is-small" onClick={() => useReview.getState().showHint()} disabled={grading}>
@@ -218,6 +216,16 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
           )
         )}
       </div>
+    </div>
+  );
+}
+
+/** A hint quotes the notes, math and all. */
+function Hint({ text }: { text: string }) {
+  return (
+    <div className="rv-hint">
+      <Lightbulb size={14} />
+      <span className="md is-inline" dangerouslySetInnerHTML={{ __html: md(text) }} />
     </div>
   );
 }
@@ -307,11 +315,7 @@ function FeedbackView({ current }: { current: Current }) {
       )}
       {canRetry && (
         <div className="rv-retry">
-          {current.hint && (
-            <div className="rv-hint">
-              <Lightbulb size={14} /> {current.hint}
-            </div>
-          )}
+          {current.hint && <Hint text={current.hint} />}
           <div className="rv-retry-row">
             <input
               className="rv-input"

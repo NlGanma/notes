@@ -2,10 +2,10 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { useVault } from '../../src/state/vault';
 import { useAI } from '../../src/state/ai';
-import { conceptsOf, useReview } from '../../src/state/review';
+import { conceptsOf, factOf, useReview } from '../../src/state/review';
 import { buildSeedNotes, SEED_CLASSES } from '../../src/lib/vault/seed';
 import { isReviewable } from '../../src/lib/review/tree';
-import { buildItem, mulberry32, type Item } from '../../src/lib/review/items';
+import { buildItem, hintFor, mulberry32, type Item } from '../../src/lib/review/items';
 import { chunkNote } from '../../src/lib/ai/rag';
 import { DAY, freshState, isMastered, type Confidence, type Level } from '../../src/lib/review/mastery';
 import type { NoteDoc, VaultBackend } from '../../src/lib/vault/types';
@@ -238,6 +238,36 @@ function ask(title: string, name: string, level: Level, want: (it: Item) => bool
 
 const lastGraded = (item: Item) => review().file.states[item.conceptId]?.recent.at(-1)?.graded;
 const preterite = (it: Item) => it.format === 'cloze' && it.expected === 'preterite';
+
+test('Hint, and the cue after a miss, point back to the notes without the answer', async () => {
+  const fold = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}+/gu, '')
+      .toLowerCase();
+  for (const [title, name, want] of [
+    ['Cell Structure', 'Nucleus', (it: Item) => it.format === 'recall'],
+    ['Pretérito', 'El pretérito', preterite],
+    ['Pretérito', 'El pretérito', (it: Item) => it.expected === '-é, -aste, -ó, -amos, -aron'],
+    ['Lecture 4', 'Squeeze theorem', (it: Item) => it.format === 'cloze' && /\$/.test(it.expected ?? '')],
+    ['Vocabulario', 'portarse bien / mal', (it: Item) => it.expected === 'portarse bien / mal'],
+  ] as const) {
+    const item = ask(title, name, 0, want);
+    const c = review().current!.concept;
+    const f = factOf(item, c);
+    review().showHint();
+    const hint = review().current!.hint!;
+    assert.equal(hint, hintFor(item, f));
+    await review().submit('banana', 'sure');
+    const cue = review().current!.hint!;
+    assert.equal(cue, hintFor(item, f, true), 'offline, the cue is code’s');
+    for (const h of [hint, cue]) {
+      assert.ok(!fold(h).includes(fold(item.expected!)), `${h} gives away ${item.expected}`);
+      assert.ok(!fold(h).includes(fold(item.expected!.split(/[,/]/)[0])), `${h} gives away part of ${item.expected}`);
+      assert.ok(!/What do your notes say about/.test(h), 'the idea isn’t named when its name is the answer');
+    }
+  }
+});
 
 test('a typed answer that only repeats what the question shows is wrong, however long', async () => {
   for (const [answer, verdict] of [

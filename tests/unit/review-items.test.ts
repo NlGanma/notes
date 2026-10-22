@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { heuristicConcepts, notReviewable, type Concept } from '../../src/lib/review/concepts';
-import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type BuildCtx } from '../../src/lib/review/items';
+import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type BuildCtx, type Item } from '../../src/lib/review/items';
 import { gradeShort, isDontKnow, normalizeTex, quickRubric, scoreRubric } from '../../src/lib/review/grade';
 import { chunkNote } from '../../src/lib/ai/rag';
 import { DAY, freshState, isMastered, recordAnswer } from '../../src/lib/review/mastery';
@@ -214,6 +214,110 @@ test('a hint from the model never gives the answer away, with or without accents
   const hint = (n: string) => validateNudge(n, { item: apply, blanked: ex.text, answer: 'the imperfect', key: ex.key });
   assert.ok(!hint('Is it the preterite?'));
   assert.ok(hint('Which idea in your notes does Ayer comí paella show?'));
+});
+
+/**
+ * What a hint must never say (checked apart from the app's own check, and more strictly): an item's
+ * answer, alternatives, key, any part of a listed key, a formula of it or most of one, or a word of
+ * the same stem as one of theirs — unless the question shows it. A formula cut in two is a leak too.
+ */
+function leakIn(hint: string, item: Item, key: string | null | undefined): string | null {
+  const fold = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}+/gu, '')
+      .toLowerCase()
+      .replace(/\*\*|==|`/g, '');
+  if ((hint.match(/(?<!\\)\$/g) ?? []).length % 2) return 'a formula cut in two';
+  const h = fold(hint);
+  const shown = fold(item.prompt);
+  const words = (s: string): string[] => s.match(/\p{L}+/gu) ?? [];
+  const fresh = words(h).filter((w) => !words(shown).includes(w));
+  for (const a of [item.expected, ...(item.accept ?? []), key, ...(item.hide ?? [])]) {
+    if (!a) continue;
+    const parts = [a, ...(a.includes('$') ? (a.match(/\$\$[\s\S]*?\$\$|\$[^$]+\$/g) ?? []) : a.split(/[,/;]/))].map((p) => fold(p).trim()).filter((p) => /[\p{L}\p{N}]/u.test(p));
+    for (const p of parts) {
+      if (shown.includes(p)) continue;
+      // As the e2e suite reads it: anywhere in the hint, even inside a word ("-é" with what follows it).
+      if (p.replace(/[^\p{L}\p{N}]/gu, '').length >= 3 ? h.includes(p) : new RegExp(`${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(h)) return `“${p}”`;
+      // Most of a formula, spaces aside.
+      const tight = (s: string) => s.replace(/[\s$]/g, '');
+      if (p.includes('$') && tight(p).length >= 6) {
+        const f = tight(p);
+        const n = Math.ceil(f.length * 0.6);
+        for (let i = 0; i + n <= f.length; i++) if (tight(h).includes(f.slice(i, i + n))) return `most of ${p}`;
+      }
+    }
+    // A word of the same stem ("imperfecto" for "imperfect", "pretérito" for "preterite").
+    for (const w of words(fold(a.replace(/\$[^$]*\$/g, ' ')))) {
+      if (w.length < 5 || words(shown).includes(w)) continue;
+      const hit = fresh.find((x) => x.length >= 5 && (x.startsWith(w) || w.startsWith(x) || (x.length >= 6 && w.slice(0, 6) === x.slice(0, 6))));
+      if (hit) return `“${hit}” for “${w}”`;
+    }
+  }
+  return null;
+}
+
+test('a hint or a cue after a miss never gives the answer away, for every question the demo notes allow', () => {
+  let checked = 0;
+  for (const note of seed) {
+    const cs = heuristicConcepts(note, { languageClass: /Spanish/.test(note.meta.folder) });
+    for (const c of cs) {
+      const keys = new Set<string>();
+      for (const firstExposure of [true, false])
+        for (let level = 0; level <= 3; level++) {
+          const avoid: string[] = [];
+          for (let i = 0; i < 6; i++) {
+            const item = buildItem(c, level as 0, { title: note.meta.title, siblings: cs.filter((x) => x !== c), avoid, rng: mulberry32(i), firstExposure, chunkText: chunkOf(c.noteId, c) });
+            avoid.push(item.key);
+            if (keys.has(item.key)) continue;
+            keys.add(item.key);
+            const f = c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
+            for (const hint of [hintFor(item, f), hintFor(item, f, true)]) {
+              const leak = leakIn(hint, item, f.key);
+              assert.equal(leak, null, `${item.format} “${item.prompt.replace(/\s+/g, ' ').slice(0, 70)}” → “${hint}” gives away ${leak}`);
+              assert.ok(!/Look at “([^”]+)” in \1\b/.test(hint), `the note is named once: ${hint}`);
+              checked++;
+            }
+          }
+        }
+    }
+  }
+  assert.ok(checked > 150, `${checked} hints checked`);
+});
+
+test('a hint quotes the words next to the blank, never cutting a formula, and names a place only when it gives nothing away', () => {
+  const ask = (cs: Concept[], name: string, want: (it: Item) => boolean) => {
+    const c = cs.find((x) => x.name === name)!;
+    for (let i = 0, avoid: string[] = []; i < 6; i++) {
+      const it = buildItem(c, 0, ctxFor(c, cs.filter((x) => x !== c), { firstExposure: false, avoid, title: seed.find((n) => n.meta.id === c.noteId)!.meta.title }));
+      if (want(it)) return { it, f: c.facts.find((x) => x.id === it.factId)! };
+      avoid.push(it.key);
+    }
+    throw new Error(name);
+  };
+  // The words before the blank, from the start of the line.
+  const pretCloze = ask(pret, 'El pretérito', (it) => it.expected === '-é, -aste, -ó, -amos, -aron');
+  // (Where the line is from is on the card, not repeated in the question.)
+  assert.equal(pretCloze.it.prompt, 'Fill in the blank:\n\n> Regular -ar endings: _____ — hablé, hablaste, habló');
+  assert.equal(hintFor(pretCloze.it, pretCloze.f, true), 'Look at “El pretérito” in Pretérito vs. imperfecto: the line that starts “Regular -ar endings…”. What comes next?');
+  // The term opens the line: the words after it — and not the term, nor a section named like the answer.
+  const nucleus = ask(cells, 'Nucleus', () => true);
+  assert.equal(hintFor(nucleus.it, nucleus.f), 'Look at “Organelles” in Cell Structure & Organelles: the line with “…holds DNA; the nucleolus…”.');
+  const preterite = ask(pret, 'El pretérito', (it) => it.expected === 'preterite');
+  assert.equal(hintFor(preterite.it, preterite.f), 'Look in your notes for the line that starts “Use the…”.');
+  // A formula is quoted whole or not at all.
+  const squeeze = ask(calc, 'Squeeze theorem', (it) => it.format === 'cloze' && /\$/.test(it.expected ?? ''));
+  assert.equal(hintFor(squeeze.it, squeeze.f), 'Look at “Squeeze theorem” in Lecture 4 — Limits & Continuity: the line with “…near $a$ and $\\lim g = \\lim h = L$…”.');
+  // A note with no sections is named once; a title holding the answer isn't named at all.
+  const toEnglish = ask(vocab, 'portarse bien / mal', (it) => it.expected === 'to behave well / badly');
+  assert.equal(hintFor(toEnglish.it, toEnglish.f), 'Look at “Vocabulario — la niñez”: the line that starts “portarse bien / mal…”.');
+  const childhood = ask(vocab, 'la niñez', (it) => it.expected === 'la niñez');
+  assert.equal(hintFor(childhood.it, childhood.f, true), 'Look in your notes for the line with “…childhood”. What comes before it?');
+  // An explanation's words are its answer: only where to look.
+  const explain = buildItem(pret[0], 1, ctxFor(pret[0], pret, { title: pretNote.meta.title }));
+  assert.equal(explain.format, 'explain');
+  assert.equal(hintFor(explain, pret[0].facts[0]), `Look at “${pret[0].section}” in Pretérito vs. imperfecto.`);
 });
 
 test('mastery needs follow what an idea’s notes allow; self-checked ideas take turns over their lines', () => {

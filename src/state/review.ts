@@ -8,7 +8,7 @@ import { expandProof } from '../lib/ai/quote';
 import { classForFolder, classInfo } from '../lib/classes';
 import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
 import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
-import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
+import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
 import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
 import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
@@ -302,6 +302,8 @@ export function dueCount(now = Date.now()): number {
 }
 
 const where = (c: Concept, title: string) => [title, c.section].filter(Boolean).join(' › ');
+/** The line of the notes an item asks about. */
+export const factOf = (item: Item, c: Concept): Fact | undefined => c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
 
 export const useReview = create<ReviewState>((set, get) => {
   const save = (file: ReviewFile) => {
@@ -552,19 +554,13 @@ export const useReview = create<ReviewState>((set, get) => {
 
   /** A guiding question after a miss: code's cue at once, the model's (if it passes the checks) a moment later. */
   const nudge = async (item: Item, c: Concept, answer: string) => {
-    const f = c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
-    const before = f?.key ? f.text.slice(0, f.text.indexOf(f.key)).replace(/\*\*|==/g, '').trim().split(/\s+/).slice(-4).join(' ') : '';
-    const note = noteOf(c.noteId);
-    const cue =
-      before && before.split(/\s+/).length >= 2
-        ? `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'} — the line that starts “${before}…”. What comes next?`
-        : `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}. What do your notes say about ${c.name.replace(/\*\*/g, '')}?`;
+    const f = factOf(item, c);
     const gen = generation;
     const setHint = (h: string) => {
       const cur = get().current;
       if (cur && cur.item.key === item.key && gen === generation) set({ current: { ...cur, hint: h } });
     };
-    setHint(cue);
+    setHint(hintFor(item, f, true));
     if (!online() || item.format === 'mcq' || isDontKnow(answer)) return;
     try {
       const blanked = f ? (blankOut(f) ?? f.text) : item.fact;
@@ -937,11 +933,7 @@ export const useReview = create<ReviewState>((set, get) => {
     showHint() {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      const c = cur.concept;
-      const f = c.facts.find((x) => x.id === cur.item.factId) ?? c.facts[0];
-      const note = noteOf(c.noteId);
-      const start = f ? f.text.replace(/\*\*|==/g, '').split(/\s+/).slice(0, 4).join(' ') : '';
-      set({ current: { ...cur, hintUsed: true, hint: `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}${start ? ` — it starts “${start}…”` : ''}.` } });
+      set({ current: { ...cur, hintUsed: true, hint: hintFor(cur.item, factOf(cur.item, cur.concept)) } });
     },
 
     async retry(answer) {

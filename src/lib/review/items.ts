@@ -104,8 +104,6 @@ export function blankOut(f: Fact): string | null {
   return clean(`${before}${BLANK}${after}`);
 }
 
-const where = (title: string, section: string) => [title, section].filter(Boolean).join(' › ');
-
 export interface BuildCtx {
   title: string;
   /** Other concepts of the same kind (same chapter first): their keys are the wrong choices. */
@@ -165,7 +163,8 @@ function recallItems(c: Concept, f: Fact, ctx: BuildCtx): Item[] {
   if (blanked) {
     out.push({
       ...base(c, f, 'cloze', 0, ctx, 'typed'),
-      prompt: `Fill in the blank (from ${where(ctx.title, c.section)}):\n\n> ${blanked}`,
+      // Where the line is from is on the card already.
+      prompt: `Fill in the blank:\n\n> ${blanked}`,
       expected: key,
       accept: alternatives(key),
     });
@@ -176,7 +175,7 @@ function recallItems(c: Concept, f: Fact, ctx: BuildCtx): Item[] {
       const choices = shuffle([key, ...wrong], ctx.rng);
       out.push({
         ...base(c, f, 'mcq', 0, ctx, 'mcq'),
-        prompt: `Which completes this line from ${where(ctx.title, c.section)}?\n\n> ${blanked}`,
+        prompt: `Which completes this line?\n\n> ${blanked}`,
         choices,
         correct: choices.indexOf(key),
         expected: key,
@@ -412,8 +411,88 @@ export function validateQuestion(raw: ModelQuestion, item: Item, chunkText: stri
  */
 export function validateNudge(nudge: string, o: { item: Item; blanked: string; answer: string; key?: string | null }): boolean {
   const n = nudge.trim();
-  if (!/\?\s*$/.test(n) || n.split(/\s+/).length > 25) return false;
+  if (!/\?\s*$/.test(n) || n.split(/\s+/).length > 25 || revealsAnswer(n, o.item, o.key)) return false;
   const answers = [o.item.expected, ...(o.item.accept ?? []), o.key, ...(o.item.hide ?? [])].filter((x): x is string => !!x && !!clean(x));
   if (answers.some((a) => givesAway(n, a, o.item.prompt))) return false;
   return novelWords(n, `${o.blanked}\n${o.item.prompt}\n${o.answer}`).length <= 1;
+}
+
+/** A formula: `$$…$$` or `$…$`. */
+const MATH = /\$\$[\s\S]*?\$\$|\$[^$]+\$/g;
+
+/** What an item asks for, and each part of it: its answers and key, the idea an example shows, each part of a listed key and each formula in it. */
+function answerParts(item: Pick<Item, 'expected' | 'accept' | 'hide'>, key?: string | null): string[] {
+  return [item.expected, ...(item.accept ?? []), key, ...(item.hide ?? [])]
+    .filter((x): x is string => !!x && !!clean(x))
+    .flatMap((p) => [p, ...(p.includes('$') ? (p.match(MATH) ?? []) : p.split(/\s*[,;/]\s*/))]);
+}
+
+/** Two words of one stem: "preterite" and "pretérito", "continuity" and "continuous". */
+const sameStem = (a: string, b: string) => a.length >= 7 && b.length >= 7 && a.slice(0, 7) === b.slice(0, 7);
+
+/**
+ * Whether a text gives away what an item asks for beyond what its question
+ * shows — an answer, its key, a part of a listed key ("-é" of "-é, -aste, -ó")
+ * or a formula in it, or a word of them inside another word or of the same
+ * stem; accents, case and markdown ignored — or cuts a formula in two.
+ */
+export function revealsAnswer(text: string, item: Pick<Item, 'prompt' | 'expected' | 'accept' | 'hide'>, key?: string | null): boolean {
+  if ((text.match(/(?<!\\)\$/g) ?? []).length % 2) return true;
+  const said = bare(text);
+  const shown = bare(item.prompt);
+  const seen = new Set(tokenize(item.prompt));
+  const words = tokenize(text).filter((w) => !seen.has(w));
+  return answerParts(item, key).some((p) => {
+    const b = bare(p);
+    if (!b.trim() || shown.includes(b)) return false;
+    if (said.includes(b)) return true;
+    // "imperfecto" gives "imperfect" away (a formula's commands, like \lim, are no words).
+    return tokenize(p.replace(MATH, ' ')).some((a) => a.length >= 3 && !seen.has(a) && words.some((w) => w.includes(a) || sameStem(a, w)));
+  });
+}
+
+/** The section a question's card names: none when that would give the answer away (an example's idea is often its heading). */
+export function sectionShown(item: Item, key?: string | null): string {
+  const s = item.source.section;
+  return s && !revealsAnswer(s, item, key) ? s : '';
+}
+
+/** Words of a line without markdown, a formula kept whole. */
+const lineWords = (s: string): string[] => clean(s).match(/(?:\$\$[\s\S]*?\$\$|\$[^$]*\$|[^\s$])+/g) ?? [];
+/** A word that says something (not a dash or a colon on its own). */
+const saysSomething = (w: string) => /[\p{L}\p{N}$]/u.test(w);
+const quoted = (words: string[]) => words.join(' ').replace(/[\s,;:.\/—–-]+$/u, '');
+
+/**
+ * A few words of a fact's line next to its key, never the key itself: the
+ * 3–4 just before it or, when the key (nearly) opens the line, the ones after.
+ */
+function wordsAround(f: Fact): { text: string; after: boolean; fromStart: boolean; more: boolean } | null {
+  const i = f.key ? f.text.indexOf(f.key) : -1;
+  if (i < 0) return null;
+  const before = lineWords(f.text.slice(0, i));
+  while (before.length && !saysSomething(before[before.length - 1])) before.pop();
+  const after = lineWords(f.text.slice(i + f.key!.length));
+  while (after.length && !saysSomething(after[0])) after.shift();
+  if (before.length >= 2 || (before.length && !after.length)) return { text: quoted(before.slice(-4)), after: false, fromStart: before.length <= 4, more: true };
+  return after.length ? { text: quoted(after.slice(0, 4)), after: true, fromStart: false, more: after.length > 4 } : null;
+}
+
+/**
+ * A hint back to the notes that never gives the answer away: where the line
+ * is and, for a short answer, a few of its words next to the blank. After a
+ * miss (`cue`) it asks what's missing. A free answer gets the place only (the
+ * line is its answer), and a place named after the answer isn't named.
+ */
+export function hintFor(item: Item, f: Fact | undefined, cue = false): string {
+  const fine = (s: string) => !!s.trim() && !revealsAnswer(s, item, f?.key);
+  const { title, section } = item.source;
+  const sec = fine(section) && normalizeForQuote(section) !== normalizeForQuote(title) ? section : '';
+  const ttl = fine(title) ? title : '';
+  const place = sec && ttl ? `“${sec}” in ${ttl}` : sec || ttl ? `“${sec || ttl}”` : '';
+  const near = f && item.expected ? wordsAround(f) : null;
+  const line = !near ? '' : !near.after && near.fromStart ? `the line that starts “${near.text}…”` : `the line with “…${near.text}${near.more ? '…' : ''}”`;
+  const ask = cue && near ? (near.after ? ' What comes before it?' : ' What comes next?') : '';
+  const hints = [line && (place ? `Look at ${place}: ${line}.${ask}` : `Look in your notes for ${line}.${ask}`), place && `Look at ${place}.`];
+  return hints.find((h) => h && !revealsAnswer(h, item, f?.key)) || 'Look back at your notes.';
 }
