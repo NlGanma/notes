@@ -15,7 +15,7 @@
     "preview": "vite preview --port 4173",
     "app": "electron .",
     "app:dev": "concurrently -k -n vite,electron \"vite --port 5173 --strictPort\" \"wait-on tcp:5173 && cross-env NIB_DEV_URL=http://localhost:5173 electron .\"",
-    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
     "test": "tsx --test tests/unit/*.test.ts",
     "eval:grounding": "tsx scripts/eval-grounding.mts",
     "mock-llm": "node scripts/mock-llm.mjs",
