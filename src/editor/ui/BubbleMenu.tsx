@@ -71,9 +71,10 @@ type Panel = null | 'ai' | 'turn' | 'color' | 'link';
  */
 export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTextRequest): void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [panelLeft, setPanelLeft] = useState(0);
+  const [panelUp, setPanelUp] = useState(false);
   const [link, setLink] = useState('');
   const [mouseDown, setMouseDown] = useState(false);
   /** Focus is inside the bubble (e.g. its question field) — keep it open. */
@@ -132,9 +133,8 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
     const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
     // 8px above the selection; below it when there is no room under the toolbar.
     let top = r.top - 36 - 8;
-    const below = top < 120;
-    if (below) top = r.bottom + 8;
-    setPos({ left, top, below });
+    if (top < 120) top = r.bottom + 8;
+    setPos({ left, top });
   }, [show, st.from, st.to, editor]);
 
   if (!show || mouseDown) return null;
@@ -142,6 +142,9 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
   const selectedText = () => editor.state.doc.textBetween(st.from, st.to, '\n', '￼');
   const toggle = (p: Panel, e: React.MouseEvent<HTMLElement>) => {
     setPanelLeft(e.currentTarget.offsetLeft);
+    // Drop down under the bar, or up over it when the window has no room below.
+    const bar = ref.current?.getBoundingClientRect();
+    setPanelUp(!!bar && bar.bottom + 380 > window.innerHeight && bar.top > 380);
     setPanel(panel === p ? null : p);
   };
   const mark = (on: boolean, label: string, icon: ReactNode, run: () => void) => (
@@ -153,7 +156,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
   return createPortal(
     <div
       ref={ref}
-      className="bubble"
+      className={cx('bubble', panelUp && 'is-up')}
       style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
       onMouseDown={(e) => {
         if (!(e.target as HTMLElement).closest('input')) e.preventDefault();

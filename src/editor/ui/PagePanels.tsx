@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, Copy, FolderInput, Minus, Plus, Printer, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Copy, FolderInput, Minus, Plus, Printer, Trash2, ZoomIn } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
@@ -130,6 +130,7 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
         <span className="menu-label">Make a copy</span>
       </button>
       <div className="menu-item more-zoom">
+        <ZoomIn size={20} />
         <span className="menu-label">Zoom</span>
         <button className="icon-btn is-tiny" aria-label="Zoom out" title={`Zoom out  ${MOD}−`} onClick={() => useUI.getState().setZoom(zoom / 1.1)}>
           <Minus size={18} />

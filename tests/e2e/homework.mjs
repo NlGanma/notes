@@ -227,7 +227,7 @@ check(await page.locator('.hw-row-item.is-done:has-text("Problem Set 4")').count
 // ---------------------------------------------------------------- class-scoped Q&A and study tools
 await page.click('.tree-row.is-class:has-text("Calculus I")');
 await page.click('.class-view button[aria-label="Ask your Calculus I notes"]');
-await page.waitForSelector('.library-title h1:has-text("Ask Calculus I")');
+await page.waitForSelector('.library-title h1:has-text("Calculus I")');
 await page.fill('.library-composer textarea', 'What does the squeeze theorem say?');
 await page.press('.library-composer textarea', 'Enter');
 await page.waitForFunction(() => !document.querySelector('.msg.is-streaming'), null, { timeout: 20000 });

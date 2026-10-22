@@ -116,15 +116,19 @@ check(/Not in your notes: who discovered it/i.test(await libBot().locator('.cove
 check((await libBot().locator('.outside-notes').count()) >= 2, '…and answered separately in its own labelled box');
 await shot(page, 'grounding-03-library');
 
-// "Never use the AI's own knowledge": say so, make no model call.
-await page.click('.library .strict-toggle');
+// "Only my notes": say so, make no model call.
+await page.click('.library button[title="Configure chat"]');
+await page.click('.chat-config .strict-toggle');
+await page.click('.chat-config .btn:has-text("Save")');
 before = await stats();
 await libAsk('Who painted the Mona Lisa?');
 after = await stats();
 check(/answer only from your notes/i.test(await libBot().locator('.coverage-banner').textContent().catch(() => '')), 'with own knowledge off, it only says the notes don’t cover it');
 check(!(await libBot().locator('.outside-notes').count()), '…shows no own-knowledge answer');
 check(after.chat === before.chat, '…and makes no model call at all');
-await page.click('.library .strict-toggle');
+await page.click('.library button[title="Configure chat"]');
+await page.click('.chat-config .config-option:not(.strict-toggle)');
+await page.click('.chat-config .btn:has-text("Save")');
 
 // ---------------------------------------------------------------- partly covered
 await openClassNote(page, 'Spanish II', 'Pretérito');

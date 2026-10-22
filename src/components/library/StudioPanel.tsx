@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   BookOpenText,
   ChevronRight,
@@ -221,7 +221,6 @@ export function StudioPanel({
 /** NotebookLM's pencil dialog: what to focus on, then Generate. */
 function CustomizeDialog({ tool, onClose, onGenerate }: { tool: StudyTool | null; onClose(): void; onGenerate(t: StudyTool, topic: string): void }) {
   const [topic, setTopic] = useState('');
-  const ref = useRef<HTMLTextAreaElement>(null);
   if (!tool) return null;
   const look = TOOL_LOOK[tool];
   const go = () => {
@@ -245,7 +244,6 @@ function CustomizeDialog({ tool, onClose, onGenerate }: { tool: StudyTool | null
         </label>
         <textarea
           id="studio-topic"
-          ref={ref}
           autoFocus
           className="lib-dialog-text"
           value={topic}

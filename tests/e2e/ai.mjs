@@ -106,13 +106,10 @@ await page.waitForSelector('.flashcards', { timeout: 20000 });
 await page.click('.fc-card');
 await page.waitForTimeout(500);
 await shot(page, 'ai-08-flashcards');
-await page.click('.study-tool:has-text("Quiz me")').catch(() => undefined);
 await page.click('.library button[title="New conversation"]');
-await page.click('.study-tool:has-text("Quiz me")');
+await page.click('.study-tool:has-text("Quiz")');
 await page.waitForSelector('.quiz', { timeout: 20000 });
-const choices = page.locator('.quiz-q').first().locator('.quiz-choice');
-await choices.nth(1).click();
-await page.locator('.quiz-q').nth(1).locator('.quiz-choice').nth(0).click();
+await page.locator('.quiz-choice').nth(1).click();
 check(await page.locator('.quiz-choice.is-right').count(), 'quiz marks answers');
 await shot(page, 'ai-09-quiz');
 

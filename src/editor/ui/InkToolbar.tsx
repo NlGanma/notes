@@ -23,7 +23,6 @@ import {
   Sigma,
   Signature,
   Square,
-  Strikethrough,
   Triangle,
   Type,
   Underline,
@@ -127,7 +126,6 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
       bold: e.isActive('bold'),
       italic: e.isActive('italic'),
       underline: e.isActive('underline'),
-      strike: e.isActive('strike'),
       task: e.isActive('taskList'),
       highlight: e.isActive('highlight'),
       hlColor: (e.getAttributes('highlight').color as string | undefined) ?? '',
@@ -327,10 +325,6 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
       <button className={cx('tb-btn is-mark tb-x2', ed.underline && 'is-active')} onClick={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
         <Underline size={20} />
         <Tip label="Underline" kbd={`${MOD}U`} />
-      </button>
-      <button className={cx('tb-btn is-mark tb-x2', ed.strike && 'is-active')} onClick={() => editor.chain().focus().toggleStrike().run()} aria-label="Strikethrough">
-        <Strikethrough size={20} />
-        <Tip label="Strikethrough" kbd={`⇧${MOD}X`} />
       </button>
       <span className="tb-sep is-inner tb-x2" />
       <button className={cx('tb-btn tb-hl tb-x2', pop === 'textHl' && 'is-open')} onClick={(e) => open('textHl', e.currentTarget)} aria-label="Highlight colour">

@@ -3,12 +3,16 @@
  * the white page, a plain title with icon buttons, a greeting with assist chips, the same chat as
  * Ask your notes, and a fully rounded input at the bottom. */
 
+/* Like Gemini's side panel and Drive's details pane: its own white panel on the shell colour, beside the page. */
 .assistant {
   width: var(--assistant-w);
   flex: none;
   display: flex;
   flex-direction: column;
-  background: var(--bg-shell);
+  margin: 0 8px 0 8px;
+  background: var(--bg);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  overflow: hidden;
   animation: slide-in 0.2s var(--ease);
   min-height: 0;
 }
@@ -1177,7 +1181,3 @@
   color: var(--warning);
 }
 
-/* On the shell-coloured Assistant panel, the bubble needs one step more tint to show. */
-.assistant .msg-bubble {
-  background: #e9eef6;
-}

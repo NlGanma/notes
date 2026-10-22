@@ -262,7 +262,8 @@ export function LibraryView() {
   const ask = (q?: string, tool?: StudyTool) => {
     const prompt = (q ?? text).trim();
     if ((!prompt && !tool) || streaming || !count) return;
-    if (q === undefined || tool) setText('');
+    // Only a typed question empties the box (a tile or chip leaves what's being typed alone).
+    if (q === undefined) setText('');
     void useAssistant.getState().askLibrary({ prompt, scope, tool, scopeLabel: label });
     if (tool) setWaitFor(useAssistant.getState().threads[LIBRARY_KEY]?.messages.at(-1)?.id ?? null);
   };

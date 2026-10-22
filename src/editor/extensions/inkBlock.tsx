@@ -188,7 +188,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
             item(<GraduationCap size={20} />, 'Tutor me through it', () => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'tutor' }))}
           <div className="menu-sep" />
           {transcript && !transcript.stale && item(showTranscript ? <EyeOff size={20} /> : <Eye size={20} />, showTranscript ? 'Hide what Nib read' : 'Show what Nib read', () => setShowTranscript((v) => !v))}
-          {item(<ScanText size={20} />, 'Read handwriting', () => editorBus.emit('ink:transcribe', { editor, blockId: id }), 'Makes it searchable')}
+          {item(<ScanText size={20} />, 'Read handwriting', () => editorBus.emit('ink:transcribe', { editor, blockId: id }))}
           {item(<Type size={20} />, 'Convert to typed text', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'text' }))}
           {item(<Sigma size={20} />, 'Convert to typeset math', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'math' }))}
           <div className="menu-sep" />
