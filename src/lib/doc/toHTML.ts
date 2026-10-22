@@ -16,6 +16,8 @@ export interface HtmlOptions {
   mathml?: boolean;
   /** Stop after this many top-level blocks (thumbnails). */
   maxBlocks?: number;
+  /** Baseline-grid padding per top-level block, measured by the live editor. */
+  pads?: number[];
 }
 
 function attr(s: unknown) {
@@ -127,10 +129,17 @@ function children(n: JSONContent, o: HtmlOptions): string {
 export function docToHTML(doc: JSONContent | undefined, o: HtmlOptions = {}): string {
   const blocks = (doc?.content ?? []).slice(0, o.maxBlocks ?? Infinity);
   return blocks
-    .map((b) => {
+    .map((b, i) => {
       const ink = (b.attrs?.ink as Stroke[] | null) ?? [];
-      const svg = ink.length ? `<svg class="blk-ink" width="1" height="1" aria-hidden="true">${strokesToSvgMarkup(ink)}</svg>` : '';
-      return `<div class="blk blk-${attr(b.type)}">${block(b, o)}${svg}</div>`;
+      // Ink is anchored to the block's border box; headings sit below their top margin.
+      const level = Number(b.attrs?.level ?? 1);
+      const inkTop = b.type === 'heading' && i > 0 ? (level === 3 ? 'calc(var(--line) * 0.5)' : 'var(--line)') : '0px';
+      const svg = ink.length
+        ? `<svg class="blk-ink" width="1" height="1" aria-hidden="true" style="top:${inkTop}">${strokesToSvgMarkup(ink)}</svg>`
+        : '';
+      const pad = o.pads?.[i];
+      const style = pad && pad > 0.25 ? ` style="padding-bottom:${Math.round(pad * 100) / 100}px"` : '';
+      return `<div class="blk blk-${attr(b.type)}"${style}>${block(b, o)}${svg}</div>`;
     })
     .join('\n');
 }

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 import { ChevronDown, Folder, Hash, Plus, X } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
@@ -18,6 +19,21 @@ export const PAPERS: { id: Paper; label: string }[] = [
 
 export function PaperSwatch({ paper }: { paper: Paper }) {
   return <span className={cx('paper-swatch', `paper-${paper}`)} />;
+}
+
+/**
+ * Moves the caret from the title into the note body — synchronously, so fast
+ * typing right after Enter never lands in the title. Enter opens a fresh first
+ * line when the note already starts with content (like Notion).
+ */
+function focusBody(editor: Editor, newLine: boolean) {
+  const first = editor.state.doc.firstChild;
+  const firstIsEmptyText = first?.type.name === 'paragraph' && first.content.size === 0;
+  let tr = editor.state.tr;
+  if (newLine && first && !firstIsEmptyText) tr = tr.insert(0, editor.schema.nodes.paragraph.create());
+  tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
+  editor.view.dispatch(tr.scrollIntoView());
+  editor.view.focus();
 }
 
 export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) {
@@ -98,7 +114,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
           if (e.key === 'Enter' || e.key === 'ArrowDown') {
             e.preventDefault();
             commitTitle();
-            editor.commands.focus('start');
+            focusBody(editor, e.key === 'Enter');
           }
         }}
       />

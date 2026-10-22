@@ -319,6 +319,7 @@
 /* static documents: ink travels with its block */
 .nib-doc .blk {
   position: relative;
+  display: flow-root;
 }
 .nib-doc .blk-ink {
   position: absolute;
@@ -336,13 +337,13 @@
 }
 
 /* paper */
-.paper-ruled :is(.surface, .doc-body, .thumb-body),
-.paper-legal :is(.surface, .doc-body, .thumb-body) {
+.paper-ruled :is(.surface, .thumb-body, .doc-body > .blk),
+.paper-legal :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--rule) calc(100% - 1px));
   background-size: 100% var(--line);
   background-position: 0 calc(var(--line) * -0.25);
 }
-.paper-legal :is(.surface, .doc-body, .thumb-body) {
+.paper-legal :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image:
     linear-gradient(
       to right,
@@ -359,24 +360,24 @@
     0 0,
     0 calc(var(--line) * -0.25);
 }
-.paper-grid :is(.surface, .doc-body, .thumb-body) {
+.paper-grid :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image:
     linear-gradient(to bottom, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px)),
     linear-gradient(to right, transparent calc(100% - 1px), var(--grid-line) calc(100% - 1px));
   background-size: calc(var(--line) / 2) calc(var(--line) / 2);
   background-position: calc(var(--page-pad-x) - 1px) calc(var(--line) * -0.25);
 }
-.paper-dots :is(.surface, .doc-body, .thumb-body) {
+.paper-dots :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image: radial-gradient(circle at center, var(--dot) 1.15px, transparent 1.5px);
   background-size: var(--line) var(--line);
   background-position: calc(var(--page-pad-x) - var(--line) / 2) calc(var(--line) * 0.25);
 }
 /* static docs have no side padding on the body */
-:is(.doc-body, .thumb-body) {
+:is(.doc-body, .thumb-body, .doc-body > .blk) {
   --page-pad-x: 0px;
 }
 .thumb-page.paper-legal .thumb-body,
-.nib-print.paper-legal .doc-body {
+.nib-print.paper-legal .doc-body > .blk {
   background-position:
     -60px 0,
     0 calc(var(--line) * -0.25);

@@ -15,6 +15,17 @@ export interface NoteMeta {
   paper?: Paper;
   /** Accent colour for the notebook card. */
   color?: string;
+  /** Present when the note is a homework assignment. */
+  homework?: HomeworkMeta;
+}
+
+export interface HomeworkMeta {
+  /** Notes linked as the sources for this homework. */
+  sources: string[];
+  /** Whole folders linked as sources (every note inside counts). */
+  folders: string[];
+  due?: number;
+  done?: boolean;
 }
 
 export interface NoteDoc {
@@ -72,6 +83,15 @@ export function parseNoteFile(text: string): NoteDoc | null {
         trashed: meta.trashed ? Number(meta.trashed) : undefined,
         paper: meta.paper,
         color: meta.color,
+        homework:
+          meta.homework && typeof meta.homework === 'object'
+            ? {
+                sources: Array.isArray(meta.homework.sources) ? meta.homework.sources.map(String) : [],
+                folders: Array.isArray(meta.homework.folders) ? meta.homework.folders.map(String) : [],
+                due: meta.homework.due ? Number(meta.homework.due) : undefined,
+                done: !!meta.homework.done,
+              }
+            : undefined,
       },
       content: raw.content?.type === 'doc' ? raw.content : EMPTY_DOC,
     };

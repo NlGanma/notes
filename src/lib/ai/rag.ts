@@ -22,7 +22,12 @@ export interface Chunk {
   hash: string;
 }
 
-export type Scope = { kind: 'all' } | { kind: 'folder'; path: string } | { kind: 'note'; id: string } | { kind: 'tag'; tag: string };
+export type Scope =
+  | { kind: 'all' }
+  | { kind: 'folder'; path: string }
+  | { kind: 'note'; id: string }
+  | { kind: 'tag'; tag: string }
+  | { kind: 'notes'; ids: string[] };
 
 const MAX_CHARS = 900;
 
@@ -70,6 +75,8 @@ export function chunkVault(notes: NoteDoc[], scope: Scope = { kind: 'all' }): Ch
         return n.meta.id === scope.id;
       case 'tag':
         return n.meta.tags.includes(scope.tag);
+      case 'notes':
+        return scope.ids.includes(n.meta.id);
     }
   });
   return inScope.flatMap(chunkNote);

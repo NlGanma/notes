@@ -16,6 +16,8 @@ export interface ModelInfo {
   vision: boolean;
   embedding: boolean;
   thinking?: boolean;
+  /** Trained context window in tokens, when the server reports it. */
+  contextLength?: number;
 }
 
 export interface ChatMessage {
@@ -31,6 +33,8 @@ export interface ChatRequest {
   temperature?: number;
   numCtx?: number;
   json?: boolean;
+  /** Upper bound on generated tokens. */
+  maxTokens?: number;
   signal?: AbortSignal;
   onToken?(text: string): void;
   onThinking?(text: string): void;
@@ -39,6 +43,13 @@ export interface ChatRequest {
 export interface ChatResult {
   text: string;
   thinking: string;
+  /** 'stop' normally; 'length' when the reply was cut off by the token limit. */
+  finishReason?: string;
+  /** Generated tokens, when the server reports them (Ollama does). */
+  evalCount?: number;
+  /** Generation time in ms, when the server reports it. */
+  evalMs?: number;
+  promptTokens?: number;
 }
 
 export const DEFAULT_URLS: Record<ProviderKind, string> = {
@@ -85,7 +96,12 @@ export async function listModels(cfg: ProviderConfig): Promise<ModelInfo[]> {
           ...guessCapabilities(m.name + ' ' + (m.details?.families ?? []).join(' ')),
         };
         try {
-          const show = await httpJSON<{ capabilities?: string[] }>(`${base}/api/show`, { body: { model: m.name }, timeout: 5000 });
+          const show = await httpJSON<{ capabilities?: string[]; model_info?: Record<string, unknown> }>(`${base}/api/show`, {
+            body: { model: m.name },
+            timeout: 5000,
+          });
+          const ctxKey = Object.keys(show.model_info ?? {}).find((k) => k.endsWith('.context_length'));
+          if (ctxKey) info.contextLength = Number(show.model_info![ctxKey]) || undefined;
           if (Array.isArray(show.capabilities)) {
             info.vision = show.capabilities.includes('vision');
             info.embedding = show.capabilities.includes('embedding') && !show.capabilities.includes('completion');
@@ -179,6 +195,14 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
   if (cfg.provider === 'ollama') {
     let pending = '';
     let errorMsg: string | null = null;
+    const stats: Partial<ChatResult> = {};
+    const readFinal = (obj: Record<string, unknown>) => {
+      if (!obj.done) return;
+      stats.finishReason = String(obj.done_reason ?? 'stop');
+      if (typeof obj.eval_count === 'number') stats.evalCount = obj.eval_count;
+      if (typeof obj.eval_duration === 'number') stats.evalMs = obj.eval_duration / 1e6;
+      if (typeof obj.prompt_eval_count === 'number') stats.promptTokens = obj.prompt_eval_count;
+    };
     await httpStream(
       `${base}/api/chat`,
       {
@@ -190,6 +214,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
         options: {
           ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
           ...(req.numCtx ? { num_ctx: req.numCtx } : {}),
+          ...(req.maxTokens ? { num_predict: req.maxTokens } : {}),
         },
       },
       (chunk) => {
@@ -204,6 +229,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
             if (obj.error) errorMsg = String(obj.error);
             if (obj.message?.thinking) think(obj.message.thinking);
             if (obj.message?.content) split.push(obj.message.content);
+            readFinal(obj);
           } catch {
             /* partial line */
           }
@@ -216,24 +242,27 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
         const obj = JSON.parse(pending);
         if (obj.error) errorMsg = String(obj.error);
         if (obj.message?.content) split.push(obj.message.content);
+        readFinal(obj);
       } catch {
         /* ignore */
       }
     }
     split.flush();
     if (errorMsg) throw new HttpError(500, errorMsg);
-    return { text, thinking };
+    return { text, thinking, ...stats };
   }
 
   // OpenAI-compatible (LM Studio, llama.cpp server, Jan, vLLM, LocalAI…)
   let pending = '';
   let streamError: string | null = null;
+  let finishReason: string | undefined;
   await httpStream(
     `${base}/chat/completions`,
     {
       model: req.model,
       stream: true,
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+      ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
       messages: req.messages.map((m) =>
         m.images?.length
           ? {
@@ -258,6 +287,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
         try {
           const obj = JSON.parse(data);
           const delta = obj.choices?.[0]?.delta ?? {};
+          if (obj.choices?.[0]?.finish_reason) finishReason = String(obj.choices[0].finish_reason);
           const r = delta.reasoning_content ?? delta.reasoning;
           if (r) think(r);
           if (delta.content) split.push(delta.content);
@@ -271,7 +301,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
   );
   split.flush();
   if (streamError) throw new HttpError(500, streamError);
-  return { text, thinking };
+  return { text, thinking, finishReason };
 }
 
 export async function embed(cfg: ProviderConfig, model: string, input: string[]): Promise<number[][]> {

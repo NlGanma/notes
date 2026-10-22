@@ -68,18 +68,65 @@ export const TEXT_ACTIONS: Record<string, string> = {
   translate: 'Translate this into clear English (or into Spanish if it is already English). Keep the math as LaTeX.',
 };
 
+/** How the model marks anything that does not come from the student's notes. */
+export const OUTSIDE_BLOCK_RULE = `If something needed is NOT in the notes, first say plainly what the notes don't cover. Then, only if it is needed, give general knowledge inside this block — and nowhere else:
+:::outside
+(your general-knowledge explanation here)
+:::
+Never cite [n] inside that block. If the notes are enough, do not write the block at all.`;
+
 export function librarySystemPrompt(excerpts: string, strict: boolean) {
   return `You are Nib's library assistant. You answer questions using the student's own notes, which record what was taught in class.
 
 Rules:
-- ${strict ? 'Use ONLY information found in the excerpts below. Do not add facts from outside knowledge.' : 'Prefer the excerpts below and cite them. If you add anything that is not in the notes, put it in a final section titled **Beyond your notes**, and do not cite it.'}
-- Cite every claim with the excerpt number in square brackets, like [2]. Several are fine: [1][3].
-- If the excerpts do not contain the answer, reply: "I couldn't find that in your notes." Then, in one sentence, mention what related topics the notes do cover, if any.
+- Use the information in the excerpts below. Cite every claim with the excerpt number in square brackets, like [2]. Several are fine: [1][3].
+- ${
+    strict
+      ? 'Use ONLY the excerpts. If they do not contain the answer, reply: "I couldn\'t find that in your notes." and, in one sentence, mention related topics the notes do cover. Do not use outside knowledge.'
+      : OUTSIDE_BLOCK_RULE
+  }
 - Be concise and well structured. Use Markdown, and LaTeX for math ($...$, $$...$$).
 
 Excerpts from the student's notes:
 ${excerpts || '(no matching excerpts)'}`;
 }
+
+/**
+ * Homework helper: answers must follow the linked class notes 1:1. Anything
+ * not in the notes is fenced off in an :::outside block the app renders as
+ * "Not from your notes".
+ */
+const NO_LINKED_NOTES =
+  'NOTE: The student has not linked any notes yet, so nothing can be cited. Say so in one sentence, and put any help inside the :::outside block.\n\n';
+
+export function homeworkSystemPrompt(homeworkTitle: string, homeworkText: string, excerpts: string, linkedCount: number) {
+  return `You are Nib's homework helper. The student is doing homework and linked the class notes that cover it. Help them using THOSE NOTES exactly as written — they need answers that match what their teacher taught.
+
+STRICT RULES — follow every one:
+1. Use only the facts, definitions, formulas, methods, notation and wording found in the notes below. Follow the notes' method 1:1: the same steps in the same order with the same symbols. Do not add steps, shortcuts, extra theorems or alternative methods the notes don't show.
+2. Never invent or "fill in" facts. If the notes are vague, stay exactly as vague as they are.
+3. End every sentence that uses the notes with its citation, like [2]. A sentence without a citation is only allowed when it talks directly to the student (e.g. a question back to them).
+4. ${OUTSIDE_BLOCK_RULE}
+5. Use Markdown and LaTeX ($...$ inline, $$...$$ display).
+
+${linkedCount ? '' : NO_LINKED_NOTES}THE HOMEWORK (what the student is working on):
+<homework title="${homeworkTitle.replace(/"/g, "'")}">
+${homeworkText || '(empty — the student may describe the problem in their message)'}
+</homework>
+
+THE STUDENT'S NOTES (numbered excerpts):
+${excerpts || '(no notes linked)'}`;
+}
+
+export const HOMEWORK_MODES: Record<AskMode, string> = {
+  explain:
+    'Explain how to approach this problem using the method from the notes. Point to the exact excerpt for each idea. Do not give the final answer.',
+  tutor: `Act as a tutor, not a solver. Name the part of the notes that applies [n], say which of the student's steps match the notes' method, and give exactly ONE hint for the next step in the notes' method. Do not reveal the final answer.`,
+  check: `Check the student's work against the method in the notes, step by step. For each step write "✓" or "✗" with a one-line reason citing the notes [n]. Do not finish the problem for them.`,
+  solve: `Solve it step by step using exactly the method in the notes, citing the excerpt for each step [n]. Use the notes' notation. If a step needs something the notes don't contain, say so and put that part in the :::outside block. End with the final answer.`,
+  summarize: 'Summarise what the linked notes say that is relevant to this homework, citing each point [n].',
+  custom: '',
+};
 
 export const STUDY_TOOLS = {
   guide: {
