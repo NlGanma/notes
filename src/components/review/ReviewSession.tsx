@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { ArrowRight, Check, CircleHelp, Flag, Lightbulb, MessageCircleQuestion, ShieldCheck, Undo2, X } from 'lucide-react';
-import { useReview, type Current } from '../../state/review';
+import { ArrowRight, BookOpen, Check, CircleHelp, Flag, Lightbulb, MessageCircleQuestion, ShieldCheck, Undo2, X } from 'lucide-react';
+import { canOverride, factOf, questionNumber, useReview, type Current } from '../../state/review';
+import { sectionShown } from '../../lib/review/items';
 import { useAI } from '../../state/ai';
 import { useUI } from '../../state/ui';
 import { useAssistant } from '../../state/assistant';
@@ -8,10 +9,19 @@ import { useVault } from '../../state/vault';
 import { renderMarkdown } from '../../lib/ai/markdown';
 import { LEVELS, type Confidence } from '../../lib/review/mastery';
 import { cx } from '../../lib/util';
-import { sessionKey } from './sessionKeys';
+import { toast } from '../common/toast';
+import { SELF_GRADES, sessionKey } from './sessionKeys';
 
 /** Enter that ends a line — not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
 const isEnter = (e: ReactKeyboardEvent<HTMLElement>) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
+
+/** Esc in an answer box leaves the box, keeping what's typed; pressed again, it ends the session. */
+const leaveOnEsc = (e: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  if (e.key !== 'Escape' || e.nativeEvent.isComposing) return false;
+  e.preventDefault();
+  e.currentTarget.blur();
+  return true;
+};
 
 const CONF: { id: Confidence; label: string }[] = [
   { id: 'guess', label: 'Guessing' },
@@ -30,7 +40,8 @@ export function ReviewSession() {
   const meta = current ? pool.find((p) => p.id === current.concept.id) : undefined;
   const groups = useMemo(() => [...new Set(pool.map((p) => p.groupName))], [pool]);
 
-  // Esc ends the session; Enter moves on from feedback; 1–4 pick a choice — when the key is meant for the session.
+  // Esc leaves the answer box, then ends the session; Enter moves on from feedback; 1–4 pick a choice and 1–3 grade
+  // a self-check — when the key is meant for the session.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target instanceof Element ? e.target : document.body;
@@ -48,8 +59,10 @@ export function ReviewSession() {
       if (!k) return;
       e.preventDefault();
       if (k.do === 'end') r.end();
+      else if (k.do === 'blur') (document.activeElement as HTMLElement | null)?.blur();
       else if (k.do === 'next') r.next();
       else if (k.do === 'show') void r.submit('', r.current?.conf ?? null);
+      else if (k.do === 'grade') r.selfGrade(k.s);
       else r.choose(k.index, r.current?.conf ?? null);
     };
     window.addEventListener('keydown', onKey);
@@ -58,9 +71,10 @@ export function ReviewSession() {
 
   if (!current) return null;
   const progress = Math.min(1, session.index / session.opts.length);
+  const section = sectionShown(current.item, factOf(current.item, current.concept)?.key);
 
   return (
-    <div className="rv-session" style={meta?.color ? { ['--class' as string]: meta.color } : undefined}>
+    <div className="rv-session">
       <div className="rv-topbar">
         <button className="btn is-ghost is-small" onClick={() => useReview.getState().end()} title="End the session (Esc)">
           End
@@ -70,12 +84,15 @@ export function ReviewSession() {
           <span style={{ width: `${progress * 100}%` }} />
         </div>
         <span className="rv-count-label">
-          {Math.min(session.index + (current.phase === 'feedback' ? 0 : 1), session.opts.length)} / {session.opts.length}
+          {questionNumber(session, current)} / {session.opts.length}
         </span>
       </div>
 
+      {/* A card per question, so its fade plays each time; the class's colour is the card's, not the progress bar's. */}
       <div
+        key={current.shownAt}
         className={cx('rv-card', `is-${current.phase}`)}
+        style={meta?.color ? { ['--class' as string]: meta.color } : undefined}
         data-concept={current.concept.id}
         data-item-key={current.item.key}
         data-class={meta?.group}
@@ -86,7 +103,7 @@ export function ReviewSession() {
           <span className="rv-class-chip">{meta?.groupName}</span>
           <span className="rv-where">
             {current.item.source.title}
-            {current.item.source.section ? ` › ${current.item.source.section}` : ''}
+            {section ? ` › ${section}` : ''}
           </span>
           <span className="grow" />
           <span className="rv-level" title={current.item.origin === 'model' ? 'AI-phrased question, checked against your notes' : 'Built from your notes'}>
@@ -129,9 +146,29 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
     void useReview.getState().submit(text, conf);
   };
   const long = item.format === 'explain' || item.format === 'apply' || item.format === 'connect';
+  // Clicking a pill keeps the answer box focused, so Enter still checks and typing goes on.
+  const sure = askConfidence && (
+    <div className="rv-conf" role="radiogroup" aria-label="How sure are you?">
+      <span className="rv-conf-label">How sure?</span>
+      {CONF.map((c) => (
+        <button
+          key={c.id}
+          role="radio"
+          aria-checked={conf === c.id}
+          className={cx('rv-conf-pill', conf === c.id && 'is-on')}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => useReview.getState().setConf(conf === c.id ? null : c.id)}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="rv-ask">
+      {/* A click on a choice answers at once, so how sure comes first. */}
+      {item.format === 'mcq' && sure}
       {item.format === 'mcq' ? (
         <div className="rv-choices">
           {item.choices!.map((c, i) => (
@@ -153,6 +190,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
           disabled={grading}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if (leaveOnEsc(e)) return;
             if (isEnter(e) && !e.shiftKey) {
               e.preventDefault();
               submit();
@@ -168,6 +206,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
           disabled={grading}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if (leaveOnEsc(e)) return;
             if (isEnter(e)) {
               e.preventDefault();
               submit();
@@ -175,30 +214,20 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
           }}
         />
       )}
-      {askConfidence && (
-        <div className="rv-conf" role="radiogroup" aria-label="How sure are you?">
-          <span className="rv-conf-label">How sure?</span>
-          {CONF.map((c) => (
-            <button
-              key={c.id}
-              role="radio"
-              aria-checked={conf === c.id}
-              className={cx('rv-conf-pill', conf === c.id && 'is-on')}
-              onClick={() => useReview.getState().setConf(conf === c.id ? null : c.id)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {current.hint && (
-        <div className="rv-hint">
-          <Lightbulb size={14} /> {current.hint}
-        </div>
-      )}
+      {item.format !== 'mcq' && sure}
+      {current.hint && <Hint text={current.hint} />}
       <div className="rv-actions">
         {!current.hintUsed && item.format !== 'mcq' && (
-          <button className="btn is-ghost is-small" onClick={() => useReview.getState().showHint()} disabled={grading}>
+          <button
+            className="btn is-ghost is-small"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              useReview.getState().showHint();
+              // The button goes once used: typing goes on in the answer box.
+              ref.current?.focus();
+            }}
+            disabled={grading}
+          >
             <Lightbulb size={14} /> Hint
           </button>
         )}
@@ -222,6 +251,33 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   );
 }
 
+/** The idea's mastery: shown where it was, then moved to where it is now (so the change is seen). */
+function MasteryBar({ before, after }: { before: number; after: number }) {
+  const [width, setWidth] = useState(before);
+  useEffect(() => {
+    // Two frames: the first paints the old width, so the move is animated rather than skipped.
+    let id = requestAnimationFrame(() => {
+      id = requestAnimationFrame(() => setWidth(after));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [after]);
+  return (
+    <span className="rv-bar">
+      <span style={{ width: `${width}%` }} />
+    </span>
+  );
+}
+
+/** A hint quotes the notes, math and all. */
+function Hint({ text }: { text: string }) {
+  return (
+    <div className="rv-hint">
+      <Lightbulb size={14} />
+      <span className="md is-inline" dangerouslySetInnerHTML={{ __html: md(text).trim() }} />
+    </div>
+  );
+}
+
 function NotesSay({ current }: { current: Current }) {
   const src = current.item.source;
   return (
@@ -240,28 +296,33 @@ function NotesSay({ current }: { current: Current }) {
   );
 }
 
+/** A line without its markdown, for comparing. */
+const plain = (s: string) =>
+  s
+    .replace(/\*\*|==|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 function SelfGrade({ current }: { current: Current }) {
+  // The points besides the line "Your notes say" already shows.
+  const points = (current.item.points ?? []).filter((p) => plain(p) !== plain(current.item.fact));
   return (
     <div className="rv-self">
       <NotesSay current={current} />
-      {current.item.points && current.item.points.length > 1 && (
+      {points.length > 0 && (
         <ul className="rv-points">
-          {current.item.points.map((p, i) => (
+          {points.map((p, i) => (
             <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
           ))}
         </ul>
       )}
       <div className="rv-self-q">How did you do?</div>
       <div className="rv-actions">
-        <button className="btn is-secondary" onClick={() => useReview.getState().selfGrade(0)}>
-          <X size={14} /> Missed it
-        </button>
-        <button className="btn is-secondary" onClick={() => useReview.getState().selfGrade(0.5)}>
-          Partly
-        </button>
-        <button className="btn is-primary" onClick={() => useReview.getState().selfGrade(1)}>
-          <Check size={14} /> Got it
-        </button>
+        {['Missed it', 'Partly', 'Got it'].map((label, i) => (
+          <button key={label} className={cx('btn', i === 2 ? 'is-primary' : 'is-secondary')} onClick={() => useReview.getState().selfGrade(SELF_GRADES[i])}>
+            <span className="rv-choice-n">{i + 1}</span> {label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -272,25 +333,42 @@ function FeedbackView({ current }: { current: Current }) {
   const [again, setAgain] = useState('');
   const overrides = useReview((s) => s.overrides);
   const wrong = fb.verdict !== 'right';
+  // "I don't know" is no mistake: it gets the answer, not a red cross.
+  const idk = !!current.dontKnow;
   const canRetry = wrong && !current.revealed && !current.retry && current.item.format !== 'mcq' && current.item.format !== 'rate';
   const retry = current.retry;
-  const title = fb.verdict === 'right' ? (current.overridden ? 'Counted as right' : 'Right') : fb.verdict === 'partial' ? 'Partly right' : 'Not quite';
+  const title = idk ? 'Here’s the answer' : fb.verdict === 'right' ? (current.overridden ? 'Counted as right' : 'Right') : fb.verdict === 'partial' ? 'Partly right' : 'Not quite';
+  const report = () => {
+    const key = current.item.key;
+    useReview.getState().report();
+    toast.info('Question reported — you won’t see it again', undefined, { label: 'Undo', run: () => useReview.getState().unreport(key) });
+  };
   const ask = () => {
     const src = current.item.source;
     const note = useVault.getState().notes[src.noteId];
     useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'note', id: src.noteId } });
     void useAssistant.getState().askLibrary({
-      prompt: `Why: ${current.item.fact.replace(/\*\*|==/g, '')}`,
+      prompt: `Why is this so: ${current.item.fact.replace(/\*\*|==/g, '')}`,
       scope: { kind: 'note', id: src.noteId },
       scopeLabel: note?.meta.title,
     });
   };
   return (
     <div className="rv-feedback">
-      <div className={cx('rv-verdict', `is-${fb.verdict}`)}>
-        {fb.verdict === 'right' ? <Check size={16} /> : fb.verdict === 'partial' ? <Undo2 size={16} /> : <X size={16} />}
+      <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>
+        {idk ? <BookOpen size={16} /> : fb.verdict === 'right' ? <Check size={16} /> : fb.verdict === 'partial' ? <Undo2 size={16} /> : <X size={16} />}
         <b>{title}.</b>
-        {current.answer && wrong && <span className="rv-wrote">You wrote “{current.answer.slice(0, 120)}”.</span>}
+        {current.answer && wrong && !idk && (
+          <span className="rv-wrote">
+            {current.item.format === 'mcq' ? (
+              <>
+                You picked “<span className="md is-inline" dangerouslySetInnerHTML={{ __html: md(current.answer).trim() }} />”.
+              </>
+            ) : (
+              `You wrote “${current.answer.slice(0, 120)}”.`
+            )}
+          </span>
+        )}
         {fb.note && <span className="rv-grade-note">{fb.note}</span>}
       </div>
       {fb.hypercorrect && <div className="rv-hyper">You were sure about this one — confident mix-ups are the easiest to fix right now.</div>}
@@ -307,11 +385,7 @@ function FeedbackView({ current }: { current: Current }) {
       )}
       {canRetry && (
         <div className="rv-retry">
-          {current.hint && (
-            <div className="rv-hint">
-              <Lightbulb size={14} /> {current.hint}
-            </div>
-          )}
+          {current.hint && <Hint text={current.hint} />}
           <div className="rv-retry-row">
             <input
               className="rv-input"
@@ -320,7 +394,7 @@ function FeedbackView({ current }: { current: Current }) {
               autoFocus
               onChange={(e) => setAgain(e.target.value)}
               onKeyDown={(e) => {
-                if (!isEnter(e)) return;
+                if (leaveOnEsc(e) || !isEnter(e)) return;
                 e.preventDefault();
                 // An empty box: Enter moves on, as its ↵ says.
                 if (again.trim()) void useReview.getState().retry(again);
@@ -336,7 +410,8 @@ function FeedbackView({ current }: { current: Current }) {
           </div>
         </div>
       )}
-      {retry?.checking ? (
+      {/* Once counted as right, the second try's verdict is beside the point. */}
+      {current.overridden ? null : retry?.checking ? (
         <span className="rv-grading">
           <span className="spinner" /> Checking your answer against your notes…
         </span>
@@ -348,9 +423,7 @@ function FeedbackView({ current }: { current: Current }) {
       {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} />}
       <div className="rv-mastery-change">
         <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
-        <span className="rv-bar">
-          <span style={{ width: `${fb.after}%` }} />
-        </span>
+        <MasteryBar before={fb.before} after={fb.after} />
         <span className="rv-pct">
           {fb.before}% → {fb.after}%
         </span>
@@ -360,12 +433,21 @@ function FeedbackView({ current }: { current: Current }) {
         <button className="btn is-ghost is-small" onClick={ask} title="Ask your notes why — answered only from your notes">
           <MessageCircleQuestion size={14} /> Why?
         </button>
-        {wrong && !current.overridden && overrides < 3 && current.item.format !== 'mcq' && (
-          <button className="btn is-ghost is-small" onClick={() => useReview.getState().override()} title="Count it as right (at most 3 times a session)">
-            I was right
+        {/* Counted, the button keeps its place, so Report doesn't slide under the pointer. */}
+        {current.overridden ? (
+          <button className="btn is-ghost is-small" disabled>
+            Counted <Check size={13} />
           </button>
+        ) : (
+          wrong &&
+          canOverride(current) &&
+          overrides < 3 && (
+            <button className="btn is-ghost is-small" onClick={() => useReview.getState().override()} title="Count it as right (at most 3 times a session)">
+              I was right
+            </button>
+          )
         )}
-        <button className="btn is-ghost is-small" onClick={() => useReview.getState().report()} title="This question is wrong or unclear — skip it and don’t ask it again">
+        <button className="btn is-ghost is-small" onClick={report} title="This question is wrong or unclear — skip it and don’t ask it again">
           <Flag size={13} /> Report question
         </button>
         <span className="grow" />

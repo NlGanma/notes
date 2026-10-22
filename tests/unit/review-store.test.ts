@@ -2,10 +2,10 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { useVault } from '../../src/state/vault';
 import { useAI } from '../../src/state/ai';
-import { conceptsOf, useReview } from '../../src/state/review';
+import { conceptsOf, factOf, useReview } from '../../src/state/review';
 import { buildSeedNotes, SEED_CLASSES } from '../../src/lib/vault/seed';
 import { isReviewable } from '../../src/lib/review/tree';
-import { buildItem, mulberry32, type Item } from '../../src/lib/review/items';
+import { buildItem, hintFor, mulberry32, type Item } from '../../src/lib/review/items';
 import { chunkNote } from '../../src/lib/ai/rag';
 import { DAY, freshState, isMastered, type Confidence, type Level } from '../../src/lib/review/mastery';
 import type { NoteDoc, VaultBackend } from '../../src/lib/vault/types';
@@ -121,6 +121,57 @@ test('a session moves on when its notes change under it (an idea renamed or remo
   }
 });
 
+test('asking to review other notes mid-session ends it, but its summary stays on screen; the picker shows the new notes after', async () => {
+  // (The vault's file is read once, so reading the picked notes in the background later changes nothing here.)
+  await review().load();
+  const calc = byTitle('Lecture 4');
+  const vocab = byTitle('Vocabulario');
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().next();
+  await answer(false);
+  review().request([vocab.meta.id]);
+  assert.equal(review().session, null);
+  assert.equal(review().summary?.items, 2, 'the session’s summary is on screen');
+  assert.deepEqual(review().selection, [vocab.meta.id]);
+  review().closeSummary();
+  assert.equal(review().summary, null);
+  assert.deepEqual(review().selection, [vocab.meta.id], 'then the notes asked for are picked');
+  // Nothing answered yet: nothing to sum up.
+  review().start([calc.meta.id]);
+  review().request([vocab.meta.id]);
+  assert.equal(review().session, null);
+  assert.equal(review().summary, null);
+  // A summary already seen makes way.
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().end();
+  assert.ok(review().summary);
+  review().request([calc.meta.id]);
+  assert.equal(review().summary, null);
+  assert.deepEqual(review().selection, [calc.meta.id]);
+});
+
+test('a session ended early says it stopped; one that ran its course is complete', async () => {
+  const calc = byTitle('Lecture 4');
+  review().setOpts({ length: 10 });
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().next();
+  await answer(true);
+  review().end();
+  assert.equal(review().summary!.items, 2);
+  assert.equal(review().summary!.stopped, true);
+  review().closeSummary();
+  review().start([calc.meta.id]);
+  while (review().session && review().current) {
+    await answer(true);
+    review().next();
+  }
+  assert.ok(review().summary);
+  assert.ok(!review().summary!.stopped);
+});
+
 test('a note trashed mid-session drops out of it', async () => {
   const calc = byTitle('Lecture 4');
   const cells = byTitle('Cell Structure');
@@ -136,11 +187,12 @@ test('a note trashed mid-session drops out of it', async () => {
 test('“I was right” recounts the answer as right: no re-ask, no miss, and out of the working set once mastered', async () => {
   const pret = byTitle('Pretérito');
   const c = conceptsOf(pret).find((x) => x.name === 'El pretérito')!;
-  // One more right answer masters it.
-  const st = { ...freshState(clock.now), p: 0.99, attempts: 6, correct: 5, best: 2, level: 2 as const, codeCorrect: 2, correctKeys: ['a', 'b'], last: clock.now - 1000, due: clock.now };
+  // One more right answer masters it; it's asked as a fill-in, which code grades.
+  const st = { ...freshState(clock.now), p: 0.99, attempts: 6, correct: 5, best: 2, level: 0 as const, codeCorrect: 2, correctKeys: ['a', 'b'], last: clock.now - 1000, due: clock.now };
   useReview.setState({ file: { ...review().file, states: { [c.id]: st } } });
   review().start([pret.meta.id]);
   assert.equal(review().current!.concept.id, c.id);
+  assert.equal(review().current!.item.graded, 'typed');
   await answer(false, 'sure');
   assert.equal(review().misconceptions.length, 1);
   review().override();
@@ -151,6 +203,49 @@ test('“I was right” recounts the answer as right: no re-ask, no miss, and ou
   assert.equal(sess.misses[c.id] ?? 0, 0);
   assert.equal(sess.history.at(-1)!.s, 0.8);
   assert.equal(review().misconceptions.length, 0, 'it was no misconception');
+});
+
+test('“I was right” is only for an answer the student wrote and someone else graded', async () => {
+  const counted = () => review().session!.history.at(-1)!.s;
+  // "I don't know", pressed or typed: the answer is shown as the answer, and nothing can be overridden.
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  review().dontKnow();
+  assert.ok(review().current!.dontKnow);
+  review().override();
+  assert.ok(!review().current!.overridden && counted() === 0 && review().overrides === 0, 'after “I don’t know”');
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('no sé', 'sure');
+  assert.ok(review().current!.dontKnow);
+  assert.ok(!review().current!.feedback!.hypercorrect, 'not knowing, with “Sure” on, is no mix-up');
+  assert.deepEqual(review().misconceptions, []);
+  review().override();
+  assert.ok(!review().current!.overridden, 'after typing “no sé”');
+  // The student said how it went themselves.
+  ask('Lecture 4', 'Limit laws', 0, (it) => it.format === 'rate');
+  await review().submit('', 'sure');
+  review().selfGrade(0);
+  assert.ok(review().current!.selfGraded);
+  review().override();
+  assert.ok(!review().current!.overridden, 'after a self-check');
+  // A typed answer code marked wrong can be.
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('imperfect', 'unsure');
+  assert.ok(!review().current!.dontKnow && !review().current!.selfGraded);
+  review().override();
+  assert.ok(review().current!.overridden);
+  assert.equal(review().current!.feedback!.verdict, 'right');
+});
+
+test('a reported question can be taken back', async () => {
+  const vocab = byTitle('Vocabulario');
+  review().start([vocab.meta.id]);
+  const key = review().current!.item.key;
+  await answer(false);
+  review().report();
+  assert.ok(review().file.bad.includes(key));
+  assert.notEqual(review().current?.item.key, key, 'the session moved on');
+  review().unreport(key);
+  assert.ok(!review().file.bad.includes(key), 'it can be asked again');
 });
 
 test('Report undoes the answer and the question is never asked again, in any phrasing', async () => {
@@ -238,6 +333,36 @@ function ask(title: string, name: string, level: Level, want: (it: Item) => bool
 
 const lastGraded = (item: Item) => review().file.states[item.conceptId]?.recent.at(-1)?.graded;
 const preterite = (it: Item) => it.format === 'cloze' && it.expected === 'preterite';
+
+test('Hint, and the cue after a miss, point back to the notes without the answer', async () => {
+  const fold = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}+/gu, '')
+      .toLowerCase();
+  for (const [title, name, want] of [
+    ['Cell Structure', 'Nucleus', (it: Item) => it.format === 'recall'],
+    ['Pretérito', 'El pretérito', preterite],
+    ['Pretérito', 'El pretérito', (it: Item) => it.expected === '-é, -aste, -ó, -amos, -aron'],
+    ['Lecture 4', 'Squeeze theorem', (it: Item) => it.format === 'cloze' && /\$/.test(it.expected ?? '')],
+    ['Vocabulario', 'portarse bien / mal', (it: Item) => it.expected === 'portarse bien / mal'],
+  ] as const) {
+    const item = ask(title, name, 0, want);
+    const c = review().current!.concept;
+    const f = factOf(item, c);
+    review().showHint();
+    const hint = review().current!.hint!;
+    assert.equal(hint, hintFor(item, f));
+    await review().submit('banana', 'sure');
+    const cue = review().current!.hint!;
+    assert.equal(cue, hintFor(item, f, true), 'offline, the cue is code’s');
+    for (const h of [hint, cue]) {
+      assert.ok(!fold(h).includes(fold(item.expected!)), `${h} gives away ${item.expected}`);
+      assert.ok(!fold(h).includes(fold(item.expected!.split(/[,/]/)[0])), `${h} gives away part of ${item.expected}`);
+      assert.ok(!/What do your notes say about/.test(h), 'the idea isn’t named when its name is the answer');
+    }
+  }
+});
 
 test('a typed answer that only repeats what the question shows is wrong, however long', async () => {
   for (const [answer, verdict] of [

@@ -17,11 +17,6 @@
   gap: 24px;
   align-items: start;
 }
-@media (max-width: 900px) {
-  .rv-setup {
-    grid-template-columns: 1fr;
-  }
-}
 .rv-tree {
   background: var(--bg);
   border-radius: var(--radius-l);
@@ -180,6 +175,16 @@
   flex-direction: column;
   gap: 6px;
 }
+/* The lengths fill their row (and take two when the panel is narrow). */
+.rv-field .seg {
+  display: flex;
+  flex-wrap: wrap;
+}
+.rv-field .seg button {
+  flex: 1 1 auto;
+  padding: 0 6px;
+  white-space: nowrap;
+}
 .rv-field-label {
   font-size: 11.5px;
   font-weight: 600;
@@ -215,6 +220,15 @@
 .rv-warn svg {
   flex: none;
   margin-top: 2px;
+}
+.rv-warn-link {
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .rv-start {
   height: 36px;
@@ -366,6 +380,18 @@
   background: var(--bg-subtle);
   box-shadow: inset 0 0 0 1px var(--border);
 }
+/* The key that presses a button ("How did you do?" 1–3). */
+.btn .rv-choice-n {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.btn.is-primary .rv-choice-n {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
 .rv-input {
   width: 100%;
   height: 40px;
@@ -468,7 +494,7 @@
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--success);
+  color: #177a3b;
   margin-bottom: 4px;
 }
 .md.rv-notes-say-text {
@@ -508,14 +534,19 @@
 .rv-verdict svg {
   align-self: center;
 }
+/* Darker than --success and --warning, so short words in them read on white. */
 .rv-verdict.is-right {
-  color: var(--success);
+  color: #177a3b;
 }
 .rv-verdict.is-partial {
-  color: var(--warning);
+  color: #8a5e00;
 }
 .rv-verdict.is-wrong {
   color: var(--danger);
+}
+/* "I don't know" isn't a mistake. */
+.rv-verdict.is-idk {
+  color: var(--text-2);
 }
 .rv-wrote,
 .rv-grade-note {
@@ -553,10 +584,14 @@
 }
 .rv-retry-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 }
+/* Narrow, the buttons go under the box rather than squeeze it. */
 .rv-retry-row .rv-input {
+  flex: 1 1 180px;
+  min-width: 0;
   height: 34px;
   font-size: 14px;
 }
@@ -565,7 +600,7 @@
   font-weight: 550;
 }
 .rv-retry-result.is-right {
-  color: var(--success);
+  color: #177a3b;
 }
 .rv-retry-result.is-wrong {
   color: var(--text-2);
@@ -755,4 +790,46 @@
   align-items: center;
   gap: 8px;
   margin-top: 26px;
+}
+
+/* ------------------------------------------------------------ narrow */
+/* By the room Review has, not the window's: the assistant panel takes some (each page is a size container). */
+@container collection (max-width: 640px) {
+  .rv-setup {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rv-panel {
+    position: static;
+  }
+}
+@container collection (max-width: 400px) {
+  .rv-code {
+    display: none;
+  }
+  .rv-row.is-chapter,
+  .rv-row.is-note,
+  .rv-row.is-note.is-flat {
+    padding-left: 30px;
+  }
+  .rv-class-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+  .rv-class-name {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .rv-class-row > .rv-pct {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .rv-class-row > .rv-bar {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+  .rv-class-meta {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
 }

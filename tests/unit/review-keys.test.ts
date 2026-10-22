@@ -20,11 +20,31 @@ const at = (format: Item['format'], phase: 'ask' | 'feedback' | 'self' = 'ask') 
 
 test('Esc ends the session — unless it closed a palette or a menu, or was pressed in another panel', () => {
   assert.deepEqual(sessionKey(key('Escape'), body, at('cloze')), { do: 'end' });
-  assert.deepEqual(sessionKey(key('Escape'), { ...body, editable: true }, at('cloze')), { do: 'end' }, 'from the answer box too');
+  assert.deepEqual(sessionKey(key('Escape'), body, at('cloze', 'feedback')), { do: 'end' });
+  assert.deepEqual(sessionKey(key('Escape'), { ...body, control: true }, at('cloze', 'feedback')), { do: 'end' }, 'with a button focused');
   assert.equal(sessionKey(key('Escape', { defaultPrevented: true }), body, at('cloze')), null, 'the palette closed with it');
   assert.equal(sessionKey(key('Escape'), { ...body, overlay: true }, at('cloze')), null, 'a dialog, the palette or a menu is open');
   assert.equal(sessionKey(key('Escape'), { ...body, inSession: false }, at('cloze')), null, 'typed in the assistant panel');
   assert.equal(sessionKey(key('Escape', { isComposing: true }), body, at('cloze')), null, 'cancelling an input method’s candidate');
+});
+
+test('Esc in the answer box only leaves the box: a half-typed answer is kept, and the next Esc ends the session', () => {
+  for (const phase of ['ask', 'feedback'] as const) assert.deepEqual(sessionKey(key('Escape'), { ...body, editable: true }, at('cloze', phase)), { do: 'blur' }, phase);
+  assert.deepEqual(sessionKey(key('Escape'), body, at('cloze')), { do: 'end' }, 'once out of the box');
+  assert.equal(sessionKey(key('Escape', { isComposing: true }), { ...body, editable: true }, at('cloze')), null, 'cancelling a candidate stays in the box');
+  assert.equal(sessionKey(key('Escape', { defaultPrevented: true }), { ...body, editable: true }, at('cloze')), null, 'the box left already');
+});
+
+test('1–3 say how a self-check went — not with a modifier, a dialog open, or in a field', () => {
+  assert.deepEqual(sessionKey(key('1'), body, at('rate', 'self')), { do: 'grade', s: 0 });
+  assert.deepEqual(sessionKey(key('2'), body, at('explain', 'self')), { do: 'grade', s: 0.5 });
+  assert.deepEqual(sessionKey(key('3'), { ...body, control: true }, at('rate', 'self')), { do: 'grade', s: 1 }, 'with one of its buttons focused');
+  assert.equal(sessionKey(key('4'), body, at('rate', 'self')), null);
+  assert.equal(sessionKey(key('3', { metaKey: true }), body, at('rate', 'self')), null);
+  assert.equal(sessionKey(key('3'), { ...body, overlay: true }, at('rate', 'self')), null);
+  assert.equal(sessionKey(key('3'), { ...body, editable: true }, at('rate', 'self')), null);
+  assert.equal(sessionKey(key('3'), body, at('rate', 'feedback')), null, 'once graded');
+  assert.equal(sessionKey(key('3'), body, at('rate')), null, 'before the notes are shown');
 });
 
 test('Enter moves on from feedback, and shows the notes for a self-check — not when a button or field has it', () => {

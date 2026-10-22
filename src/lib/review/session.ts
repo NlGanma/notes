@@ -272,6 +272,8 @@ export interface SessionSummary {
   calibration: { conf: Confidence; n: number; correct: number }[];
   misconceptions: { conceptId: string; wrote: string; notesSay: string }[];
   overrides: number;
+  /** Ended by the student before its length, with questions left. */
+  stopped?: boolean;
 }
 
 export function summarize(
@@ -279,7 +281,7 @@ export function summarize(
   pool: (PoolEntry & { name: string; groupName: string; color?: string; thin: boolean })[],
   before: Record<string, ConceptState | undefined>,
   after: Record<string, ConceptState | undefined>,
-  extra: { label: string; notReviewable: string[]; misconceptions: SessionSummary['misconceptions']; overrides: number },
+  extra: { label: string; notReviewable: string[]; misconceptions: SessionSummary['misconceptions']; overrides: number; stopped?: boolean },
   now: number,
 ): SessionSummary {
   const touched = new Set(sess.history.map((h) => h.c));
@@ -322,15 +324,25 @@ export function summarize(
     calibration,
     misconceptions: extra.misconceptions,
     overrides: extra.overrides,
+    ...(extra.stopped && sess.index < sess.opts.length ? { stopped: true } : {}),
   };
 }
 
-/** One line on how well confidence matched accuracy. */
+/**
+ * One line on how well confidence matched accuracy — nothing until there are
+ * three answers at one level of sureness, and never "matches" while the sure
+ * ones are mostly wrong or the guesses mostly right.
+ */
 export function calibrationMessage(c: SessionSummary['calibration']): string | null {
-  const sure = c.find((x) => x.conf === 'sure');
-  const guess = c.find((x) => x.conf === 'guess');
-  if (sure && sure.n >= 3 && sure.correct / sure.n < 0.75) return 'You were often sure and wrong — slow down on those.';
-  if (guess && guess.n >= 3 && guess.correct / guess.n > 0.7) return 'You know more than you think.';
-  if (c.some((x) => x.n)) return 'Your confidence matches your accuracy.';
+  if (!c.some((x) => x.n >= 3)) return null;
+  const rate = (conf: Confidence) => {
+    const x = c.find((y) => y.conf === conf);
+    return x?.n ? { n: x.n, right: x.correct / x.n } : null;
+  };
+  const sure = rate('sure');
+  const guess = rate('guess');
+  if (sure && sure.n >= 3 && sure.right < 0.75) return 'You were often sure and wrong — slow down on those.';
+  if (guess && guess.n >= 3 && guess.right > 0.7) return 'You know more than you think.';
+  if ((!sure || sure.right >= 0.75) && (!guess || guess.right <= 0.5)) return 'Your confidence matches your accuracy.';
   return null;
 }

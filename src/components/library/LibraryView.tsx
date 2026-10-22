@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowUp,
   BookMarked,
   BookOpen,
@@ -21,6 +22,7 @@ import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
 import { LIBRARY_KEY, useAssistant, type ChatMsg, type SourceRef } from '../../state/assistant';
 import { useLibrary } from '../../state/library';
+import { questionNumber, useReview } from '../../state/review';
 import { chunkVault, type Scope } from '../../lib/ai/rag';
 import { STUDY_TOOLS, type StudyTool } from '../../lib/ai/prompts';
 import { MessageView, shownMarkdown } from '../ai/Message';
@@ -85,6 +87,8 @@ export function LibraryView() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messages = thread?.messages ?? [];
+  // A review session left for "Why?" stays one click away.
+  const reviewing = useReview((s) => (s.session ? `${questionNumber(s.session, s.current)}/${s.session.opts.length}` : null));
 
   const chunks = useMemo(() => chunkVault(Object.values(notes), scope), [notes, scope]);
   const noteCount = useMemo(() => new Set(chunks.map((c) => c.noteId)).size, [chunks]);
@@ -172,6 +176,11 @@ export function LibraryView() {
           </div>
         </div>
         <div className="library-controls">
+          {reviewing && (
+            <button className="btn is-ghost" onClick={() => useUI.getState().setView({ kind: 'review' })} title="Back to your review session">
+              <ArrowLeft size={14} /> Back to review · {reviewing}
+            </button>
+          )}
           <button ref={scopeBtn} className="btn is-ghost" onClick={() => setScopeOpen((v) => !v)}>
             {scopeClass ? (
               <ClassBadge cls={scopeClass} size={18} />

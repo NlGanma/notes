@@ -8,7 +8,7 @@ import { expandProof } from '../lib/ai/quote';
 import { classForFolder, classInfo } from '../lib/classes';
 import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
 import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
-import { assertGroundedItem, blankOut, buildItem, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
+import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
 import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
 import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
@@ -80,6 +80,10 @@ export interface Current {
   /** A second try after a miss (not counted): its score — none when only the student can tell — or being checked. */
   retry?: { answer: string; s?: number; checking?: boolean };
   revealed: boolean;
+  /** Answered "I don't know" (or typed it). */
+  dontKnow?: boolean;
+  /** The student said how it went themselves (a self-check, or a free answer no one else could grade). */
+  selfGraded?: boolean;
   firstInSession: boolean;
   wasDue: boolean;
   stateBefore: ConceptState;
@@ -111,6 +115,11 @@ interface ReviewState {
   /** Has the model look for more concepts in passages the rules found little in (background). */
   readMore(noteIds: string[]): Promise<void>;
   setSelection(ids: string[]): void;
+  /**
+   * A request to review these notes (⌘K, a class page, the sidebar): a session in progress ends, its
+   * summary staying on screen until it's closed, and the picker then shows them.
+   */
+  request(ids: string[]): void;
   setOpts(p: Partial<SessionOpts>): void;
   start(noteIds?: string[]): void;
   /** How sure the student says they are about the question on screen. */
@@ -125,6 +134,8 @@ interface ReviewState {
   next(): void;
   override(): void;
   report(): void;
+  /** Takes a report back: the question can be asked again. */
+  unreport(key: string): void;
   end(): void;
   closeSummary(): void;
 }
@@ -302,6 +313,19 @@ export function dueCount(now = Date.now()): number {
 }
 
 const where = (c: Concept, title: string) => [title, c.section].filter(Boolean).join(' › ');
+/** The line of the notes an item asks about. */
+export const factOf = (item: Item, c: Concept): Fact | undefined => c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
+
+/** The number of the question on screen (the "9" of "9 / 25"). */
+export const questionNumber = (session: SessionState, current: Pick<Current, 'phase'> | null) =>
+  Math.min(session.index + (current?.phase === 'feedback' ? 0 : 1), session.opts.length);
+
+/**
+ * Whether "I was right" can apply: to an answer the student wrote and code or the model graded —
+ * not to "I don't know", a self-check, or a choice (which is compared exactly).
+ */
+export const canOverride = (cur: Pick<Current, 'answer' | 'dontKnow' | 'selfGraded' | 'item'>) =>
+  !!cur.answer?.trim() && !cur.dontKnow && !cur.selfGraded && cur.item.format !== 'mcq';
 
 export const useReview = create<ReviewState>((set, get) => {
   const save = (file: ReviewFile) => {
@@ -552,19 +576,13 @@ export const useReview = create<ReviewState>((set, get) => {
 
   /** A guiding question after a miss: code's cue at once, the model's (if it passes the checks) a moment later. */
   const nudge = async (item: Item, c: Concept, answer: string) => {
-    const f = c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
-    const before = f?.key ? f.text.slice(0, f.text.indexOf(f.key)).replace(/\*\*|==/g, '').trim().split(/\s+/).slice(-4).join(' ') : '';
-    const note = noteOf(c.noteId);
-    const cue =
-      before && before.split(/\s+/).length >= 2
-        ? `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'} — the line that starts “${before}…”. What comes next?`
-        : `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}. What do your notes say about ${c.name.replace(/\*\*/g, '')}?`;
+    const f = factOf(item, c);
     const gen = generation;
     const setHint = (h: string) => {
       const cur = get().current;
       if (cur && cur.item.key === item.key && gen === generation) set({ current: { ...cur, hint: h } });
     };
-    setHint(cue);
+    setHint(hintFor(item, f, true));
     if (!online() || item.format === 'mcq' || isDontKnow(answer)) return;
     try {
       const blanked = f ? (blankOut(f) ?? f.text) : item.fact;
@@ -745,8 +763,9 @@ export const useReview = create<ReviewState>((set, get) => {
     const meta = get().pool.find((p) => p.id === c.id);
     if (!meta) return;
     const conf = cur.conf ?? null;
-    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception.
-    const named = !!cur.answer && namesPoint(cur.answer, cur.item.points ?? []);
+    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception. Nor is
+    // "I don't know", typed while "Sure" was on.
+    const named = !!cur.dontKnow || (!!cur.answer && namesPoint(cur.answer, cur.item.points ?? []));
     const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: named ? undefined : cur.answer, firstInSession: cur.firstInSession };
     const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
     const mastered = isMastered(after, meta.cap, meta.needs);
@@ -780,7 +799,8 @@ export const useReview = create<ReviewState>((set, get) => {
     if (verdict !== 'right') void nudge(cur.item, c, cur.answer ?? '');
   };
 
-  const finish = () => {
+  /** Sums the session up; `stopped` when the student ended it. */
+  const finish = (stopped = false) => {
     const sess = get().session;
     if (!sess) return;
     // Nothing was asked (nothing due or new): no session to sum up or keep.
@@ -804,6 +824,7 @@ export const useReview = create<ReviewState>((set, get) => {
         notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? notReviewable(noteOf(id)!).map((s) => `${noteOf(id)!.meta.title} › ${s}`) : [])),
         misconceptions: get().misconceptions,
         overrides: get().overrides,
+        stopped,
       },
       now,
     );
@@ -864,6 +885,13 @@ export const useReview = create<ReviewState>((set, get) => {
       scheduleExtract(ids);
     },
 
+    request(ids) {
+      if (get().session) get().end();
+      // A summary already on screen was seen: it makes way.
+      else if (get().summary) get().closeSummary();
+      get().setSelection(ids);
+    },
+
     setOpts(p) {
       set({ opts: { ...get().opts, ...p } });
     },
@@ -897,12 +925,13 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ current: { ...cur, answer: undefined, conf, phase: 'self', revealed: true } });
         return;
       }
-      set({ current: { ...cur, answer, conf } });
       if (isDontKnow(answer)) {
+        set({ current: { ...cur, answer, conf, dontKnow: true } });
         apply({ s: 0 }, item.graded);
         get().reveal();
         return;
       }
+      set({ current: { ...cur, answer, conf } });
       const r = await gradeAnswer(item, cur.concept, answer, withGrading);
       // Moved on (or the session ended) while the model was checking.
       const now = get().current;
@@ -922,7 +951,7 @@ export const useReview = create<ReviewState>((set, get) => {
     dontKnow() {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      set({ current: { ...cur, answer: '', conf: null } });
+      set({ current: { ...cur, answer: '', conf: null, dontKnow: true } });
       apply({ s: 0 }, cur.item.graded);
       // Nothing to retry from: show the notes' answer straight away (a re-teach).
       get().reveal();
@@ -931,17 +960,14 @@ export const useReview = create<ReviewState>((set, get) => {
     selfGrade(s) {
       const cur = get().current;
       if (!cur || cur.phase !== 'self') return;
+      set({ current: { ...cur, selfGraded: true } });
       apply({ s }, 'self');
     },
 
     showHint() {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      const c = cur.concept;
-      const f = c.facts.find((x) => x.id === cur.item.factId) ?? c.facts[0];
-      const note = noteOf(c.noteId);
-      const start = f ? f.text.replace(/\*\*|==/g, '').split(/\s+/).slice(0, 4).join(' ') : '';
-      set({ current: { ...cur, hintUsed: true, hint: `Look at “${c.section || note?.meta.title}” in ${note?.meta.title ?? 'your notes'}${start ? ` — it starts “${start}…”` : ''}.` } });
+      set({ current: { ...cur, hintUsed: true, hint: hintFor(cur.item, factOf(cur.item, cur.concept)) } });
     },
 
     async retry(answer) {
@@ -987,6 +1013,8 @@ export const useReview = create<ReviewState>((set, get) => {
       const cur = get().current;
       const sess = get().session;
       if (!cur || !sess || cur.phase !== 'feedback' || cur.overridden || get().overrides >= 3 || cur.feedback?.verdict === 'right') return;
+      // Only an answer that was written, and graded by someone else, can have been right.
+      if (!canOverride(cur)) return;
       const meta = get().pool.find((p) => p.id === cur.concept.id);
       if (!meta || !cur.sessBefore) return;
       const now = Date.now();
@@ -1018,8 +1046,13 @@ export const useReview = create<ReviewState>((set, get) => {
       get().next();
     },
 
+    unreport(key) {
+      const file = get().file;
+      if (file.bad.includes(key)) save({ ...file, bad: file.bad.filter((k) => k !== key) });
+    },
+
     end() {
-      if (get().session?.history.length) finish();
+      if (get().session?.history.length) finish(true);
       else {
         control?.abort();
         set({ session: null, current: null });
