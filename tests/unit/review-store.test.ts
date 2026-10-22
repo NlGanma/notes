@@ -217,7 +217,7 @@ test('a right answer after a hint comes back later in the session, without the h
 });
 
 /** Puts one question about an idea on screen: the first item `want` accepts among those its notes allow at `level`. */
-function ask(title: string, name: string, level: Level, want: (it: Item) => boolean = () => true): Item {
+function ask(title: string, name: string, level: Level, want: (it: Item) => boolean = () => true, firstExposure = false): Item {
   const note = byTitle(title);
   review().start([note.meta.id]);
   const cs = conceptsOf(note);
@@ -225,7 +225,7 @@ function ask(title: string, name: string, level: Level, want: (it: Item) => bool
   const chunkText = chunkNote(note).find((ch) => ch.hash === c.chunkHash)!.text;
   const avoid: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const item = buildItem(c, level, { title: note.meta.title, siblings: cs.filter((x) => x !== c), avoid, rng: mulberry32(1), firstExposure: false, chunkText });
+    const item = buildItem(c, level, { title: note.meta.title, siblings: cs.filter((x) => x !== c), avoid, rng: mulberry32(1), firstExposure, chunkText });
     if (want(item)) {
       const current = { item, concept: c, phase: 'ask' as const, hintUsed: false, revealed: false, firstInSession: true, wasDue: false, stateBefore: freshState(clock.now), shownAt: clock.now };
       useReview.setState({ current, misconceptions: [] });
@@ -304,6 +304,18 @@ test('a second try the code can’t decide is checked by the model', async () =>
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test('“How sure?” counts when a choice is answered with the number keys', () => {
+  const item = ask('Pretérito', 'El pretérito', 0, (it) => it.format === 'mcq', true);
+  review().setConf('sure');
+  // What 1–4 do: choose, with the pick kept with the question.
+  review().choose((item.correct! + 1) % item.choices!.length, review().current!.conf ?? null);
+  assert.equal(review().file.states[item.conceptId].recent.at(-1)!.conf, 'sure');
+  assert.ok(review().current!.feedback!.hypercorrect, 'sure and wrong');
+  // Once answered, the pick no longer changes.
+  review().setConf('guess');
+  assert.equal(review().current!.conf, 'sure');
 });
 
 test('a self-check has no written answer: none is shown or kept', async () => {
