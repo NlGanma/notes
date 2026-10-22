@@ -12,12 +12,15 @@ function inline(nodes: JSONContent[] | undefined): string {
   let out = '';
   for (const n of nodes) {
     if (n.type === 'text') {
-      let t = n.text ?? '';
+      const raw = n.text ?? '';
       const marks = (n.marks ?? []).map((m) => m.type);
+      // Markers must hug the text: "**ε–δ form: **" is not bold in Markdown, so edge spaces go outside them.
+      const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(raw)!;
+      let t = core;
       if (marks.includes('code')) t = '`' + t + '`';
       if (marks.includes('bold')) t = `**${t}**`;
       if (marks.includes('highlight')) t = `==${t}==`;
-      out += t;
+      out += core ? lead + t + trail : raw;
     } else if (n.type === 'mathInline') out += `$${n.attrs?.latex ?? ''}$`;
     else if (n.type === 'inkInline') out += n.attrs?.transcript ? String(n.attrs.transcript) : '[hand-drawn symbol]';
     else if (n.type === 'hardBreak') out += '\n';

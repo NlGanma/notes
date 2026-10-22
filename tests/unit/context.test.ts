@@ -21,6 +21,19 @@ test('notes become prompt text: math as LaTeX, handwriting via its transcript', 
   assert.match(text, /\$\$e\^\{i\\pi\}\+1=0\$\$/);
 });
 
+test('bold and highlight markers hug the text, so a label typed with its space still reads as bold', () => {
+  const bold = (text: string) => ({ type: 'text', text, marks: [{ type: 'bold' }] });
+  const text = docToText({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [bold('ε–δ form: '), { type: 'text', text: 'for every ε' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'the ' }, { type: 'text', text: ' key words ', marks: [{ type: 'highlight' }] }, { type: 'text', text: 'here' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'a' }, bold(' '), { type: 'text', text: 'b' }] },
+    ],
+  });
+  assert.equal(text, '**ε–δ form:** for every ε\n\nthe  ==key words== here\n\na b');
+});
+
 test('block list carries heading paths and can leave out assistant callouts', () => {
   const doc = { type: 'doc', content: [h('A'), p('one'), callout('outside', p('general')), h('B', 3), p('two')] };
   const all = docBlocks(doc);
