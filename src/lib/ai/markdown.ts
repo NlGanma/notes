@@ -129,8 +129,13 @@ function citations(state: StateInline, silent: boolean): boolean {
   const max = (state.env as { maxCite?: number } | undefined)?.maxCite;
   if (!isCitation(state.src, state.pos, m[1], max)) return false;
   if (!silent) {
+    // A chip right after a word wraps with that word: the space moves into a no-wrap run
+    // (a no-break space alone isn't enough; browsers still wrap before an inline-block).
+    const glued = /[\p{L}\p{N}][^\s\p{L}\p{N}]*[ \t]+$/u.test(state.pending);
+    if (glued) state.pending = state.pending.replace(/[ \t]+$/, '');
     const token = state.push('citation', 'cite', 0);
     token.content = m[1];
+    token.info = glued ? 'glued' : '';
   }
   state.pos += m[0].length;
   return true;
@@ -235,10 +240,12 @@ function build(withCitations: boolean) {
   md.renderer.rules.math_block = (tokens, idx) => `<div class="md-display">${renderMath(tokens[idx].content, true)}</div>\n`;
   if (withCitations) {
     md.inline.ruler.before('link', 'citation', citations);
-    md.renderer.rules.citation = (tokens, idx) =>
-      citedNumbers(tokens[idx].content)
+    md.renderer.rules.citation = (tokens, idx) => {
+      const chips = citedNumbers(tokens[idx].content)
         .map((n) => `<button class="cite" data-cite="${n}" type="button">${n}</button>`)
         .join('');
+      return tokens[idx].info ? `<span class="cite-run">&nbsp;${chips}</span>` : chips;
+    };
   }
   const defaultLink = md.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {

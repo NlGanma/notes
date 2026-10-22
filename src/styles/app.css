@@ -109,7 +109,8 @@
   width: auto;
   padding-right: 24px;
 }
-.appbar-menu {
+/* Two classes so it beats .icon-btn's 36px (components.css loads later): the 48px button centres on the icon column. */
+.icon-btn.appbar-menu {
   width: 48px;
   height: 48px;
 }
@@ -467,7 +468,7 @@
   border-radius: 16px;
 }
 .sidebar.is-rail .nav-item.nav-class {
-  height: 32px;
+  display: none;
 }
 .sidebar.is-rail .nav-label,
 .sidebar.is-rail .nav-count,
@@ -478,7 +479,19 @@
   display: none;
 }
 .sidebar.is-rail .side-section {
-  padding: 0;
+  padding: 0 0 16px;
+}
+/* Classroom's rail keeps only destinations, with one even 16px gap between groups. Classes stay on Home;
+   a collapsed or tags-only section has nothing to show here, so it takes no gap either. */
+.sidebar.is-rail .nav {
+  padding-bottom: 16px;
+}
+.sidebar.is-rail .nav.is-end {
+  padding-top: 0;
+}
+.sidebar.is-rail .side-section.is-collapsed,
+.sidebar.is-rail .side-section:has(.tag-pill) {
+  display: none;
 }
 /* A flex column, like .nav, so the items' margins don't collapse: one 48px pitch down the rail. */
 .sidebar.is-rail .side-section-body {
@@ -514,6 +527,10 @@
 .tree-row.is-active {
   background: var(--bg-selected);
   color: #004a77;
+}
+/* Like .nav-item.is-active: the glyph, arrow and badge take the selected colour too (an inline folder colour still wins). */
+.tree-row.is-active :is(.tree-icon, .tree-chevron, .tree-count, .tree-due) {
+  color: inherit;
 }
 .tree-row.is-drop {
   background: var(--accent-tint);
@@ -576,6 +593,12 @@
   align-items: center;
   gap: 12px;
   margin: 8px 0 24px;
+}
+/* The outlined Folder pill shares the create pill's 48px height (GM3 buttons in one row match), without its shadow. */
+.notes-toolbar .btn.is-secondary {
+  height: 48px;
+  padding: 0 24px 0 16px;
+  border-radius: 24px;
 }
 .notes-section {
   margin: 8px 0 12px;
@@ -676,7 +699,7 @@
   flex: none;
 }
 .note-card-title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: 14px;
   font-weight: 500;
@@ -691,6 +714,7 @@
 .note-card-more {
   width: 32px !important;
   height: 32px !important;
+  margin-left: auto;
 }
 .note-card-thumb {
   position: relative;
@@ -705,12 +729,12 @@
   border-radius: 0;
   margin-top: 8px;
 }
+/* Drive's starred mark: a small grey filled star right after the name, never a badge on the preview. */
 .note-card-star {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  color: #f9ab00;
-  fill: #f9ab00;
+  flex: none;
+  margin-left: -4px;
+  color: var(--text-2);
+  fill: var(--text-2);
 }
 .note-card-meta {
   display: flex;
@@ -814,9 +838,10 @@
   color: var(--text-2);
 }
 .note-row-star {
-  color: #f9ab00;
-  fill: #f9ab00;
   flex: none;
+  margin-left: -8px;
+  color: var(--text-2);
+  fill: var(--text-2);
 }
 .note-list-where,
 .note-list-date {

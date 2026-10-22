@@ -78,15 +78,8 @@ function ItemRow({ note, onOpen }: { note: NoteDoc; onOpen(): void }) {
   );
 }
 
-// The class's study tools, in NotebookLM's Studio order, each with one line on what it makes.
-const STUDY: { tool: StudyTool | 'review'; hint: string }[] = [
-  { tool: 'guide', hint: 'Concepts, formulas and practice' },
-  { tool: 'summary', hint: 'What the notes cover, in bullets' },
-  { tool: 'terms', hint: 'Everything defined in class' },
-  { tool: 'flashcards', hint: 'Flip cards from every note' },
-  { tool: 'quiz', hint: 'Questions with sources' },
-  { tool: 'review', hint: 'Practise until you know it' },
-];
+// The class's study tools, in NotebookLM's Studio order.
+const STUDY: (StudyTool | 'review')[] = ['guide', 'summary', 'terms', 'flashcards', 'quiz', 'review'];
 
 /** A class's page, as Google Classroom shows a class: Stream, Classwork and Study tabs under a breadcrumb. */
 export function ClassView({ path, tab = 'stream' }: { path: string; tab?: ClassTab }) {
@@ -338,6 +331,25 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
             </button>
           )}
         </div>
+        {/* Below 1100px the topic rail is hidden; Classroom swaps it for this outlined select under "+ Create". */}
+        {!empty && (
+          <label className="gselect cw-topic-select">
+            <span className="gselect-label">Topic filter</span>
+            <select
+              defaultValue=""
+              onChange={(e) => (e.target.value ? anchor(e.target.value) : document.querySelector('.screen-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }))}
+            >
+              <option value="">All topics</option>
+              {homework.length > 0 && <option value="topic-homework">Homework</option>}
+              {topics.map((f) => (
+                <option key={f} value={`topic-${f}`}>
+                  {f.slice(path.length + 1)}
+                </option>
+              ))}
+              {loose.length > 0 && (homework.length > 0 || topics.length > 0) && <option value="topic-notes">Notes</option>}
+            </select>
+          </label>
+        )}
         {empty && (
           <div className="screen-empty is-block">
             <div className="screen-empty-title">This is where your notes and homework live</div>
@@ -428,14 +440,11 @@ function Study({ path }: { path: string }) {
     <div className="study-page">
       <div className="study-intro">Made only from your {cls.name} notes. What you make opens in Ask your notes.</div>
       <div className="study-tiles">
-        {STUDY.map((s) => (
-          <div key={s.tool} className="studio-tile" style={toolStyle(s.tool)}>
-            <button className="study-tool class-study-tool" onClick={() => run(s.tool)}>
-              <ToolIcon tool={s.tool} size={24} />
-              <span>
-                <span className="study-tool-name">{TOOL_LOOK[s.tool].name}</span>
-                <span className="study-tool-hint">{s.hint}</span>
-              </span>
+        {STUDY.map((t) => (
+          <div key={t} className="studio-tile" style={toolStyle(t)}>
+            <button className="study-tool class-study-tool" onClick={() => run(t)}>
+              <ToolIcon tool={t} size={24} />
+              <span className="study-tool-name">{TOOL_LOOK[t].name}</span>
             </button>
           </div>
         ))}

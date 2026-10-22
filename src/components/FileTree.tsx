@@ -14,9 +14,9 @@ import {
   FolderPlus,
   Palette,
   Pencil,
-  Pin,
-  PinOff,
   SquareArrowOutUpRight,
+  Star,
+  StarOff,
   Target,
   Trash2,
 } from 'lucide-react';
@@ -262,8 +262,8 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
       },
     },
     n.meta.pinned
-      ? { label: 'Remove from Favorites', icon: <PinOff size={15} />, run: () => vault.updateMeta(n.meta.id, { pinned: false, updated: n.meta.updated }) }
-      : { label: 'Add to Favorites', icon: <Pin size={15} />, run: () => vault.updateMeta(n.meta.id, { pinned: true, updated: n.meta.updated }) },
+      ? { label: 'Remove from Favorites', icon: <StarOff size={15} />, run: () => vault.updateMeta(n.meta.id, { pinned: false, updated: n.meta.updated }) }
+      : { label: 'Add to Favorites', icon: <Star size={15} />, run: () => vault.updateMeta(n.meta.id, { pinned: true, updated: n.meta.updated }) },
     {
       label: 'Duplicate',
       icon: <Copy size={15} />,

@@ -146,7 +146,10 @@ export function SlashMenu() {
     if (!shown || !rect || !ref.current) return;
     const w = ref.current.offsetWidth;
     const below = window.innerHeight - rect.bottom - 16;
-    const above = rect.top - 16 - 64;
+    // The note's toolbar band is the ceiling, not the app bar.
+    const dock = document.querySelector('.note-view:not(.is-hidden) .toolbar-dock');
+    const ceiling = (dock?.getBoundingClientRect().bottom ?? 64) + 8;
+    const above = rect.top - 4 - ceiling;
     // The list plus the 37px footer: what the menu needs at most.
     const full = Math.min(400, (listRef.current?.scrollHeight ?? 400) + 37);
     const down = below >= full || below >= above;

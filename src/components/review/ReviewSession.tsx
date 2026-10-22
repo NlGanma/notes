@@ -100,7 +100,10 @@ export function ReviewSession() {
     const c = card.current;
     if (!feedback || !st || !c || !sheet) return;
     const over = c.getBoundingClientRect().bottom - (st.getBoundingClientRect().bottom - sheet - 16);
-    if (over > 0) st.scrollTop += over;
+    // On a very short pane the question wins: the sheet may cover the lowest answers, never the prompt.
+    const room = c.querySelector('.rv-prompt')!.getBoundingClientRect().top - st.getBoundingClientRect().top;
+    const by = Math.min(over, room);
+    if (by > 0) st.scrollTop += by;
   }, [feedback, sheet, current?.shownAt]);
 
   if (!current) return null;
@@ -295,6 +298,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => useReview.getState().setConf(conf === c.id ? null : c.id)}
               >
+                {conf === c.id && <Check size={16} />}
                 {c.label}
               </button>
             ))}
@@ -578,7 +582,11 @@ function FeedbackSheet({ current, onHeight }: { current: Current; onHeight(h: nu
     const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
     ro.observe(el);
     onHeight(el.offsetHeight);
-    return () => ro.disconnect();
+    // Gone, it frees its room: a stale height would scroll the next answered card too far up.
+    return () => {
+      ro.disconnect();
+      onHeight(0);
+    };
   }, [onHeight]);
   // Continue takes the focus (Enter moves on) — unless the answer box is open for another try.
   useEffect(() => {

@@ -237,7 +237,7 @@ export function NoteGrid({ view }: { view: View }) {
               </button>
               {(view.kind === 'home' || view.kind === 'folder') && (
                 <button className="btn is-secondary" onClick={() => void newFolder(folderPath)}>
-                  <FolderPlus size={18} /> Folder
+                  <FolderPlus size={20} /> Folder
                 </button>
               )}
             </div>
@@ -415,6 +415,7 @@ export const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc;
       <div className="note-card-top">
         {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
         <span className={cx('note-card-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
+        {note.meta.pinned && !trash && <Star size={16} className="note-card-star is-on" />}
         <button
           className="icon-btn note-card-more"
           onClick={(e) => {
@@ -428,7 +429,6 @@ export const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc;
       </div>
       <div className="note-card-thumb">
         <NoteThumb note={note} width={196} />
-        {note.meta.pinned && !trash && <Star size={16} className="note-card-star is-on" />}
       </div>
       <div className="note-card-meta">
         {cls ? (
@@ -476,7 +476,7 @@ export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) 
       <span className="note-list-name">
         {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
         <span className={cx('note-row-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
-        {note.meta.pinned && <Star size={14} className="note-row-star" />}
+        {note.meta.pinned && <Star size={16} className="note-row-star" />}
       </span>
       <span className="note-list-where">
         {cls ? <span className="class-letter is-small">{cls.name.charAt(0).toUpperCase()}</span> : <Folder size={16} className="note-card-folder-icon" />}

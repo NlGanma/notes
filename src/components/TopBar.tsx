@@ -11,11 +11,11 @@ import {
   FileUp,
   FolderPlus,
   GraduationCap,
-  ListChecks,
   Menu,
   MessageCircleQuestion,
   Plus,
   Search,
+  SpellCheck,
   X,
 } from 'lucide-react';
 import { useUI } from '../state/ui';
@@ -65,7 +65,7 @@ export function TopBar() {
     <header className={cx('topbar appbar drag', isElectron && isMac && 'has-traffic', rail && 'is-rail')}>
       <div className="appbar-start">
         <button className="icon-btn no-drag appbar-menu" onClick={() => useUI.getState().toggleSidebar()} aria-label="Main menu" title={`Main menu  ${MOD}\\`}>
-          <Menu size={22} />
+          <Menu size={24} />
         </button>
         <button className="appbar-brand no-drag" onClick={() => useUI.getState().setView({ kind: 'classes' })} title="Home">
           <NibMark />
@@ -115,7 +115,7 @@ export function TopBar() {
               aria-label="Polish"
               title="Polish — suggestions to tidy this note"
             >
-              <ListChecks size={20} />
+              <SpellCheck size={20} />
               {polishCount > 0 && <span className="badge">{polishCount}</span>}
             </button>
             <button

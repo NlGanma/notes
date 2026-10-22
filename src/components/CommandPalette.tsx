@@ -338,18 +338,6 @@ function Palette() {
             );
           })}
         </div>
-        <div className="palette-foot">
-          <span>
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> navigate
-          </span>
-          <span>
-            <kbd>↵</kbd> open
-          </span>
-          <span>
-            <kbd>&gt;</kbd> commands
-          </span>
-        </div>
       </div>
     </div>
   );

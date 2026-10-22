@@ -564,10 +564,9 @@ function AboutSection() {
   return (
     <div className="settings-section about">
       <div className="about-mark">
-        <NibMark size={64} />
+        <NibMark size={48} />
       </div>
       <h2>Nib</h2>
-      <p>A notebook where typing and handwriting share the page — and a study assistant that runs entirely on your own computer.</p>
       <p className="muted">{info ? `Version ${info.version} · Electron ${info.electron}` : 'Version 0.1.0'}</p>
     </div>
   );

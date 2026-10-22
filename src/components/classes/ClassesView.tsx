@@ -25,8 +25,6 @@ export function ClassArt({ icon, h, compact }: { icon: ClassInfo['icon']; h: num
       <span className="class-art-icon" style={compact ? { right: h * 0.24, top: h * 0.14 } : { right: h * 0.32 - s / 2, top: h * 0.5 - s / 2 }}>
         <ClassGlyph icon={icon} size={s} />
       </span>
-      <span className="class-art-dot" style={{ right: h * 0.95, top: h * 0.22 }} />
-      <span className="class-art-dot is-small" style={{ right: h * 0.12, top: h * 0.12 }} />
     </span>
   );
 }

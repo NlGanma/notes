@@ -418,7 +418,13 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
             {t.tool === 'eraser' ? (
               <span className="tb-ring" style={{ width: 4 + t.eraser.size / 3.2, height: 4 + t.eraser.size / 3.2 }} />
             ) : (
-              <span className="tb-summary-dot" style={{ background: activeColor }} />
+              <>
+                <span className="tb-summary-dot" style={{ background: activeColor }} />
+                <span
+                  className="tb-line"
+                  style={{ height: t.tool === 'highlighter' ? Math.min(10, t.highlighter.size / 2.6) : Math.max(1.5, Math.min(6, t.pen.size * 1.3)) }}
+                />
+              </>
             )}
             <ChevronDown size={14} />
             <Tip label="Tool options" />

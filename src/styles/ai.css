@@ -113,34 +113,47 @@
   line-height: 20px;
   margin: 8px 0 16px;
 }
-/* GM3 assist chips: outlined, radius 8, a blue icon. */
+/* Gemini side-panel suggestion cards: a full-width connected list, big outer
+   corners and small inner ones, each with a white icon tile. */
 .starters {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: stretch;
+  gap: 4px;
 }
 .starter {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 16px 6px 8px;
-  border-radius: var(--radius-s);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px 10px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-subtle);
   text-align: left;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--text);
   transition: background 0.15s var(--ease);
 }
+.starter:first-child {
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+}
+.starter:last-child {
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
 .starter svg {
-  color: var(--accent);
   flex: none;
+  box-sizing: content-box;
+  padding: 9px;
+  border-radius: var(--radius-s);
+  background: var(--bg);
+  color: var(--text-2);
 }
 .starter:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--accent-soft);
 }
 .starter:disabled {
   opacity: 0.38;
@@ -525,11 +538,14 @@
   background: #cdd3dd;
   color: var(--text);
 }
+.cite-run {
+  white-space: nowrap;
+}
 
 /* composer: a fully rounded field (Gemini's and NotebookLM's input) */
 .composer {
   margin: 0 16px 16px;
-  border-radius: 28px;
+  border-radius: 20px;
   background: var(--bg);
   box-shadow: inset 0 0 0 1px var(--border);
   padding: 8px 8px 8px 20px;
@@ -609,10 +625,19 @@
 /* Ask / Tutor: a small GM3 segmented button. */
 .mode-toggle {
   display: inline-flex;
+  position: relative;
   border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
   overflow: hidden;
   flex: none;
+}
+/* The outline sits above the segments so the selected fill can't cover it. */
+.mode-toggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--outline-variant);
+  pointer-events: none;
 }
 .mode-toggle button {
   display: inline-flex;

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Check } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
@@ -169,6 +169,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                   <div className="seg rv-length" role="radiogroup" aria-label="Length">
                     {LENGTHS.map((l) => (
                       <button key={l.n} role="radio" aria-checked={opts.length === l.n} className={cx(opts.length === l.n && 'is-active')} onClick={() => useReview.getState().setOpts({ length: l.n })}>
+                        {opts.length === l.n && <Check size={18} />}
                         {l.label}
                       </button>
                     ))}

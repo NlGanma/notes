@@ -27,7 +27,7 @@
 
 .rv-setup-column {
   max-width: 1040px;
-  margin: 0 auto;
+  margin: 0;
   padding: 0 24px 64px;
 }
 .rv-intro {
@@ -407,10 +407,11 @@ button.rv-bucket:hover:not(:disabled) {
   display: flex;
   width: 100%;
 }
+/* Equal thirds while they fit; in the narrow panel the checked segment takes the room its check needs. */
 .rv-length button {
-  flex: 1;
-  min-width: 0;
-  padding: 0 8px;
+  flex: 1 1 0;
+  min-width: auto;
+  padding: 0 12px;
 }
 .rv-warn {
   display: flex;
@@ -599,6 +600,12 @@ button.rv-bucket:hover:not(:disabled) {
 .rv-card.is-feedback:not(:has(.rv-ask, .rv-self-result)) {
   min-height: 0;
 }
+/* A graded written answer stays where it was typed: the ask state's 380px less the 56px action row it drops. */
+@media (min-height: 801px) {
+  .rv-card.is-feedback:has(.rv-answered) {
+    min-height: 324px;
+  }
+}
 @keyframes rv-rise {
   from {
     opacity: 0;
@@ -640,6 +647,7 @@ button.rv-bucket:hover:not(:disabled) {
   font-weight: 400;
   color: var(--text);
   overflow-wrap: break-word;
+  text-wrap: pretty;
 }
 .md.rv-prompt.is-l {
   font-size: 28px;
@@ -1075,7 +1083,7 @@ kbd.rv-key {
   margin: 0 auto;
   padding: 24px;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   column-gap: 20px;
   align-items: start;
 }
@@ -1153,10 +1161,9 @@ kbd.rv-key {
 .rv-sheet-foot {
   align-self: stretch;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 24px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
   margin-top: 8px;
 }
 .rv-links {
@@ -1165,6 +1172,7 @@ kbd.rv-key {
   gap: 8px 24px;
 }
 .rv-mastery-change {
+  order: -1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1324,6 +1332,7 @@ kbd.rv-key {
   line-height: 40px;
   font-weight: 400;
   color: var(--text);
+  text-wrap: balance;
 }
 .rv-summary-sub {
   margin-top: 8px;
@@ -1349,6 +1358,8 @@ kbd.rv-key {
   overflow: hidden;
 }
 .rv-scard.is-steps {
+  display: flex;
+  flex-direction: column;
   padding-bottom: 0;
 }
 .rv-scard-title,
@@ -1479,11 +1490,13 @@ kbd.rv-key {
 
 /* "Next steps": big described rows, the whole row clickable. */
 .rv-steps {
+  flex-grow: 1;
   display: flex;
   flex-direction: column;
   margin: 0 -24px;
 }
 .rv-step {
+  flex-grow: 1;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1764,6 +1777,35 @@ kbd.rv-key {
 @media (max-height: 800px) {
   .rv-card.is-feedback {
     min-height: 0;
+    padding-top: 16px;
+    padding-bottom: 20px;
+  }
+  .rv-card.is-feedback .md.rv-prompt {
+    margin: 12px 0 16px;
+  }
+  .rv-card.is-feedback .rv-answer-head {
+    min-height: 20px;
+    margin-bottom: 8px;
+  }
+  .rv-card.is-feedback .rv-choice {
+    min-height: 48px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .rv-sheet {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  .rv-sheet-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .rv-sheet-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .rv-verdict {
+    min-height: 40px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

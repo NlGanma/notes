@@ -70,7 +70,8 @@
   padding-top: 40px;
 }
 /* Classroom's assignment page: a 40px class-colour circle, then the title in the class colour; the rows under it
-   sit in the column right of the circle. (The "Your work" card and help below stay full width.) */
+   sit in the column right of the circle. (The class-colour rule, the "Your work" card and the help card stay full
+   width, sharing the body's left edge.) */
 .hw-title-row {
   display: flex;
   align-items: flex-start;
@@ -88,7 +89,7 @@
   line-height: 40px;
   color: var(--class-dark, var(--text));
 }
-.hw-bar > :is(.hw-meta, .hw-meta-row, .page-tags, .hw-rule) {
+.hw-bar > :is(.hw-meta, .hw-meta-row, .page-tags) {
   margin-left: 56px;
 }
 .page-meta {
@@ -671,6 +672,14 @@
   padding: 6px 0;
   background: var(--math-bg, var(--paper, #fff));
 }
+/* The cover runs edge to edge, like the unruled header band, so the rules don't stop at the text column.
+   (Legal paper keeps its red margin line.) */
+.page:not(.paper-legal) .nib-editor > .math-block-node > .math-block {
+  border-radius: 0;
+  box-shadow:
+    calc(-1 * var(--page-pad-x)) 0 0 var(--math-bg, var(--paper, #fff)),
+    var(--page-pad-x) 0 0 var(--math-bg, var(--paper, #fff));
+}
 .math-block.is-selected {
   background: linear-gradient(rgba(11, 87, 208, 0.08), rgba(11, 87, 208, 0.08)), var(--math-bg, var(--paper, #fff));
 }
@@ -1023,6 +1032,10 @@
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
+.tb-summary .tb-line {
+  width: 14px;
+  margin-left: 2px;
+}
 .tool-pop.is-summary {
   width: auto;
   padding: 8px;
@@ -1268,6 +1281,7 @@
   background: var(--bg-hover);
 }
 .fmt-style.is-active {
+  padding: 0 12px;
   background: var(--accent);
   color: #fff;
 }
@@ -1436,10 +1450,10 @@
   display: flex;
 }
 .pp-seg button {
-  flex: 1;
+  flex: 1 1 auto;
   height: 32px;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   font-size: 13px;
 }
 .pp-default {
@@ -2154,6 +2168,9 @@
   .tb-x1 {
     display: none;
   }
+}
+/* Shapes' inline row is the widest: it folds a little earlier, before its colours reach Paper. */
+@container toolbar (max-width: 840px) {
   .ink-toolbar[data-tool='shapes'] .tb-context {
     display: none;
   }
@@ -2161,12 +2178,9 @@
     display: inline-flex;
   }
 }
-@container toolbar (max-width: 620px) {
-  .ink-toolbar {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .tb-start,
-  .tb-x2 {
+@container toolbar (max-width: 680px) {
+  .tb-hl,
+  .tb-format > .tb-sep.is-inner {
     display: none;
   }
   .tb-context.has-summary {
@@ -2177,5 +2191,19 @@
   }
   .tb-end > .tb-sep {
     margin: 0 4px;
+  }
+}
+/* B/I/U go next (they're in the Aa panel too); undo/redo go last, as in Docs. */
+@container toolbar (max-width: 572px) {
+  .tb-x2 {
+    display: none;
+  }
+}
+@container toolbar (max-width: 500px) {
+  .ink-toolbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .tb-start {
+    display: none;
   }
 }

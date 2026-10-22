@@ -53,6 +53,7 @@ export function PaperPanel({ note }: { note: NoteDoc }) {
       <div className="seg pp-seg">
         {SPACINGS.map(([v, label]) => (
           <button key={v} className={cx(settings.lineSpacing === v && 'is-active')} onClick={() => settings.set({ lineSpacing: v })}>
+            {settings.lineSpacing === v && <Check size={16} />}
             {label}
           </button>
         ))}
