@@ -295,3 +295,50 @@ test('a negation reaches only to the end of its clause; word forms match, look-a
   assert.ok(!sameWord('differ', 'differentiable') && !sameWord('imperative', 'imperfect') && !sameWord('photograph', 'photosynthesis'));
   assert.deepEqual(idfSupport('differentiable', 'left and right limits differ').missing, ['differentiable']);
 });
+
+test('talking with the student is not a claim, and never makes a whole reply the AI’s own', () => {
+  const tutor = { mode: 'compute' as const, context: 'Find lim_{x→3} (x^2-9)/(x-3).' };
+  for (const line of ['Nice work!', 'Good — now plug in x = 3.', 'Your turn: try factoring the numerator.', 'You’re on the right track.', 'Take it one step at a time.', 'Double-check your algebra.'])
+    assert.notEqual(verdict(line, [], tutor), 'unsupported', line);
+  const f = finishGrounded('Nice work! You are close.\n\nWhat do you get when you plug in $x = 3$?', ctx(tutor), { question: tutor.context });
+  assert.notEqual(f.banner, 'collapsed');
+  assert.ok(!/outside/.test(f.shown), f.shown);
+  // A hint that states a rule of the subject is still checked.
+  assert.equal(verdict('Remember to differentiate the inside function too.', [], tutor), 'unsupported');
+});
+
+test('a formula of the notes applied to the student’s numbers is no contradiction; a fragment of one is not the notes', () => {
+  assert.equal(verdict('So near $0$, if $\\lim g = \\lim h = 0$ then $\\lim f = 0$ [1].', [1]), 'supported');
+  const frag = finishGrounded('If $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [1].\n\n$$\\frac{\\sin x}{x} = 1$$', ctx());
+  assert.ok(!unlabeled(renderMarkdown(frag.shown)).includes('sin'), frag.shown);
+  // The notes' formula re-spaced, with \leq or \left( … \right), is the notes' formula.
+  const same = finishGrounded('In symbols [1]:\n\n$$g(x) \\leq f(x) \\leq h(x)$$', ctx());
+  assert.ok(!/outside/.test(same.shown), same.shown);
+});
+
+test('claims hide in structure no longer: \\[ blocks, header rows, short headings, code fences, gap clauses', () => {
+  const ok = 'If $g(x) \\le f(x) \\le h(x)$ near $a$ and $\\lim g = \\lim h = L$, then $\\lim f = L$ [1].';
+  for (const extra of [
+    '\\[\n\\lim_{x \\to 0}\\frac{1-\\cos x}{x^2}=\\frac12\n\\]',
+    '| Every polynomial is continuous | Limits always exist |\n|---|---|\n| Sum | x |',
+    '### Imperfect: completed actions',
+    '```\n```python\nNewton proved the squeeze theorem in 1687.\n```\n```',
+    'Your notes don’t mention Archimedes proving the squeeze theorem in 250 BC.',
+    'Newton couldn’t find a proof of it, but the squeeze theorem holds.',
+  ]) {
+    const free = visibleUnlabeled(`${ok}\n\n${extra}`);
+    assert.ok(!/cos|polynomial|always exist|imperfect: completed|Newton|Archimedes/i.test(free), `${extra} → ${free}`);
+  }
+});
+
+test('“every”, “only” and opposite prefixes must be what a line of the notes says', () => {
+  assert.equal(verdict('Every limit exists.', []), 'unsupported');
+  assert.equal(verdict('Ser is regular.', []), 'unsupported');
+  assert.equal(verdict('Only three verbs are irregular in the imperfect: ser, ir and ver [5].', [5]), 'supported');
+});
+
+test('copying keeps paragraphs apart, and citations are dropped without touching math', () => {
+  const copied = markersToText('Before [1].\n\n:::outside auto\nArchimedes.\n:::\n\nAfter [1].');
+  assert.match(copied, /> Archimedes\.\n\nAfter/);
+  assert.match(shownOf({ content: 'On $[0, 1]$ it is continuous [1].', grounding: 'library', status: 'stopped' }), /\$\[0, 1\]\$/);
+});

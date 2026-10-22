@@ -32,6 +32,15 @@ export interface Finished {
 
 const CITES = /\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\()/g;
 
+/** The text without citation markers — never touching math, where "[0, 1]" is an interval. */
+function withoutCites(s: string): string {
+  const math: string[] = [];
+  return s
+    .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, (m) => `\u0001${math.push(m) - 1}\u0001`)
+    .replace(CITES, '')
+    .replace(/\u0001(\d+)\u0001/g, (_m, i: string) => math[Number(i)]);
+}
+
 /**
  * Turns a grounded reply into what the student sees. Runs in code after every
  * answer (and again after Continue), so the guarantee never depends on the
@@ -53,10 +62,12 @@ export function finishGrounded(raw: string, ctx: VerifyCtx, opts: { question?: s
   };
   // A plain refusal ("Your notes don't cover this.") with nothing from the notes: the whole question is the gap.
   if (!gaps.length && report.supported + report.weak === 0 && !report.outside && opts.question && GAP_RE.test(body)) gaps.push(opts.question);
-  // Nothing in it could be matched to the notes: the whole reply is the model's own knowledge.
-  if (report.claims > 0 && report.supported + report.weak === 0 && report.outside === 0) {
+  // Nothing in it could be matched to the notes: the whole reply is the model's own knowledge. (Talk with the
+  // student boxed only for its words — "Nice work!" — is no reason to box all of it.)
+  const claims = report.statements.filter((st) => st.verdict !== 'exempt' && !st.talk).length;
+  if (claims > 0 && report.supported + report.weak === 0 && report.outside === 0) {
     return {
-      shown: `:::outside auto\n${boxBody(body.replace(CITES, ''))}\n:::`,
+      shown: `:::outside auto\n${boxBody(withoutCites(body))}\n:::`,
       check,
       gaps,
       coverage: 'none',
@@ -96,14 +107,14 @@ export function shownOf(m: ShownReply): string {
   // The notes don't cover it: the reply streams straight into the labelled box.
   if (m.ownOnly && m.content) return `:::outside\n${boxBody(m.content)}\n:::`;
   if (m.content && m.grounding && m.grounding !== 'transform' && (m.status === 'stopped' || m.status === 'error'))
-    return `:::outside auto\n${boxBody(m.content.replace(CITES, ''))}\n:::`;
+    return `:::outside auto\n${boxBody(withoutCites(m.content))}\n:::`;
   return m.content;
 }
 
 /** With "never use the AI's own knowledge": what isn't from the notes is left out, not shown in a box. */
 export function leaveOutOwn(md: string): string {
   return normalizeOutside(md)
-    .replace(/^:::outside[^\n]*\n[\s\S]*?\n:::\s*$/gm, '_Left out — not in your notes._')
+    .replace(/^:::outside[^\n]*\n[\s\S]*?\n:::[ \t]*$/gm, '_Left out — not in your notes._')
     .replace(/\uE000[\s\S]*?\uE001/g, '_(left out — not in your notes)_')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

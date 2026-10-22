@@ -163,7 +163,12 @@ export function parseGaps(md: string): string[] {
   const out: string[] = [];
   for (const m of md.matchAll(/^\s*\**\s*not in (?:your |the )?notes\s*\**\s*:?\s*\**\s*(.*)$/gim)) {
     // Only what is missing — the banner is the app's, so a sentence the model added after it is dropped.
-    let what = m[1].replace(/\*\*/g, '').split(/(?<=[.!?])\s+/)[0].replace(/[.\s]+$/, '').trim();
+    let what = m[1]
+      .replace(/\*\*/g, '')
+      .split(/(?<=[.!?])\s+|\s*[(—–]\s*|,\s*but\b/)[0]
+      .replace(/[.,:;\s]+$/, '')
+      .replace(/^[,:;\s]+/, '')
+      .trim();
     if (what.length > 100) what = `${what.slice(0, 100).replace(/\s+\S*$/, '')}…`;
     if (what && !out.includes(what)) out.push(what);
   }

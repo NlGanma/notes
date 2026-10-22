@@ -419,7 +419,10 @@ export const useAssistant = create<AssistantState>()(
         if (f.weak.length && useAI.getState().doubleCheck) {
           const overrides = await doubleCheck(key, msgId, raw, f.weak.slice(0, 6), vctx, model);
           // Stopped: the reply stays as checked so far, with nothing more asked of the model.
-          if (overrides === 'stopped') return;
+          if (overrides === 'stopped') {
+            patchMsg(key, msgId, { status: 'stopped' });
+            return;
+          }
           if (overrides) {
             f = finishGrounded(raw, { ...vctx, overrides }, { question: spec.question });
             show();

@@ -75,6 +75,10 @@ const CASES: Case[] = [
   { note: CALC, kind: 'homework', mode: 'compute', context: 'True or false: every continuous function is differentiable.', answer: 'True: every continuous function is differentiable.\n\nTo check, use the definition of continuity {Continuity}.', invented: ['every continuous function is differentiable'] },
   { note: CALC, kind: 'homework', mode: 'compute', context: 'Find lim_{x→3} (x^2-9)/(x-3).', answer: '$= \\lim_{x \\to 3}(x+3) = 6$\n\nThis works because L’Hôpital’s rule lets you differentiate the top and the bottom.', invented: ['Hôpital'] },
   { note: CALC, kind: 'homework', mode: 'compute', context: 'Is f(x) = |x| continuous at 0?', answer: 'Yes, and it is also differentiable at 0.', invented: ['also differentiable'] },
+  // Talk with the student: no claim, so never boxed (and never a reason to box a whole reply)
+  { note: CALC, kind: 'talk', mode: 'compute', context: 'Find lim_{x→3} (x^2-9)/(x-3).', answer: 'Nice work! You’re on the right track.\n\nYour turn: try factoring the numerator.', backed: ['Nice work', 'right track', 'factoring the numerator'] },
+  { note: CALC, kind: 'talk', mode: 'compute', context: 'Find lim_{x→3} (x^2-9)/(x-3).', answer: 'Good — now plug in $x = 3$.\n\nWhat do you get for the limit?', backed: ['now plug in', 'What do you get'] },
+  { note: SPAN, kind: 'talk', mode: 'compute', context: 'Pick preterite or imperfect: Ayer ___ (comer) paella.', answer: 'Take it one step at a time. Double-check your algebra of endings?', backed: ['one step at a time'] },
   // True paraphrases: these should stay unboxed
   { note: CALC, kind: 'true paraphrases', answer: 'If $g(x) \\le f(x) \\le h(x)$ near $a$ and both $g$ and $h$ tend to $L$, then $f$ tends to $L$ too {Squeeze theorem}.', backed: ['tends to'] },
   { note: CALC, kind: 'true paraphrases', answer: 'A function is continuous at $a$ when $f(a)$ is defined, the limit exists, and the two are equal {Continuity}.', backed: ['the two are equal'] },

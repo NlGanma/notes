@@ -18,7 +18,7 @@ This doesn't rely on the model behaving. Nib's harness enforces it in code:
 - Parts the notes don't cover are answered in a separate call whose whole reply is boxed, so general knowledge never mixes into the cited text.
 - A reply that stops early (you press Stop, ask something else, or the connection drops) is checked the same way; unchecked text is never shown, copied or inserted outside a box.
 
-How well does that hold? The check is code, so it has blind spots: it reads words, not meaning. `npm run eval:grounding` throws 39 invented claims written to slip past it at the demo notes. On this version, 2 of the 39 still reach the student without a label after the double-check (a claim built from words of different lines, and a contradiction the notes never spell out), and 1 of 18 true sentences gets boxed. So "everything outside a box is from your notes" means everything outside a box passed this check, not that it is certain.
+How well does that hold? The check is code, so it has blind spots: it reads words, not meaning. `npm run eval:grounding` throws 39 invented claims written to slip past it at the demo notes. On this version, 2 of the 39 still reach the student without a label after the double-check (a claim built from words of different lines, and a contradiction the notes never spell out), and 1 of 24 true sentences — tutoring talk included — gets boxed. So "everything outside a box is from your notes" means everything outside a box passed this check, not that it is certain.
 
 ### Type and write on the same page
 - **Any pen, anywhere.** Fountain pen, ballpoint, brush pen, pencil, felt marker and highlighter, each with its own colours and sizes. Ink snaps to the same baseline grid as typed text, so the two line up.
