@@ -136,18 +136,19 @@ check(undone === before, `${MOD}+Z restored the erased strokes`);
 await page.keyboard.press('Alt+t');
 const para = page.locator('.note-view:not(.is-hidden) .ProseMirror > p').first();
 const pb = await para.boundingBox();
+// The click puts the caret at the end of the line. (No End key: on macOS it scrolls the page instead.)
 await page.mouse.click(pb.x + pb.width - 2, pb.y + 16);
-await page.keyboard.press('End');
 await page.keyboard.type(' Result');
 await page.keyboard.press('Alt+p');
-const endX = await page.evaluate(() => {
+const lineEnd = await page.evaluate(() => {
   const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
   const $p = ed.state.doc.resolve(2);
-  return ed.view.coordsAtPos($p.end()).right;
+  const r = ed.view.coordsAtPos($p.end());
+  return { x: r.right, y: (r.top + r.bottom) / 2 };
 });
 // a hand-drawn arrow right after "Result"
-const ax = endX + 10;
-const ay = pb.y + 14;
+const ax = lineEnd.x + 10;
+const ay = lineEnd.y;
 await page.mouse.move(ax, ay);
 await page.mouse.down();
 await page.mouse.move(ax + 30, ay, { steps: 6 });
@@ -167,6 +168,8 @@ check(JSON.stringify(firstPara).includes('9.79'), 'typing continued after the in
 await shot(page, 'ink-07-inline-capture');
 
 // 10. ⌘D inline sketch pad.
+const inlineCount = (d) => (JSON.stringify(d).match(/"inkInline"/g) ?? []).length;
+const inlineBefore = inlineCount(await docJSON());
 await page.keyboard.press(`${MOD}+d`);
 await page.waitForTimeout(300);
 check(await page.locator('.inkpad').count(), `${MOD}+D opened the inline sketch pad`);
@@ -180,7 +183,7 @@ await shot(page, 'ink-08-pad');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(300);
 doc = await docJSON();
-check((JSON.stringify(doc).match(/inkInline/g) ?? []).length >= 2, 'inline sketch inserted at the caret');
+check(inlineCount(doc) === inlineBefore + 1, 'inline sketch inserted at the caret');
 await shot(page, 'ink-09-final');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
