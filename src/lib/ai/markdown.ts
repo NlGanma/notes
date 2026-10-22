@@ -268,8 +268,8 @@ export function citedInAnswer(src: string, maxCite?: number): Set<number> {
 /**
  * A reply still being written, or cut off, can end inside a formula ("…and
  * $\lim g = \lim"), which shows as raw TeX until it closes: the formula is left
- * out until then. Only the last paragraph is looked at; a box the app closes
- * after it, and citations Nib added after it, stay.
+ * out until then. Only the last paragraph is looked at; what Nib wrote after
+ * it stays: the box it closes, citations it added, the end of a mark.
  */
 export function withoutOpenMath(md: string): string {
   const fence = /\n:::[ \t]*$/.exec(md)?.[0] ?? '';
@@ -278,9 +278,14 @@ export function withoutOpenMath(md: string): string {
   for (const m of body.matchAll(/\n[ \t]*\n/g)) start = m.index! + m[0].length;
   const at = openMathAt(body.slice(start));
   if (at < 0) return md;
-  const cites = /(?:\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\())+\s*$/.exec(body.slice(start + at))?.[0].trim();
-  return `${body.slice(0, start + at).trimEnd()}${cites ? ` ${cites}` : ''}${fence}`;
+  const cut = body.slice(start + at);
+  const marks = cut.match(MARKS)?.join('') ?? '';
+  const cites = /(?:\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\())+\s*$/.exec(cut.replace(MARKS, ''))?.[0].trim();
+  return `${body.slice(0, start + at).trimEnd()}${cites ? ` ${cites}` : ''}${marks}${fence}`;
 }
+
+/** Any of the inline markers. */
+const MARKS = new RegExp(`[${OWN_OPEN}-${OWN_END}]`, 'g');
 
 /** Where a formula opens without closing in `s` (-1 if none). A lone "$5" is a price, not a formula. */
 function openMathAt(s: string): number {

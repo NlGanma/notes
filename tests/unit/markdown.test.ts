@@ -80,4 +80,8 @@ test('a formula still being written is left out until it closes; prices, code an
   }
   // Only the last paragraph can still be open.
   assert.equal(withoutOpenMath('An odd $x line.\n\nThen [1].'), 'An odd $x line.\n\nThen [1].');
+  // The end of a mark stays, so a marked item keeps its tag.
+  const { OWN_OPEN, OWN_CLOSE, WEAK_OPEN, WEAK_CLOSE } = await import('../../src/lib/ai/markdown');
+  assert.equal(withoutOpenMath(`- ${OWN_OPEN}The derivative is $nx^{n-1${OWN_CLOSE}`), `- ${OWN_OPEN}The derivative is${OWN_CLOSE}`);
+  assert.equal(withoutOpenMath(`${WEAK_OPEN}Sum: $\\lim (f+g [1]${WEAK_CLOSE}`), `${WEAK_OPEN}Sum: [1]${WEAK_CLOSE}`);
 });
