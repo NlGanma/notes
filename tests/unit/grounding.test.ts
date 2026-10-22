@@ -24,3 +24,27 @@ test('method steps that start with Now/Next still need a source', () => {
   assert.equal(needsCitation('Now try the next step yourself and tell me what you get.'), false);
   assert.equal(needsCitation('Nowhere in the definition does the limit need f(a) to exist.'), true);
 });
+
+test('continuing a cut-off reply joins cleanly, mid-word or between words', async () => {
+  const { joinContinuation } = await import('../../src/state/assistant');
+  assert.equal(joinContinuation('the mitochondria is the power', 'is the powerhouse of the cell.'), 'the mitochondria is the powerhouse of the cell.');
+  assert.equal(
+    joinContinuation('Photosynthesis converts light', 'Photosynthesis converts light energy into sugar.'),
+    'Photosynthesis converts light energy into sugar.',
+  );
+  assert.equal(joinContinuation('1. Step one\n', '2. Step two'), '1. Step one\n2. Step two');
+  assert.equal(joinContinuation('The answer is', 'six.'), 'The answer is six.');
+  assert.equal(joinContinuation('The answer is 6', '.'), 'The answer is 6.');
+});
+
+test('hand-offs to the student are exempt only when they make no claim', () => {
+  for (const s of [
+    'Now you can cancel the common factor (x-3), so f(x) = x+3 for every x except 3.',
+    'Next, check the denominator: at x = 3 it is zero, so f is undefined there.',
+    'Try factoring first: x^2 - 9 = (x-3)(x+3), so the limit is 6.',
+    'Remember to apply the chain rule, since the derivative of sin(2x) is 2cos(2x).',
+  ])
+    assert.equal(needsCitation(s), true, s);
+  for (const s of ['Your turn: try the next step and tell me what you get.', 'Give it a try and let me know how it goes for you.'])
+    assert.equal(needsCitation(s), false, s);
+});

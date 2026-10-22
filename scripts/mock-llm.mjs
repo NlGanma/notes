@@ -75,6 +75,18 @@ function firstSentences(text, n = 2) {
 function reply(messages) {
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
   const last = [...messages].reverse().find((m) => m.role === 'user') ?? { content: '' };
+
+  // "Continue" after a cut-off reply: repeat the last few words, then the rest of the original answer.
+  if (/Your reply was cut off/i.test(last.content) && messages.length >= 3) {
+    const before = messages[messages.length - 2]?.content ?? '';
+    const full = reply(messages.slice(0, -2));
+    const rest = full.startsWith(before) ? full.slice(before.length) : full;
+    const tail = before
+      .split(/(?<=\s)/)
+      .slice(-5)
+      .join('');
+    return tail + rest;
+  }
   const q = last.content;
   const images = last.images ?? [];
 

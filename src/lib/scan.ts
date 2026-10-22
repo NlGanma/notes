@@ -57,18 +57,37 @@ export async function readPage(noteId: string, blockId: string, opts: { priority
   });
   const label = String(block?.attrs?.title ?? '').match(/Page \d+/)?.[0] ?? String(block?.attrs?.alt ?? '').match(/^Page \d+/)?.[0] ?? 'Page';
   const text = res.text.replace(/```[a-z]*\n?|```/g, '').trim();
-  setAlt(noteId, blockId, `${label}: ${text}`);
+  // Another run may have read this page meanwhile; keep the first result.
+  const now = (liveContent(noteId)?.content ?? []).find((b) => b.type === 'image' && b.attrs?.id === blockId);
+  if (now && needsReading(now.attrs)) setAlt(noteId, blockId, `${label}: ${text}`);
   return text;
 }
 
-/** Reads every page of a note that has no text yet. Returns how many were read. */
+/** One reading run per note: a newer run (e.g. the "Read pages" button) takes over from a background one. */
+const runs = new Map<string, { cancelled: boolean }>();
+
+/** Reads every page of a note that has no text yet. Returns how many were read (0 if another run took over). */
 export async function readScannedPages(noteId: string, opts: { priority?: Priority; onProgress?(done: number, total: number): void } = {}): Promise<number> {
   if (!visionModel()) return 0;
+  const previous = runs.get(noteId);
+  if (previous) previous.cancelled = true;
+  const run = { cancelled: false };
+  runs.set(noteId, run);
+  try {
+    return await readPages(noteId, run, opts);
+  } finally {
+    if (runs.get(noteId) === run) runs.delete(noteId);
+  }
+}
+
+async function readPages(noteId: string, run: { cancelled: boolean }, opts: { priority?: Priority; onProgress?(done: number, total: number): void }) {
   const pages = (liveContent(noteId)?.content ?? []).filter((b) => b.type === 'image' && b.attrs?.id && needsReading(b.attrs));
   let done = 0;
   for (const p of pages) {
+    if (run.cancelled) return 0;
     const id = String(p.attrs!.id);
     for (let paused = 0; ; paused++) {
+      if (run.cancelled) return 0;
       // The page may have been deleted, or read with the button, meanwhile.
       const live = (liveContent(noteId)?.content ?? []).find((b) => b.type === 'image' && b.attrs?.id === id);
       if (!live || !needsReading(live.attrs)) break;

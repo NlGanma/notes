@@ -147,7 +147,16 @@ export const MessageView = memo(function MessageView({
           </div>
         </div>
       )}
-      {msg.status === 'stopped' && <div className="msg-stopped">Stopped</div>}
+      {msg.status === 'stopped' && (
+        <div className="msg-stopped">
+          Stopped
+          {onRegenerate && !msg.content && (
+            <button className="link-btn" onClick={onRegenerate}>
+              <RefreshCw size={12} /> Retry
+            </button>
+          )}
+        </div>
+      )}
       {report && (
         <GroundingBar
           report={report}

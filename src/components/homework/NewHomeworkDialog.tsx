@@ -93,6 +93,8 @@ export function NewHomeworkDialog() {
           content: [...pages, { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'My work' }] }, { type: 'paragraph' }],
         };
       }
+      busyRef.current = false;
+      setBusy(false);
       const doc = createHomework({ classPath, title: title.trim() || (start === 'scan' ? 'Scanned homework' : ''), due: fromDateInput(due), content });
       useUI.getState().openDialog(null);
       if (start === 'scan') {

@@ -201,6 +201,20 @@ await lastBot().locator('.msg-continue').click();
 await waitIdle();
 const full = (await lastBot().locator('.md').textContent()).length;
 check(full > cut && !(await lastBot().locator('.msg-continue').count()), `continue extends the same reply (${cut} → ${full} chars)`);
+// The raw reply (KaTeX repeats formula text in the DOM, so read the stored markdown).
+const joinedText = await page.evaluate(() => {
+  const threads = JSON.parse(localStorage.getItem('nib.assistant') || '{}').state?.threads ?? {};
+  const msgs = Object.values(threads).flatMap((t) => t.messages);
+  return [...msgs].reverse().find((m) => m.role === 'assistant' && m.status === 'done')?.content ?? '';
+});
+const words = joinedText.split(/\s+/);
+const fiveGrams = words.map((_, i) => words.slice(i, i + 5).join(' ')).filter((g) => g.split(' ').length === 5);
+const repeated = fiveGrams.some((g, i) => fiveGrams.indexOf(g) !== i);
+if (repeated) console.log('     joined:', JSON.stringify(joinedText));
+check(
+  !repeated && /can be filled \[\d\]\.$/.test(joinedText.trim()),
+  'the continued reply joins seamlessly (no repeated words at the seam, ends where the answer ends)',
+);
 
 // ---------------------------------------------------------------- done
 await page.click(`${V} .hw-done`);

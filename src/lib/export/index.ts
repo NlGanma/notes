@@ -52,7 +52,7 @@ async function saveText(name: string, data: string, mime: string, ext: string, l
 }
 
 function pageHTML(title: string, bodyHTML: string, paper: string, line: number) {
-  return `<article class="nib-doc nib-print paper-${paper}" style="--line:${line}px">
+  return `<article class="nib-doc nib-print paper-${escapeHtml(paper)}" style="--line:${Number(line) || 32}px">
   <h1 class="doc-title">${escapeHtml(title || 'Untitled')}</h1>
   <div class="doc-body">${bodyHTML}</div>
 </article>`;

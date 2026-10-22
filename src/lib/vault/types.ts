@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Paper } from '../../state/settings';
-import { sanitizeDoc } from './sanitize';
+import { isSafeColor, sanitizeDoc } from './sanitize';
 
 export interface NoteMeta {
   id: string;
@@ -91,8 +91,8 @@ export function parseNoteFile(text: string): NoteDoc | null {
         updated: Number(meta.updated) || Date.now(),
         pinned: !!meta.pinned,
         trashed: meta.trashed ? Number(meta.trashed) : undefined,
-        paper: meta.paper,
-        color: meta.color,
+        paper: (['blank', 'ruled', 'legal', 'grid', 'dots'] as const).includes(meta.paper as never) ? meta.paper : undefined,
+        color: isSafeColor(meta.color) ? meta.color : undefined,
         homework:
           meta.homework && typeof meta.homework === 'object'
             ? {

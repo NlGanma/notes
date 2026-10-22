@@ -46,7 +46,8 @@ test('duplicating homework keeps it homework, so it is never cited as a class no
   vault().updateMeta(hw().meta.id, { homework: { ...hw().meta.homework!, done: true } });
   const copy = vault().duplicateNote(hw().meta.id)!;
   assert.ok(copy.meta.homework);
-  assert.equal(copy.meta.homework!.done, false);
+  // A copy keeps the original's state (a reference copy of finished work isn't suddenly overdue).
+  assert.equal(copy.meta.homework!.done, true);
   assert.deepEqual(
     homeworkSources(hw(), vault().notes).map((n) => n.meta.title),
     ['Lecture 4'],

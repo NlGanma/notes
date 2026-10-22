@@ -53,3 +53,16 @@ test('inserting an answer strips citations but never touches math', () => {
   // The student's own Markdown keeps its brackets.
   assert.match(markdownToEditorHTML('Interval [1, 2] here.'), /\[1, 2\]/);
 });
+
+test('intervals after "on", "in", "∈" stay text; bogus ranges never become chips', async () => {
+  const { citedInAnswer } = await import('../../src/lib/ai/markdown');
+  const a = renderMarkdown('Since f is continuous on [1, 2] and f(1)<0<f(2), there is a root [2].', { citations: true, maxCite: 5 });
+  assert.match(a, /on \[1, 2\]/);
+  assert.equal((a.match(/class="cite"/g) ?? []).length, 1);
+  assert.doesNotMatch(renderMarkdown('x is in [1-20] or [5-2].', { citations: true, maxCite: 30 }), /data-cite/);
+  // Inserting strips exactly what the chat showed as chips.
+  const ins = markdownToEditorHTML('On [1, 10], f grows [1].', { stripCitations: true, maxCite: 3 });
+  assert.match(ins, /On \[1, 10\], f grows\./);
+  // The sources list counts only real citations, never math.
+  assert.deepEqual([...citedInAnswer('Use $x \\in [2,3]$ and $[0, 1]$ as in the notes [1].', 3)], [1]);
+});

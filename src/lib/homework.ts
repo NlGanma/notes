@@ -35,6 +35,11 @@ export function homeworkSources(hw: NoteDoc, notes: Record<string, NoteDoc>): No
   return [...out.values()];
 }
 
+/** Notes filed in some folder's Homework/ (the student's own work, never a source). */
+export function inHomeworkFolder(n: NoteDoc): boolean {
+  return n.meta.folder.split('/').includes(HOMEWORK_SUBFOLDER);
+}
+
 export interface SourceSuggestion {
   note: NoteDoc;
   score: number;
@@ -58,7 +63,9 @@ export function suggestSources(hw: NoteDoc, notes: Record<string, NoteDoc>, k = 
   const qTokens = new Set(tokenize(raw).filter((t) => !GENERIC.has(t) && !/^\d+$/.test(t)));
   if (!qTokens.size) return [];
   const query = [...qTokens].join(' ');
-  const candidates = Object.values(notes).filter((n) => !n.meta.trashed && !n.meta.homework && n.meta.id !== hw.meta.id && !n.meta.tags.includes('guide'));
+  const candidates = Object.values(notes).filter(
+    (n) => !n.meta.trashed && !n.meta.homework && n.meta.id !== hw.meta.id && !n.meta.tags.includes('guide') && !inHomeworkFolder(n),
+  );
   const chunks = candidates.flatMap(chunkNote);
   if (!chunks.length) return [];
   const scores = bm25Scores(buildBm25(chunks), query);

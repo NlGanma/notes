@@ -4,7 +4,7 @@ import { Modal } from '../common/Modal';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
 import { classForFolder, classInfo, inFolder } from '../../lib/classes';
-import { homeworkSources, suggestSources } from '../../lib/homework';
+import { homeworkSources, inHomeworkFolder, suggestSources } from '../../lib/homework';
 import { ClassBadge } from '../classes/ClassIcon';
 import { cx, plural } from '../../lib/util';
 import type { NoteDoc } from '../../lib/vault/types';
@@ -32,7 +32,10 @@ export function LinkNotesDialog() {
   }, [open, noteId]);
 
   const classPath = hw ? classForFolder(hw.meta.folder, folderMeta) : null;
-  const candidates = useMemo(() => Object.values(notes).filter((n) => !n.meta.trashed && !n.meta.homework && n.meta.id !== noteId), [notes, noteId]);
+  const candidates = useMemo(
+    () => Object.values(notes).filter((n) => !n.meta.trashed && !n.meta.homework && n.meta.id !== noteId && !inHomeworkFolder(n)),
+    [notes, noteId],
+  );
   const suggestions = useMemo(() => (hw ? suggestSources(hw, notes, 3, classPath) : []), [hw, notes, classPath]);
 
   // Group by top-level folder (its class, if it is one); the homework's own class first.

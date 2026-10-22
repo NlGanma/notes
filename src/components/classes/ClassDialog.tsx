@@ -77,11 +77,13 @@ export function ClassDialog() {
       setError(folderMeta[same]?.kind === 'class' ? 'You already have a class with that name.' : 'There is already a folder with that name.');
       return;
     }
+    // Editing only the details of a class must never rename its folder.
+    const keepName = !!path && !!existing && name === existing.name;
     const info = { name: n, code: code.trim(), instructor: instructor.trim(), term: term.trim(), color, icon: shownIcon };
     const vault = useVault.getState();
     try {
       if (path) {
-        const next = await vault.updateClass(path, info);
+        const next = await vault.updateClass(path, keepName ? { ...info, name: undefined } : info);
         const v = useUI.getState().view;
         if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: next });
         close();

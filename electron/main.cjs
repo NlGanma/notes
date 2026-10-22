@@ -236,11 +236,14 @@ function approveRoot(dir) {
 }
 function isApprovedRoot(root) {
   const r = path.resolve(root);
-  if (loadRoots().has(r)) return true;
-  // A vault opened by an older version: it has Nib's data folder or notes at its top level.
+  const set = loadRoots();
+  if (set.has(r)) return true;
+  // Upgrading from a version that didn't keep this list: the first vault the app opens is the
+  // user's own (it is opened before any note content is shown), so it is approved once.
+  if (!fs.existsSync(rootsPath()) && set.size === 0) return true;
+  // A folder Nib already keeps its data in.
   try {
-    if (fs.statSync(path.join(r, '.nib')).isDirectory()) return true;
-    return fs.readdirSync(r).some((f) => f.endsWith('.nib'));
+    return fs.statSync(path.join(r, '.nib')).isDirectory();
   } catch {
     return false;
   }
@@ -280,7 +283,8 @@ function uniqueRel(root, rel, ignoreAbs) {
 async function atomicWrite(abs, text) {
   await fsp.mkdir(path.dirname(abs), { recursive: true });
   // A unique temp file per write, so two writes to the same file can never interleave.
-  const tmp = path.join(path.dirname(abs), `.${path.basename(abs)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+  // Short, so a long note title plus the suffix still fits the 255-byte file-name limit.
+  const tmp = path.join(path.dirname(abs), `.nib-${crypto.randomBytes(6).toString('hex')}.tmp`);
   try {
     await fsp.writeFile(tmp, text, 'utf8');
     await fsp.rename(tmp, abs);

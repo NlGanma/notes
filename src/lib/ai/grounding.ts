@@ -40,13 +40,13 @@ export function needsCitation(text: string): boolean {
     )
   )
     return false;
-  // Lines addressed to the student. "Now"/"Next" alone usually start a method step, which does need a source.
-  if (
-    /^(?:(?:now|next)\b,?\s+(?:try|you|it['’]?s your turn|see if|check|give it)\b|try\b|your turn\b|give it a try\b|can you\b|what do you\b|see if\b|ask your\b|check with\b|let me know\b|tell me\b|good luck\b|remember to\b|want me\b)/i.test(
-      t,
-    )
-  )
-    return false;
+  // Lines that only talk to the student ("Your turn", "Give it a try") need no source — but only if
+  // they make no claim. "Now you can cancel (x-3), so f = x+3" or "Try factoring: … so the limit is 6"
+  // are method steps and do.
+  const handoff =
+    /^(?:(?:now|next)\b,?\s+(?:you try|try|it['’]?s your turn|your turn|tell me)\b|try\b|your turn\b|give it a try\b|can you\b|what do you\b|see if\b|ask your\b|check with\b|let me know\b|tell me\b|good luck\b|remember to\b|want me\b)/i;
+  const claim = /[=<>≤≥≠→⇒]|\\[a-z]+|\d|\b(?:so|since|because|therefore|hence|thus|which means|equals?)\b/i;
+  if (handoff.test(t) && !claim.test(t)) return false;
   return true;
 }
 
@@ -75,7 +75,7 @@ export function applyGrounding(root: HTMLElement, excerptFor: (n: number) => str
     el.classList.remove('uncited');
     // Only the statement's own text and citations — not those of sub-bullets, which are checked separately.
     const own = el.cloneNode(true) as Element;
-    own.querySelectorAll('ul, ol').forEach((n) => n.remove());
+    own.querySelectorAll('ul, ol, blockquote, pre').forEach((n) => n.remove());
     const cites = [...el.querySelectorAll<HTMLElement>('.cite')].filter((c) => c.closest('li, p') === el);
     const text = textWithTex(own);
     if (!cites.length) {

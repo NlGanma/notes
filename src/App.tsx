@@ -88,8 +88,13 @@ export function App() {
     <div
       className={cx('app', !sidebar && 'no-sidebar', assistant && 'has-assistant', dropping && 'is-dropping')}
       onDragOver={(e) => {
-        // Dialogs handle (or refuse) their own drops; never import behind an open dialog.
-        if ((e.target as HTMLElement).closest('.modal-backdrop')) return;
+        // Dialogs handle (or refuse) their own drops; never import behind an open dialog, and never
+        // let the browser open the file instead.
+        if ((e.target as HTMLElement).closest('.modal-backdrop')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'none';
+          return;
+        }
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
           setDropping(true);
@@ -102,7 +107,10 @@ export function App() {
       onDropCapture={() => setDropping(false)}
       onDrop={(e) => {
         setDropping(false);
-        if ((e.target as HTMLElement).closest('.modal-backdrop')) return;
+        if ((e.target as HTMLElement).closest('.modal-backdrop')) {
+          e.preventDefault();
+          return;
+        }
         if (e.dataTransfer.files.length && !(e.target as HTMLElement).closest('.ProseMirror')) {
           e.preventDefault();
           void importDropped(e.dataTransfer.files);

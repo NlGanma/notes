@@ -154,7 +154,7 @@ export const useVault = create<VaultState>((set, get) => {
         tags: [...src.meta.tags],
       });
       // A copy of homework is homework too — otherwise it would count as class notes and be cited as a source.
-      if (src.meta.homework) get().updateMeta(copy.meta.id, { homework: { ...structuredClone(src.meta.homework), done: false } });
+      if (src.meta.homework) get().updateMeta(copy.meta.id, { homework: structuredClone(src.meta.homework) });
       return get().notes[copy.meta.id] ?? copy;
     },
 
@@ -169,6 +169,9 @@ export const useVault = create<VaultState>((set, get) => {
     },
 
     restoreNote(id) {
+      const n = get().notes[id];
+      // The note's folder may have been deleted meanwhile: bring it back so the note has a home.
+      if (n) set({ folders: [...new Set([...get().folders, ...parentsOf(n.meta.folder)])].sort() });
       patchNote(id, (d) => ({ ...d, meta: { ...d.meta, trashed: undefined } }), 50);
     },
 
@@ -232,21 +235,24 @@ export const useVault = create<VaultState>((set, get) => {
       for (const n of Object.values(notes)) {
         if (inside(n.meta.folder)) get().trashNote(n.meta.id);
       }
+      // Forget the folder's class details first (so an interrupted delete can't leave them behind), or the
+      // class would come back and a new folder with the same name would inherit them.
+      const folderMeta = Object.fromEntries(Object.entries(get().folderMeta).filter(([k]) => !inside(k)));
+      set({ folderMeta });
+      await get().backend?.saveFolderMeta(folderMeta);
       get().flush();
       await new Promise((r) => setTimeout(r, 120));
       await get().backend?.deleteFolder(path);
-      // Forget the folder's class details too, or the class would come back (and a new folder with
-      // the same name would inherit them).
-      const folderMeta = Object.fromEntries(Object.entries(get().folderMeta).filter(([k]) => !inside(k)));
-      set({ folders: get().folders.filter((f) => !inside(f)), folderMeta });
-      await get().backend?.saveFolderMeta(folderMeta);
+      set({ folders: get().folders.filter((f) => !inside(f)) });
       const ui = useUI.getState();
       const v = ui.view;
       if ((v.kind === 'class' || v.kind === 'folder') && inside(v.path)) ui.set({ view: { kind: 'home' } });
       if (ui.libraryScope.kind === 'folder' && inside(ui.libraryScope.path)) ui.set({ libraryScope: { kind: 'all' } });
       for (const [id, n] of Object.entries(get().notes)) {
         const hw = n.meta.homework;
-        if (hw?.folders.some(inside)) get().updateMeta(id, { homework: { ...hw, folders: hw.folders.filter((f) => !inside(f)) }, updated: n.meta.updated });
+        // Trashed notes (including this folder's own homework) are left alone.
+        if (!n.meta.trashed && hw?.folders.some(inside))
+          get().updateMeta(id, { homework: { ...hw, folders: hw.folders.filter((f) => !inside(f)) }, updated: n.meta.updated });
       }
     },
 
@@ -267,8 +273,11 @@ export const useVault = create<VaultState>((set, get) => {
 
     async updateClass(path, info) {
       let target = path;
+      const current = path.split('/').pop()!;
       const name = info.name !== undefined ? sanitizeFolderName(info.name) : '';
-      if (name && name !== path.split('/').pop()) {
+      // Names from older versions may not be "clean" (double spaces, a trailing dot): only rename when
+      // the user actually changed the name.
+      if (name && name !== current && name !== sanitizeFolderName(current)) {
         const renamed = await get().renameFolder(path, name);
         if (!renamed) throw new Error(`There is already a folder called “${name}”.`);
         target = renamed;
@@ -315,12 +324,20 @@ export const useVault = create<VaultState>((set, get) => {
         normalizeDocJSON(n.content as never);
         notes[n.meta.id] = n;
       }
-      const folders = [...new Set([...snap.folders, ...snap.notes.flatMap((n) => parentsOf(n.meta.folder))])].sort();
-      // Details of folders that no longer exist (deleted outside Nib) are dropped; classes are top-level only.
+      // Folders that exist: on disk, or implied by a live note. Trashed notes remember their old folder,
+      // but that must not resurrect a deleted folder (restoring the note brings it back).
+      const folders = [...new Set([...snap.folders, ...snap.notes.filter((n) => !n.meta.trashed).flatMap((n) => parentsOf(n.meta.folder))])].sort();
+      // Details of folders that no longer exist (deleted outside Nib) are dropped. A class that an older
+      // version let you nest inside another folder becomes a plain folder again, but keeps its details
+      // (code, teacher…) so "Make this a class" brings them back.
       const folderMeta = Object.fromEntries(
-        Object.entries(snap.folderMeta ?? {}).filter(([k, m]) => folders.includes(k) && m && typeof m === 'object' && !(m.kind === 'class' && k.includes('/'))),
+        Object.entries(snap.folderMeta ?? {})
+          .filter(([k, m]) => folders.includes(k) && m && typeof m === 'object')
+          .map(([k, m]) => [k, m.kind === 'class' && k.includes('/') ? { ...m, kind: undefined } : m]),
       );
       set({ backend, notes, folders, folderMeta, ready: true, error: null, revision: get().revision + 1 });
+      // Write the cleaned-up details back, so leftovers from deleted folders don't linger in folders.json.
+      if (JSON.stringify(folderMeta) !== JSON.stringify(snap.folderMeta ?? {})) void backend.saveFolderMeta(folderMeta);
 
       const seededKey = `${SEEDED_KEY}:${backend.label}`;
       if (!snap.notes.length && !localStorage.getItem(seededKey)) {

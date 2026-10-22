@@ -376,6 +376,7 @@ function LibraryMessage({
         {msg.status === 'done' && parsed?.kind === 'flashcards' && <Flashcards cards={parsed.cards} sources={msg.sources ?? []} onOpen={onOpen} />}
         {msg.status === 'done' && parsed?.kind === 'quiz' && <Quiz questions={parsed.questions} sources={msg.sources ?? []} onOpen={onOpen} />}
         {msg.status === 'done' && !parsed && <MessageView msg={msg} citations onCite={onCite} onRegenerate={onRetry} />}
+        {msg.status === 'stopped' && <MessageView msg={{ ...msg, content: '' }} onRegenerate={onRetry} />}
       </div>
     );
   }

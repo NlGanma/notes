@@ -1222,9 +1222,12 @@
 .md .outside-notes > :last-child {
   margin-bottom: 0;
 }
-.md.show-uncited .uncited {
+.md.show-uncited .uncited:not(:has(ul, ol, blockquote)) {
   background: linear-gradient(transparent 60%, rgba(232, 160, 20, 0.22) 60%);
   border-radius: 2px;
+}
+.md.show-uncited li.uncited:has(ul, ol, blockquote) {
+  box-shadow: inset 2px 0 0 rgba(232, 160, 20, 0.6);
 }
 .md.show-uncited li.uncited::marker {
   color: #c98a04;

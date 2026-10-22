@@ -131,7 +131,23 @@ interface StreamOpts {
 /** The exact request behind each reply, so a cut-off answer can be continued. */
 const lastRequests = new Map<string, { messages: ChatMessage[]; model: string; opts: StreamOpts; raw: string }>();
 
-const CONTINUE_PROMPT = 'Continue exactly where you stopped, mid-sentence if needed. Do not repeat anything or add a preamble.';
+const CONTINUE_PROMPT =
+  'Your reply was cut off. Continue it exactly where it stopped. Start by repeating the last five words you wrote, word for word, then carry on. No preamble, no other repetition.';
+
+/**
+ * Joins a continuation onto the text that was cut off. The model is asked to
+ * repeat its last few words, so the overlap is removed — this also gets the
+ * spacing right whether the cut fell between words or in the middle of one.
+ */
+export function joinContinuation(prefix: string, cont: string): string {
+  const c = cont.replace(/^[ \t]+/, '');
+  for (let k = Math.min(c.length, prefix.length, 200); k >= 8; k--) {
+    if (prefix.endsWith(c.slice(0, k))) return prefix + c.slice(k);
+  }
+  // No overlap: the model just carried on.
+  if (!c || /\s$/.test(prefix) || /^\s/.test(c) || /^[.,;:!?)\]}'’"”]/.test(c)) return prefix + c;
+  return `${prefix} ${c}`;
+}
 
 const emptyDraft = (): Draft => ({ attachments: [], text: '', mode: 'chat' });
 
@@ -171,6 +187,14 @@ export const useAssistant = create<AssistantState>()(
         let buf = opts.prefix ?? '';
         let think = '';
         let raf = 0;
+        // Continuing: hold the first characters until the overlap with the cut-off text can be removed.
+        let cont = '';
+        let joined = opts.prefix === undefined;
+        const settle = (final: boolean) => {
+          if (joined || (!final && cont.length < 60)) return;
+          buf = joinContinuation(opts.prefix!, cont);
+          joined = true;
+        };
         const flush = () => {
           raf = 0;
           patchMsg(key, msgId, { content: buf, thinking: think || undefined });
@@ -190,7 +214,10 @@ export const useAssistant = create<AssistantState>()(
             signal: ctrl.signal,
             onStatus: (s) => patchMsg(key, msgId, { phase: s ?? undefined }),
             onToken: (t) => {
-              buf += t;
+              if (!joined) {
+                cont += t;
+                settle(false);
+              } else buf += t;
               schedule();
             },
             onThinking: (t) => {
@@ -199,8 +226,15 @@ export const useAssistant = create<AssistantState>()(
             },
           });
           if (raf) cancelAnimationFrame(raf);
+          // Superseded by a newer request that aborted us after the server had already finished.
+          if (ctrl.signal.aborted) {
+            patchMsg(key, msgId, { status: 'stopped', phase: undefined });
+            return null;
+          }
           // Some servers don't stream (or stream only thinking); fall back to the final text.
-          if (buf === (opts.prefix ?? '') && res.text) buf += res.text;
+          if (!joined && !cont && res.text) cont = res.text;
+          settle(true);
+          if (buf === (opts.prefix ?? '') && res.text && opts.prefix === undefined) buf += res.text;
           const content = buf.trim();
           // The untrimmed text is kept so Continue joins exactly where the model stopped.
           lastRequests.set(msgId, { messages, model, opts: { ...opts, prefix: undefined }, raw: buf });
@@ -217,6 +251,7 @@ export const useAssistant = create<AssistantState>()(
           return content;
         } catch (e) {
           if (raf) cancelAnimationFrame(raf);
+          if (!joined && cont) buf = joinContinuation(opts.prefix!, cont);
           const aborted = (e as Error).name === 'AbortError' || ctrl.signal.aborted;
           patchMsg(key, msgId, {
             content: buf,
@@ -265,7 +300,8 @@ export const useAssistant = create<AssistantState>()(
             parseStudyJSON(tool, r.text) ? { content: r.text.trim(), status: 'done', phase: undefined } : { status: 'done', phase: undefined },
           );
         } catch {
-          patchMsg(key, msgId, { status: 'done', phase: undefined });
+          // Stopped: say so; failed: fall back to showing the model's reply as text.
+          patchMsg(key, msgId, { status: ctrl.signal.aborted ? 'stopped' : 'done', phase: undefined });
         } finally {
           if (controller === ctrl) {
             controller = null;
@@ -316,8 +352,13 @@ export const useAssistant = create<AssistantState>()(
           const inherit = !attachments.length && !opts.anchor && !!prevUser && (opts.inherit || !moved);
           const anchor = opts.anchor ?? (inherit ? prevUser!.anchor : undefined) ?? currentBlockId(noteId);
           // In homework, the problem under the caret is what the student means by "this".
-          const caret = homework && !attachments.length ? (opts.focus ?? (inherit && prevUser?.focus ? prevUser.focus : liveCaret)) : undefined;
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, attachments, mode, anchor, focus: caret, at: Date.now() };
+          // A follow-up keeps the earlier turn's problem: its saved focus, or the text the student pointed at
+          // (e.g. a selection). Handwriting-only turns have no text, so nothing is guessed from the caret.
+          const inheritedFocus = inherit ? (prevUser!.focus ?? prevUser!.attachments?.find((a) => a.kind === 'text')?.text) : undefined;
+          const caret = homework && !attachments.length ? (opts.focus ?? (inherit ? inheritedFocus : liveCaret)) : undefined;
+          // What the question was about, so follow-ups and Retry stay on it (a selection counts too).
+          const turnFocus = caret || attachments.find((a) => a.kind === 'text')?.text;
+          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, attachments, mode, anchor, focus: turnFocus, at: Date.now() };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -377,7 +418,7 @@ export const useAssistant = create<AssistantState>()(
             Math.floor(ctx * 0.15),
           );
           let userContent = withAttachmentText(question, attachments);
-          if (caret) userContent = `The student's cursor is on this part of the homework:\n"""\n${caret}\n"""\n\n${userContent}`;
+          if (caret) userContent = `The student is asking about this part of the homework:\n"""\n${caret}\n"""\n\n${userContent}`;
           if (images.length && !useImages)
             userContent +=
               '\n\n(The student attached a picture of their handwriting, but no image-capable model is configured, so you only have the transcript above, if any.)';
@@ -477,7 +518,8 @@ export const useAssistant = create<AssistantState>()(
               mode: lastUser.mode,
               attachments: lastUser.attachments,
               anchor: lastUser.anchor,
-              focus: lastUser.focus,
+              // '' (not undefined) when the turn had no focus: Retry must not pick up wherever the caret is now.
+              focus: lastUser.focus ?? '',
               inherit: true,
             });
         },
@@ -591,6 +633,11 @@ function caretContext(noteId: string): string | undefined {
   const ed = editors.get(noteId);
   if (!ed || ed.isDestroyed) return undefined;
   const { $from } = ed.state.selection;
+  // Inside an answer pasted from the assistant: that's not the homework, so there is no problem to point at.
+  for (let d = $from.depth; d > 0; d--) {
+    const n = $from.node(d);
+    if (n.type.name === 'callout' && (n.attrs.variant === 'ai' || n.attrs.variant === 'outside')) return undefined;
+  }
   for (let d = $from.depth; d > 0; d--) {
     const n = $from.node(d);
     if (n.type.name === 'listItem' || n.type.name === 'taskItem') return blockToText(n.toJSON()).trim() || undefined;

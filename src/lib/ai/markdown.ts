@@ -92,27 +92,41 @@ function mathBlock(state: StateBlock, startLine: number, endLine: number, silent
 
 const CITE_RE = /^\[(\d{1,2}(?:\s*[,–-]\s*\d{1,2})*)\](?!\()/;
 
-/** Expands "1, 3" / "2–4" into the cited numbers. */
+/** Expands "1, 3" / "2–4" into the cited numbers ([NaN] for anything that isn't a citation list). */
 export function citedNumbers(spec: string): number[] {
   const nums: number[] = [];
   for (const part of spec.split(/\s*,\s*/)) {
     const range = part.split(/\s*[–-]\s*/).map(Number);
-    if (range.length === 2 && range[1] >= range[0] && range[1] - range[0] < 10) for (let n = range[0]; n <= range[1]; n++) nums.push(n);
-    else nums.push(Number(part));
+    if (range.length === 2) {
+      // A citation range is short and ascending ("2–4"); "[1-20]" or "[5-2]" is not one.
+      if (!(range[1] >= range[0] && range[1] - range[0] < 10)) return [NaN];
+      for (let n = range[0]; n <= range[1]; n++) nums.push(n);
+    } else nums.push(Number(part));
   }
   return nums;
 }
 
+/** Words that make "[1, 2]" an interval, not a citation: "on [1, 2]", "x ∈ [0, 5]". */
+const INTERVAL_BEFORE = /(?:\b(?:on|in|over|within|across|from|between|interval|intervals|domain|range|of)|[∈=⊂⊆])\s*$/i;
+
 /**
- * "[2]" or "[1, 3]" as a citation — but only when every number is a real
- * excerpt number, so intervals like "[0, 1]" or "[1, 10]" stay plain text.
+ * Whether "[…]" at `pos` is a citation: every number must be a real excerpt
+ * number (1…maxCite), and a two-number list right after "on", "in", "∈"…
+ * is read as an interval.
  */
+export function isCitation(src: string, pos: number, spec: string, maxCite?: number): boolean {
+  const nums = citedNumbers(spec);
+  if (nums.some((n) => !Number.isInteger(n) || n < 1 || (maxCite !== undefined && n > maxCite))) return false;
+  if (/[,–-]/.test(spec) && INTERVAL_BEFORE.test(src.slice(Math.max(0, pos - 24), pos))) return false;
+  return true;
+}
+
+/** "[2]" or "[1, 3]" as a citation chip (see isCitation). */
 function citations(state: StateInline, silent: boolean): boolean {
   const m = CITE_RE.exec(state.src.slice(state.pos));
   if (!m) return false;
   const max = (state.env as { maxCite?: number } | undefined)?.maxCite;
-  const nums = citedNumbers(m[1]);
-  if (nums.some((n) => n < 1 || (max !== undefined && n > max))) return false;
+  if (!isCitation(state.src, state.pos, m[1], max)) return false;
   if (!silent) {
     const token = state.push('citation', 'cite', 0);
     token.content = m[1];
@@ -121,11 +135,14 @@ function citations(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-/** Drops citation markers (for text inserted into a note). Runs after math, so nothing inside $…$ is touched. */
+/**
+ * Drops citation markers (for text inserted into a note) — exactly the ones
+ * the chat showed as chips. Runs after math, so nothing inside $…$ is touched.
+ */
 function stripCitations(state: StateInline, silent: boolean): boolean {
   const m = CITE_RE.exec(state.src.slice(state.pos));
   if (!m) return false;
-  if (citedNumbers(m[1]).some((n) => n < 1)) return false;
+  if (!isCitation(state.src, state.pos, m[1], (state.env as { maxCite?: number } | undefined)?.maxCite)) return false;
   if (!silent) state.pending = state.pending.replace(/[ \t]+$/, '');
   state.pos += m[0].length;
   return true;
@@ -207,6 +224,19 @@ function build(withCitations: boolean) {
 const plain = build(false);
 const cited = build(true);
 
+/** The excerpt numbers an answer actually cites, exactly as the chips render (never from math or intervals). */
+export function citedInAnswer(src: string, maxCite?: number): Set<number> {
+  const out = new Set<number>();
+  const walk = (tokens: { type: string; content: string; children: unknown[] | null }[]) => {
+    for (const t of tokens) {
+      if (t.type === 'citation') citedNumbers(t.content).forEach((n) => out.add(n));
+      if (t.children) walk(t.children as never);
+    }
+  };
+  walk(cited.parse(normalizeOutside(src), { maxCite }) as never);
+  return out;
+}
+
 /**
  * Renders model output. With `citations`, "[n]" becomes a chip; pass
  * `maxCite` (the number of excerpts) so only real excerpt numbers do.
@@ -220,7 +250,7 @@ export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite
  * `stripCitations` removes "[n]" markers from assistant answers; it is off for
  * the student's own text (imports, handwriting), where "[0, 1]" is an interval.
  */
-export function markdownToEditorHTML(src: string, opts: { stripCitations?: boolean } = {}): string {
+export function markdownToEditorHTML(src: string, opts: { stripCitations?: boolean; maxCite?: number } = {}): string {
   const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
   md.inline.ruler.before('escape', 'math_inline', mathInline);
   md.block.ruler.before('fence', 'math_block', mathBlock, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
@@ -233,5 +263,5 @@ export function markdownToEditorHTML(src: string, opts: { stripCitations?: boole
   md.renderer.rules.outside_open = () => '<div data-type="callout" data-variant="outside"><div class="callout-body">\n';
   md.renderer.rules.outside_close = () => '</div></div>\n';
   if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
-  return md.render(normalizeOutside(src));
+  return md.render(normalizeOutside(src), { maxCite: opts.maxCite });
 }

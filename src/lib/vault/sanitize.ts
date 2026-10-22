@@ -9,13 +9,20 @@ import type { Brush, Stroke } from '../ink/types';
  */
 
 const BRUSHES: Brush[] = ['fountain', 'ballpoint', 'brush', 'pencil', 'marker', 'highlighter', 'mono'];
-const COLOR_RE =
-  /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+%?\s*)?\)|hsla?\(\s*[\d.]+(deg)?\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*(,\s*[\d.]+%?\s*)?\)|[a-z]{3,24})$/i;
+/**
+ * Any CSS colour syntax (hex, names, rgb()/hsl() with commas or spaces,
+ * oklch(), color(), var(--x, #fff)…) is allowed; what can't appear is
+ * anything that ends a declaration or attribute, or loads a resource.
+ */
+const COLOR_CHARS = /^[#\w\s().,%+\-/]{1,120}$/;
+const COLOR_BAD = /url\s*\(|expression|javascript|image|element\s*\(/i;
+
+export function isSafeColor(c: unknown): c is string {
+  return typeof c === 'string' && COLOR_CHARS.test(c.trim()) && !COLOR_BAD.test(c);
+}
 
 export function safeColor(c: unknown, fallback = '#1c1c1e'): string {
-  if (typeof c !== 'string') return fallback;
-  const t = c.trim();
-  return t === 'currentColor' || COLOR_RE.test(t) ? t : fallback;
+  return isSafeColor(c) ? c.trim() : fallback;
 }
 
 export function num(v: unknown, fallback: number): number {
@@ -67,8 +74,9 @@ export function sanitizeDoc(node: JSONContent): JSONContent {
   }
   if (n.marks)
     n.marks = n.marks.map((m) => {
-      if ((m.type === 'highlight' || m.type === 'textStyle') && m.attrs?.color !== undefined && m.attrs?.color !== null)
-        return { ...m, attrs: { ...m.attrs, color: safeColor(m.attrs.color, '#fff3a3') } };
+      const color = m.attrs?.color;
+      // An unusable colour is dropped (the text keeps its normal colour) rather than replaced.
+      if ((m.type === 'highlight' || m.type === 'textStyle') && color != null && !isSafeColor(color)) return { ...m, attrs: { ...m.attrs, color: null } };
       return m;
     });
   if (Array.isArray(n.content)) n.content = n.content.map(sanitizeDoc);

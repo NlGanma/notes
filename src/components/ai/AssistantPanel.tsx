@@ -64,11 +64,11 @@ const HOMEWORK_STARTERS: { icon: React.ReactNode; label: string; mode: 'explain'
 ];
 
 /** Inserts a reply into the note as an "assistant" callout, right after the block it was about. */
-export function insertReply(noteId: string, md: string, anchor?: string) {
+export function insertReply(noteId: string, md: string, anchor?: string, maxCite?: number) {
   const editor = editors.get(noteId);
   if (!editor) return;
   const div = document.createElement('div');
-  div.innerHTML = markdownToEditorHTML(md, { stripCitations: true });
+  div.innerHTML = markdownToEditorHTML(md, { stripCitations: true, maxCite });
   const frag = PMDOMParser.fromSchema(editor.schema).parse(div);
   const nodes: import('@tiptap/pm/model').Node[] = [];
   frag.forEach((n) => nodes.push(n));
@@ -84,7 +84,11 @@ export function insertReply(noteId: string, md: string, anchor?: string) {
     const sel = editor.state.selection;
     at = sel instanceof NodeSelection ? sel.to : sel.$from.depth > 0 ? sel.$from.after(1) : doc.content.size;
   }
-  const tr = editor.state.tr.insert(Math.min(at, doc.content.size), callout);
+  const pos = Math.min(at, doc.content.size);
+  // Leave an ordinary line after the answer, so the student's own writing doesn't end up inside it.
+  const next = doc.resolve(pos).nodeAfter;
+  const tail = next && next.type.name === 'paragraph' && next.content.size === 0 ? [] : [editor.schema.nodes.paragraph.create()];
+  const tr = editor.state.tr.insert(pos, [callout, ...tail]);
   editor.view.dispatch(tr.scrollIntoView());
   toast.success('Added to your note', 'Undo with ⌘Z');
 }
@@ -282,7 +286,7 @@ export function AssistantPanel() {
             msg={m}
             citations={m.grounding === 'homework'}
             onCite={(n, el) => cite.show(n, el, m.sources)}
-            onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, m.content, anchorFor(messages, m)) : undefined}
+            onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, m.content, anchorFor(messages, m), m.sources?.length) : undefined}
             onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
             onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
           >

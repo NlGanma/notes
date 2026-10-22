@@ -56,7 +56,8 @@ export async function createBrowserVault(): Promise<VaultBackend> {
     },
     async saveNote(doc) {
       await tx(db, 'notes', 'readwrite', (s) => s.put(doc));
-      if (doc.meta.folder) {
+      // Trashed notes keep their old folder name but must not bring a deleted folder back.
+      if (doc.meta.folder && !doc.meta.trashed) {
         const folders = await readFolders();
         const parts = doc.meta.folder.split('/');
         const needed = parts.map((_, i) => parts.slice(0, i + 1).join('/'));

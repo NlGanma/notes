@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SourceRef } from '../../state/assistant';
 import { useUI } from '../../state/ui';
-import { renderMarkdown } from '../../lib/ai/markdown';
+import { citedInAnswer, renderMarkdown } from '../../lib/ai/markdown';
 import { Popover } from '../common/Popover';
 
 /** Opens the cited note and flashes the cited passage. */
@@ -51,7 +51,8 @@ export function useCitePreview() {
 
 /** The notes an answer used (only the ones it actually cited, when it cited any). */
 export function SourcesList({ content, sources, label = 'Sources from your notes' }: { content: string; sources: SourceRef[]; label?: string }) {
-  const cited = sources.filter((s) => new RegExp(`\\[(?:[\\d,\\s–-]*\\b)?${s.n}\\b`).test(content));
+  const used = citedInAnswer(content, sources.length);
+  const cited = sources.filter((s) => used.has(s.n));
   const list = cited.length ? cited : sources.length <= 3 ? sources : [];
   if (!list.length) return null;
   return (
