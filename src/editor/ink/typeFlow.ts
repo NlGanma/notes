@@ -259,20 +259,26 @@ export function findTextDropTarget(editor: Editor, wrap: HTMLElement, scale: num
 }
 
 /**
- * Top-level blocks whose typed letters a box (layer coordinates) would cover.
- * Only the letters count, so ink beside a short line, on an empty line, on a
- * handwriting area or on an image or equation is fine.
+ * Top-level blocks whose typed letters a box (layer coordinates) would cover:
+ * its middle on a line of text, or a quarter of its height over one. Only the
+ * letters count, so ink beside a short line, on an empty line, on a
+ * handwriting area or on an image or equation is fine, and so is an arrow
+ * whose tip just reaches a word.
  */
 export function textBlocksUnder(editor: Editor, wrap: HTMLElement, scale: number, box: { minX: number; minY: number; maxX: number; maxY: number }): number[] {
   const view = editor.view;
   const wr = wrap.getBoundingClientRect();
   const out: number[] = [];
+  const mid = (box.minY + box.maxY) / 2;
+  const enough = (box.maxY - box.minY) * 0.25;
+  const pmTop = (view.dom as HTMLElement).offsetTop;
   view.state.doc.forEach((node, offset, index) => {
-    if (node.type.name === 'inkBlock' || !node.textContent.trim()) return;
+    if (node.type.name === 'inkBlock') return;
     const el = view.nodeDOM(offset);
     if (!(el instanceof HTMLElement)) return;
-    const r = el.getBoundingClientRect();
-    if ((r.bottom - wr.top) / scale < box.minY || (r.top - wr.top) / scale > box.maxY) return;
+    // (cheap test first: on a long note only the blocks near the ink are looked at)
+    const top = pmTop + el.offsetTop;
+    if (top + el.offsetHeight < box.minY || top > box.maxY || !node.textContent.trim()) return;
     const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const range = document.createRange();
     for (let t = walk.nextNode(); t; t = walk.nextNode()) {
@@ -283,7 +289,8 @@ export function textBlocksUnder(editor: Editor, wrap: HTMLElement, scale: number
         const maxX = (q.right - wr.left) / scale;
         const minY = (q.top - wr.top) / scale;
         const maxY = (q.bottom - wr.top) / scale;
-        if (minX < box.maxX - 1 && maxX > box.minX + 1 && minY < box.maxY - 1 && maxY > box.minY + 1) {
+        if (minX >= box.maxX - 1 || maxX <= box.minX + 1) continue;
+        if ((mid >= minY && mid <= maxY) || Math.min(maxY, box.maxY) - Math.max(minY, box.minY) >= enough) {
           out.push(index);
           return;
         }

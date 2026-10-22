@@ -504,6 +504,9 @@ check(
   (await inlineOnLine()) === inlinesBefore && now.has(ring.id) && now.has(tick.id) && Math.abs(now.get(tick.id).pts[0][0] - tick.pts[0][0] - 12) < 0.6,
   `nudging a circle around a typed word, or a tick after the line, keeps them as handwriting (inline sketches ${inlinesBefore} → ${await inlineOnLine()}, circle ${now.has(ring.id) ? 'kept' : 'gone'}, tick moved ${now.has(tick.id) ? (now.get(tick.id).pts[0][0] - tick.pts[0][0]).toFixed(1) : 'gone'})`,
 );
+const ringDy = (now.get(ring.id)?.pts[0][1] ?? NaN) - ring.pts[0][1];
+const tickDy = (now.get(tick.id)?.pts[0][1] ?? NaN) - tick.pts[0][1];
+check(Math.abs(ringDy) < 0.5 && Math.abs(tickDy) < 0.5, `and moved sideways they stay at their height on the text (circle ${ringDy.toFixed(1)}, tick ${tickDy.toFixed(1)})`);
 await shot(page, 'ink-14-annotations');
 await page.keyboard.press('Escape');
 await page.keyboard.press('Alt+p');
@@ -732,6 +735,31 @@ const covered = await page.evaluate((ids) => {
 }, boxIds);
 check(boxBlock === 1 && blocks[0] === 'paragraph' && blocks[1] === 'inkBlock' && blocks[2] === 'paragraph' && covered === 0, `a drawing let go between two paragraphs gets lines of its own between them (blocks ${blocks.slice(0, 3).join(', ')}; points on text ${covered})`);
 await shot(page, 'ink-19-room-made');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+// Pushed up from the handwriting area onto the last typed line, it goes back into the top of that area:
+// no new lines open and nothing else in the area moves.
+const blocksBefore = (await docJSON()).content.length;
+const othersBefore = (await inkNow()).filter((s) => !boxIds.includes(s.id));
+await page.mouse.move(bx.x + 45, bx.y);
+await page.mouse.down();
+await page.mouse.move(bx.x + 45, bx.y - 200, { steps: 8 });
+await page.mouse.move(bx.x + 45, wrap.y + R(1) - 8 + 50, { steps: 8 });
+await page.waitForTimeout(150);
+await page.mouse.up();
+await page.waitForTimeout(300);
+const othersAfter = byId(await inkNow());
+const boxAfter = (await inkNow()).filter((s) => boxIds.includes(s.id));
+const p2Bottom = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  return ed.view.dom.offsetTop + ed.view.nodeDOM(ed.state.doc.child(0).nodeSize).offsetTop + ed.view.nodeDOM(ed.state.doc.child(0).nodeSize).offsetHeight;
+});
+check(
+  (await docJSON()).content.length === blocksBefore &&
+    othersBefore.every((s) => Math.abs(othersAfter.get(s.id).pts[0][1] - s.pts[0][1]) < 0.01) &&
+    Math.min(...boxAfter.flatMap((s) => s.pts.map((q) => q[1]))) >= p2Bottom,
+  `pushed up onto the last typed line, a drawing goes back into its handwriting area and nothing else moves (top ${Math.min(...boxAfter.flatMap((s) => s.pts.map((q) => q[1]))).toFixed(0)}, text ends ${p2Bottom})`,
+);
 await page.keyboard.press(`${MOD}+z`);
 await page.waitForTimeout(250);
 

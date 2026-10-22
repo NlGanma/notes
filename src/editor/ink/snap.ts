@@ -168,31 +168,41 @@ const quantile = (v: number[], q: number) => {
  * connect to whatever their line touches.
  */
 export function clusterBlob(items: PlacedStroke[], seed: number, line: number): number[] {
-  const n = items.length;
-  if (seed < 0 || seed >= n) return [];
-  const g = linkStrokes(items, line);
-  // A tall loop picked up by its outline (a cell with its parts drawn inside,
-  // a box around a diagram) brings what is inside it.
-  if (g.kind[seed] === TALL && g.loop(seed)) {
-    for (let o = 0; o < n; o++) if (o !== seed && g.hl[o] === g.hl[seed] && inside(g.raw[seed], g.raw[o])) g.union(seed, o);
-  }
-  const r = g.find(seed);
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) if (g.find(i) === r) out.push(i);
-  return out;
+  return pageBlobs(items, line).pick(seed);
 }
 
 /** Every blob on the page, as lists of indices into `items`. */
 export function blobGroups(items: PlacedStroke[], line: number): number[][] {
+  return pageBlobs(items, line).groups;
+}
+
+/** The blobs on a page, worked out once so a press can reuse them. */
+export function pageBlobs(items: PlacedStroke[], line: number) {
+  const n = items.length;
   const g = linkStrokes(items, line);
-  const groups = new Map<number, number[]>();
-  for (let i = 0; i < items.length; i++) {
-    const r = g.find(i);
-    const list = groups.get(r);
+  const root = Array.from({ length: n }, (_, i) => g.find(i));
+  const members = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const list = members.get(root[i]);
     if (list) list.push(i);
-    else groups.set(r, [i]);
+    else members.set(root[i], [i]);
   }
-  return [...groups.values()];
+  return {
+    groups: [...members.values()],
+    /** The blob a press on stroke `seed` picks up. */
+    pick(seed: number): number[] {
+      if (seed < 0 || seed >= n) return [];
+      const roots = new Set([root[seed]]);
+      // A tall loop picked up by its outline (a cell with its parts drawn
+      // inside, a box around a diagram) brings what is inside it.
+      if (g.kind[seed] === TALL && g.loop(seed)) {
+        for (let o = 0; o < n; o++) if (o !== seed && g.hl[o] === g.hl[seed] && inside(g.raw[seed], g.raw[o])) roots.add(root[o]);
+      }
+      const out: number[] = [];
+      for (const r of roots) out.push(...members.get(r)!);
+      return out.sort((a, b) => a - b);
+    },
+  };
 }
 
 function linkStrokes(items: PlacedStroke[], line: number) {
@@ -417,7 +427,7 @@ function linkStrokes(items: PlacedStroke[], line: number) {
     if (best >= 0) union(root, best);
   }
 
-  return { find, union, kind, raw, hl, loop: isLoopAt };
+  return { find, kind, raw, hl, loop: isLoopAt };
 }
 
 // ------------------------------------------------------------------ baseline
