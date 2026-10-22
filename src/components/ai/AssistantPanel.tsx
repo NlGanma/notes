@@ -31,23 +31,16 @@ import { isReviewable } from '../../lib/review/tree';
 import { ClipboardList, Compass, Link2, SearchCheck, Wand2 } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
+import { NOTE_STARTERS } from '../../lib/ai/prompts';
 import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
 const STARTERS = [
-  { icon: <Lightbulb size={14} />, label: 'Explain the key ideas on this page', prompt: 'Explain the key ideas in this note, in plain language.' },
-  {
-    icon: <ListChecks size={14} />,
-    label: 'Quiz me on this note',
-    prompt: 'Quiz me on this note: ask me 3 short questions, one at a time, and wait for my answer.',
-  },
-  {
-    icon: <BookOpenCheck size={14} />,
-    label: 'What should I review before the exam?',
-    prompt: 'Based on this note, what are the most important things to review before an exam? Be specific.',
-  },
-  { icon: <Quote size={14} />, label: 'Summarise in 5 bullets', prompt: 'Summarise this note in 5 bullet points.' },
+  { icon: <Lightbulb size={14} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain },
+  { icon: <ListChecks size={14} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz },
+  { icon: <BookOpenCheck size={14} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam },
+  { icon: <Quote size={14} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets },
 ];
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];

@@ -9,6 +9,7 @@ import {
   isTransformPrompt,
   librarySystemPrompt,
   modeQuestion,
+  NOTE_STARTERS,
   noteSystemPrompt,
   STUDY_TOOLS,
   TEXT_ACTIONS,
@@ -61,6 +62,8 @@ export interface ChatMsg {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** What the student's bubble shows when `content` is the app's own prompt (a menu action's name). */
+  label?: string;
   thinking?: string;
   attachments?: Attachment[];
   mode?: AskMode;
@@ -134,6 +137,8 @@ interface AssistantState {
     noteId: string,
     opts: {
       prompt?: string;
+      /** Shown in the student's bubble instead of `prompt` (e.g. "Give an example"); the model still gets the prompt. */
+      label?: string;
       mode?: AskMode;
       attachments?: Attachment[];
       anchor?: string;
@@ -520,7 +525,8 @@ export const useAssistant = create<AssistantState>()(
           if (raf) cancelAnimationFrame(raf);
           if (ctrl.signal.aborted) throw new DOMException('stopped', 'AbortError');
           const text = (buf || res.text).replace(/\s*\[\d{1,2}(?:\s*[,–-]\s*\d{1,2})*\](?!\()/g, '');
-          patchMsg(key, msgId, { shown: box(text), status: 'done', phase: undefined, truncated: o.base ? undefined : res.truncated });
+          // Never offered "continue": that picks up a notes answer (see lastRequests); this reply is short anyway, and Retry asks again.
+          patchMsg(key, msgId, { shown: box(text), status: 'done', phase: undefined, truncated: undefined });
         } catch (e) {
           if (raf) cancelAnimationFrame(raf);
           const aborted = (e as Error).name === 'AbortError' || ctrl.signal.aborted;
@@ -601,7 +607,19 @@ export const useAssistant = create<AssistantState>()(
           const caret = homework && !attachments.length ? (opts.focus ?? (inherit ? inheritedFocus : liveCaret)) : undefined;
           // What the question was about, so follow-ups and Retry stay on it (a selection counts too).
           const turnFocus = caret || attachments.find((a) => a.kind === 'text')?.text;
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, attachments, mode, anchor, focus: turnFocus, at: Date.now() };
+          // `forced` is kept on the question too, so Retry searches the notes again rather than going back to the gate.
+          const userMsg: ChatMsg = {
+            id: uid('m'),
+            role: 'user',
+            content: question,
+            label: opts.label,
+            attachments,
+            mode,
+            anchor,
+            focus: turnFocus,
+            forced: opts.force,
+            at: Date.now(),
+          };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -706,8 +724,9 @@ export const useAssistant = create<AssistantState>()(
           patchMsg(key, botMsg.id, { sources, phase: undefined, grounding: homework ? 'homework' : 'note' });
 
           // Coverage, decided in code before anything is generated. Questions about something the
-          // student pointed at (a selection, handwriting, a math block, a mode like Check) are on-topic by definition.
-          const pointed = attachments.length > 0 || mode !== 'custom' || Object.values(TEXT_ACTIONS).includes(question);
+          // student pointed at (a selection, handwriting, a math block, a mode like Check, the whole open note) are on-topic by definition.
+          const pointed =
+            attachments.length > 0 || mode !== 'custom' || Object.values(TEXT_ACTIONS).includes(question) || Object.values(NOTE_STARTERS).includes(question);
           const prevQuestion = prevUser?.content ?? [...prior].reverse().find((m) => m.role === 'user')?.content;
           const gate = opts.force || pointed ? null : assessCoverage(gateQuery([question, caret ?? ''].join(' '), prevQuestion), gateHits, stats, semanticCalib());
           // "Give an example": if the notes have none, no notes prompt is sent at all.
@@ -765,6 +784,7 @@ export const useAssistant = create<AssistantState>()(
             phase: 'reading',
             grounding: 'library',
             scopeLabel,
+            forced: force,
             at: Date.now(),
           };
           push(key, userMsg, botMsg);
@@ -846,6 +866,7 @@ export const useAssistant = create<AssistantState>()(
           else
             void get().ask(key, {
               prompt: lastUser.content,
+              label: lastUser.label,
               mode: lastUser.mode,
               attachments: lastUser.attachments,
               anchor: lastUser.anchor,
@@ -893,6 +914,7 @@ export const useAssistant = create<AssistantState>()(
           else
             void get().ask(key, {
               prompt: lastUser.content,
+              label: lastUser.label,
               mode: lastUser.mode,
               attachments: lastUser.attachments,
               anchor: lastUser.anchor,
@@ -1131,6 +1153,24 @@ export function friendlyError(e: unknown): string {
   if (/ECONNREFUSED|Failed to fetch|fetch failed|NetworkError|HTTP 0/i.test(msg))
     return 'Couldn’t reach your local model server. Is Ollama / LM Studio running?';
   if (/context|too long|num_ctx/i.test(msg)) return `${msg} — try a shorter question or raise the context size in Settings → Local AI.`;
-  if (/HTTP 5\d\d/.test(msg)) return `The model server had a problem (${msg}). It was retried automatically; try again in a moment.`;
+  // The status and the server's own words, never its raw reply ('{"error":…}').
+  const code = (e as { status?: number })?.status ?? 0;
+  const status = /HTTP (5\d\d)/.exec(msg)?.[1] ?? (code >= 500 && code < 600 ? String(code) : undefined);
+  if (status) {
+    const why = serverReason(msg);
+    return `The model server had a problem (HTTP ${status}${why ? `: ${why}` : ''}). It was retried automatically; try again in a moment.`;
+  }
   return msg;
+}
+
+/** The reason in a JSON error reply ('{"error":"server busy"}' → "server busy"), or ''. */
+function serverReason(msg: string): string {
+  if (!msg.includes('{')) return '';
+  try {
+    const j = JSON.parse(msg.slice(msg.indexOf('{'))) as { error?: unknown };
+    const why = typeof j.error === 'object' && j.error ? (j.error as { message?: unknown }).message : j.error;
+    return typeof why === 'string' ? why.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+  } catch {
+    return '';
+  }
 }

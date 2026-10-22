@@ -166,7 +166,7 @@ export const MessageView = memo(function MessageView({
             )}
           </div>
         )}
-        <div className="msg-bubble">{msg.content}</div>
+        <div className="msg-bubble">{msg.label ?? msg.content}</div>
       </div>
     );
   }

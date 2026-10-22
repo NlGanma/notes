@@ -30,6 +30,8 @@ export interface AskTextRequest {
   text: string;
   action: 'explain' | 'simplify' | 'example' | 'define' | 'rewrite' | 'translate' | 'custom';
   question?: string;
+  /** The menu item's name, shown as the student's question (the model gets the action's full prompt). */
+  label?: string;
 }
 
 const AI_ACTIONS: { id: AskTextRequest['action']; label: string; icon: typeof Sparkles }[] = [
@@ -183,7 +185,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
               className="menu-item"
               onClick={() => {
                 setPanel(null);
-                onAsk({ text: selectedText(), action: a.id });
+                onAsk({ text: selectedText(), action: a.id, label: a.label });
               }}
             >
               <a.icon size={15} />

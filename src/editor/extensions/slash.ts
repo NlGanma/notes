@@ -3,6 +3,7 @@ import Suggestion from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
 import { create } from 'zustand';
 import { useTools } from '../../state/tools';
+import { NOTE_STARTERS } from '../../lib/ai/prompts';
 import { editorBus } from '../bus';
 
 export interface SlashItem {
@@ -223,7 +224,7 @@ export const SLASH_ITEMS: SlashItem[] = [
     group: 'AI',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).run();
-      window.dispatchEvent(new CustomEvent('nib:assistant', { detail: { prompt: 'Summarize this note in a few bullet points.', send: true } }));
+      window.dispatchEvent(new CustomEvent('nib:assistant', { detail: { prompt: NOTE_STARTERS.summary, send: true } }));
     },
   },
 ];
