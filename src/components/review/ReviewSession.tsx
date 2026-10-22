@@ -74,7 +74,7 @@ export function ReviewSession() {
   const section = sectionShown(current.item, factOf(current.item, current.concept)?.key);
 
   return (
-    <div className="rv-session" style={meta?.color ? { ['--class' as string]: meta.color } : undefined}>
+    <div className="rv-session">
       <div className="rv-topbar">
         <button className="btn is-ghost is-small" onClick={() => useReview.getState().end()} title="End the session (Esc)">
           End
@@ -88,8 +88,11 @@ export function ReviewSession() {
         </span>
       </div>
 
+      {/* A card per question, so its fade plays each time; the class's colour is the card's, not the progress bar's. */}
       <div
+        key={current.shownAt}
         className={cx('rv-card', `is-${current.phase}`)}
+        style={meta?.color ? { ['--class' as string]: meta.color } : undefined}
         data-concept={current.concept.id}
         data-item-key={current.item.key}
         data-class={meta?.group}
@@ -248,6 +251,23 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   );
 }
 
+/** The idea's mastery: shown where it was, then moved to where it is now (so the change is seen). */
+function MasteryBar({ before, after }: { before: number; after: number }) {
+  const [width, setWidth] = useState(before);
+  useEffect(() => {
+    // Two frames: the first paints the old width, so the move is animated rather than skipped.
+    let id = requestAnimationFrame(() => {
+      id = requestAnimationFrame(() => setWidth(after));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [after]);
+  return (
+    <span className="rv-bar">
+      <span style={{ width: `${width}%` }} />
+    </span>
+  );
+}
+
 /** A hint quotes the notes, math and all. */
 function Hint({ text }: { text: string }) {
   return (
@@ -276,13 +296,22 @@ function NotesSay({ current }: { current: Current }) {
   );
 }
 
+/** A line without its markdown, for comparing. */
+const plain = (s: string) =>
+  s
+    .replace(/\*\*|==|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 function SelfGrade({ current }: { current: Current }) {
+  // The points besides the line "Your notes say" already shows.
+  const points = (current.item.points ?? []).filter((p) => plain(p) !== plain(current.item.fact));
   return (
     <div className="rv-self">
       <NotesSay current={current} />
-      {current.item.points && current.item.points.length > 1 && (
+      {points.length > 0 && (
         <ul className="rv-points">
-          {current.item.points.map((p, i) => (
+          {points.map((p, i) => (
             <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
           ))}
         </ul>
@@ -394,9 +423,7 @@ function FeedbackView({ current }: { current: Current }) {
       {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} />}
       <div className="rv-mastery-change">
         <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
-        <span className="rv-bar">
-          <span style={{ width: `${fb.after}%` }} />
-        </span>
+        <MasteryBar before={fb.before} after={fb.after} />
         <span className="rv-pct">
           {fb.before}% → {fb.after}%
         </span>

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
 import { AlertTriangle, Play, Shuffle, Target } from 'lucide-react';
 import { useVault } from '../../state/vault';
+import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
 import { conceptsOf, dueNotes, noteMastery, useReview } from '../../state/review';
 import { buildReviewTree, isReviewable, selectionLabel } from '../../lib/review/tree';
@@ -13,10 +14,16 @@ import { ReviewSummary } from './ReviewSummary';
 import { cx, plural } from '../../lib/util';
 
 const LENGTHS: { n: number; label: string }[] = [
-  { n: 10, label: 'Quick · 10' },
-  { n: 15, label: '15' },
-  { n: 25, label: 'Long · 25' },
+  { n: 10, label: '10 · Quick' },
+  { n: 15, label: '15 · Standard' },
+  { n: 25, label: '25 · Long' },
 ];
+
+/** What the start button says when everything picked is learned and not due yet. */
+function nothingDue(next: number | null): string {
+  const day = dayLabel(next);
+  return day === 'today' ? 'Nothing due until later today' : `Nothing due until ${day}`;
+}
 
 /** Review: pick any notes (mix classes if you like), then practise until you know them. */
 export function ReviewView({ preset }: { preset?: string[] }) {
@@ -62,7 +69,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
     let due = 0;
     let fresh = 0;
     let next: number | null = null;
-    const blocked: string[] = [];
+    const blocked: { id: string; label: string }[] = [];
     const groups = new Set<string>();
     for (const id of selected) {
       const n = notes[id];
@@ -75,7 +82,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
         else if (isDue(st, now)) due++;
         else next = Math.min(next ?? st.due, st.due);
       }
-      for (const s of notReviewable(n)) blocked.push(`${n.meta.title} › ${s}`);
+      for (const s of notReviewable(n)) blocked.push({ id, label: s === n.meta.title ? s : `${n.meta.title} › ${s}` });
       groups.add(tree.find((g) => g.chapters.some((ch) => ch.notes.some((x) => x.meta.id === id)))?.key ?? '');
     }
     return { ideas, due, fresh, next, blocked, groups: groups.size };
@@ -143,13 +150,27 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
             <div className="rv-warn">
               <AlertTriangle size={14} />
               <span>
-                {stats.blocked.length === 1 ? '1 handwritten part isn’t' : `${stats.blocked.length} handwritten parts aren’t`} transcribed yet, so {stats.blocked.length === 1 ? 'it' : 'they'} can’t be
-                reviewed. Open the note and use “Read handwriting”.
+                Handwriting in{' '}
+                {stats.blocked.map((b, i) => (
+                  <Fragment key={i}>
+                    {i === 0 ? '' : i === stats.blocked.length - 1 ? ' and ' : ', '}
+                    <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id, { newTab: true })} title="Open this note">
+                      {b.label}
+                    </button>
+                  </Fragment>
+                ))}{' '}
+                isn’t transcribed yet, so it can’t be reviewed. Open the note and use “Read handwriting”.
               </span>
             </div>
           )}
           <button className="btn is-primary rv-start" disabled={!selected.size || !stats.ideas || !askable || !loaded} onClick={() => useReview.getState().start([...selected])}>
-            <Play size={15} /> Start review
+            {selected.size > 0 && stats.ideas > 0 && !askable ? (
+              nothingDue(stats.next)
+            ) : (
+              <>
+                <Play size={15} /> Start review
+              </>
+            )}
           </button>
           <div className="rv-promise">
             Questions are built from your notes’ own words, and answers are checked against them.
