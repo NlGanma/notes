@@ -6,6 +6,7 @@ import { useVault } from '../../state/vault';
 import { renderMarkdown } from '../../lib/ai/markdown';
 import { calibrationMessage, dayLabel } from '../../lib/review/session';
 import { isReviewable } from '../../lib/review/tree';
+import { cx, plural } from '../../lib/util';
 
 /** The end of a session: what was mastered, what to fix, when to come back. All from the learner model. */
 export function ReviewSummary() {
@@ -26,15 +27,16 @@ export function ReviewSummary() {
   return (
     <div className="collection review-view rv-summary">
       <div className="rv-summary-head">
-        <h1>Session complete</h1>
+        <h1>{summary.stopped ? `Stopped after ${plural(summary.items, 'question')}` : 'Session complete'}</h1>
         <div className="collection-sub">
-          {summary.label} · {summary.items} {summary.items === 1 ? 'question' : 'questions'} · {mins} min · {pct}% right
+          {summary.label}
+          {summary.stopped ? '' : ` · ${plural(summary.items, 'question')}`} · {mins} min · {pct}% right
         </div>
       </div>
 
       <div className="rv-summary-stats">
-        <span className="rv-stat is-good">
-          <CheckCircle2 size={15} /> {summary.masteredToday.length} mastered today
+        <span className={cx('rv-stat', summary.masteredToday.length > 0 && 'is-good')}>
+          {summary.masteredToday.length > 0 && <CheckCircle2 size={15} />} {summary.masteredToday.length} mastered today
         </span>
         <span className="rv-stat">
           <TrendingUp size={15} /> {summary.improved.length} improved

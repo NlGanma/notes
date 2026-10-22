@@ -115,6 +115,11 @@ interface ReviewState {
   /** Has the model look for more concepts in passages the rules found little in (background). */
   readMore(noteIds: string[]): Promise<void>;
   setSelection(ids: string[]): void;
+  /**
+   * A request to review these notes (⌘K, a class page, the sidebar): a session in progress ends, its
+   * summary staying on screen until it's closed, and the picker then shows them.
+   */
+  request(ids: string[]): void;
   setOpts(p: Partial<SessionOpts>): void;
   start(noteIds?: string[]): void;
   /** How sure the student says they are about the question on screen. */
@@ -310,6 +315,10 @@ export function dueCount(now = Date.now()): number {
 const where = (c: Concept, title: string) => [title, c.section].filter(Boolean).join(' › ');
 /** The line of the notes an item asks about. */
 export const factOf = (item: Item, c: Concept): Fact | undefined => c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
+
+/** The number of the question on screen (the "9" of "9 / 25"). */
+export const questionNumber = (session: SessionState, current: Pick<Current, 'phase'> | null) =>
+  Math.min(session.index + (current?.phase === 'feedback' ? 0 : 1), session.opts.length);
 
 /**
  * Whether "I was right" can apply: to an answer the student wrote and code or the model graded —
@@ -789,7 +798,8 @@ export const useReview = create<ReviewState>((set, get) => {
     if (verdict !== 'right') void nudge(cur.item, c, cur.answer ?? '');
   };
 
-  const finish = () => {
+  /** Sums the session up; `stopped` when the student ended it. */
+  const finish = (stopped = false) => {
     const sess = get().session;
     if (!sess) return;
     // Nothing was asked (nothing due or new): no session to sum up or keep.
@@ -813,6 +823,7 @@ export const useReview = create<ReviewState>((set, get) => {
         notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? notReviewable(noteOf(id)!).map((s) => `${noteOf(id)!.meta.title} › ${s}`) : [])),
         misconceptions: get().misconceptions,
         overrides: get().overrides,
+        stopped,
       },
       now,
     );
@@ -871,6 +882,13 @@ export const useReview = create<ReviewState>((set, get) => {
     setSelection(ids) {
       set({ selection: ids });
       scheduleExtract(ids);
+    },
+
+    request(ids) {
+      if (get().session) get().end();
+      // A summary already on screen was seen: it makes way.
+      else if (get().summary) get().closeSummary();
+      get().setSelection(ids);
     },
 
     setOpts(p) {
@@ -1033,7 +1051,7 @@ export const useReview = create<ReviewState>((set, get) => {
     },
 
     end() {
-      if (get().session?.history.length) finish();
+      if (get().session?.history.length) finish(true);
       else {
         control?.abort();
         set({ session: null, current: null });

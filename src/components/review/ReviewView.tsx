@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AlertTriangle, Play, Shuffle, Target } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useAI } from '../../state/ai';
@@ -27,14 +27,14 @@ export function ReviewView({ preset }: { preset?: string[] }) {
   useEffect(() => {
     void useReview.getState().load();
   }, []);
-  // A request to review some notes (none, when nothing is due) replaces what's on screen: a session in
-  // progress ends (its answers are kept) and the picker shows those notes.
+  // A request to review some notes (none, when nothing is due): a session in progress ends — its answers are
+  // kept and its summary shown — and the picker shows those notes once it's closed. Once per request (a
+  // second run of the effect would close that summary).
+  const handled = useRef<string[]>();
   useEffect(() => {
-    if (!preset) return;
-    const r = useReview.getState();
-    if (r.session) r.end();
-    if (useReview.getState().summary) r.closeSummary();
-    r.setSelection(preset);
+    if (!preset || handled.current === preset) return;
+    handled.current = preset;
+    useReview.getState().request(preset);
   }, [preset]);
 
   if (session) return <ReviewSession />;

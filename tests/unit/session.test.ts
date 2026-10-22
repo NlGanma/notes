@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newSession, pickNext, requeue, summarize, type PoolEntry, type SessionState } from '../../src/lib/review/session';
+import { calibrationMessage, newSession, pickNext, requeue, summarize, type PoolEntry, type SessionState } from '../../src/lib/review/session';
 import { freshState, isMastered, recordAnswer, DAY, type ConceptState } from '../../src/lib/review/mastery';
 import { mulberry32 } from '../../src/lib/review/items';
 
@@ -72,6 +72,23 @@ test('a session ends early when everything in it is mastered', () => {
   const { asked, states } = simulate(() => 1, { length: 200, mix: true, askConfidence: false });
   assert.ok(asked.length < 200);
   for (const p of pool) assert.ok(isMastered(states[p.id], p.cap), p.id);
+});
+
+test('the calibration line waits for enough answers, and never says “matches” when sure answers are wrong', () => {
+  const cal = (sure: [number, number], unsure: [number, number] = [0, 0], guess: [number, number] = [0, 0]) =>
+    calibrationMessage([
+      { conf: 'sure', correct: sure[0], n: sure[1] },
+      { conf: 'unsure', correct: unsure[0], n: unsure[1] },
+      { conf: 'guess', correct: guess[0], n: guess[1] },
+    ]);
+  assert.equal(cal([0, 2]), null, 'sure 0/2 is too little to tell');
+  assert.equal(cal([0, 2], [0, 1], [1, 1]), null);
+  assert.equal(cal([1, 2], [3, 3]), null, 'sure answers mostly wrong');
+  assert.equal(cal([3, 3], [0, 0], [2, 2]), null, 'guesses mostly right, too few to say so');
+  assert.match(cal([1, 4])!, /sure and wrong/);
+  assert.match(cal([0, 0], [0, 0], [3, 3])!, /know more than you think/);
+  assert.match(cal([4, 4], [1, 2])!, /matches/);
+  assert.match(cal([0, 0], [1, 3], [0, 1])!, /matches/, 'unsure and often wrong is no mismatch');
 });
 
 test('the summary counts mastered ideas per class and calibration', () => {

@@ -121,6 +121,57 @@ test('a session moves on when its notes change under it (an idea renamed or remo
   }
 });
 
+test('asking to review other notes mid-session ends it, but its summary stays on screen; the picker shows the new notes after', async () => {
+  // (The vault's file is read once, so reading the picked notes in the background later changes nothing here.)
+  await review().load();
+  const calc = byTitle('Lecture 4');
+  const vocab = byTitle('Vocabulario');
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().next();
+  await answer(false);
+  review().request([vocab.meta.id]);
+  assert.equal(review().session, null);
+  assert.equal(review().summary?.items, 2, 'the session’s summary is on screen');
+  assert.deepEqual(review().selection, [vocab.meta.id]);
+  review().closeSummary();
+  assert.equal(review().summary, null);
+  assert.deepEqual(review().selection, [vocab.meta.id], 'then the notes asked for are picked');
+  // Nothing answered yet: nothing to sum up.
+  review().start([calc.meta.id]);
+  review().request([vocab.meta.id]);
+  assert.equal(review().session, null);
+  assert.equal(review().summary, null);
+  // A summary already seen makes way.
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().end();
+  assert.ok(review().summary);
+  review().request([calc.meta.id]);
+  assert.equal(review().summary, null);
+  assert.deepEqual(review().selection, [calc.meta.id]);
+});
+
+test('a session ended early says it stopped; one that ran its course is complete', async () => {
+  const calc = byTitle('Lecture 4');
+  review().setOpts({ length: 10 });
+  review().start([calc.meta.id]);
+  await answer(true);
+  review().next();
+  await answer(true);
+  review().end();
+  assert.equal(review().summary!.items, 2);
+  assert.equal(review().summary!.stopped, true);
+  review().closeSummary();
+  review().start([calc.meta.id]);
+  while (review().session && review().current) {
+    await answer(true);
+    review().next();
+  }
+  assert.ok(review().summary);
+  assert.ok(!review().summary!.stopped);
+});
+
 test('a note trashed mid-session drops out of it', async () => {
   const calc = byTitle('Lecture 4');
   const cells = byTitle('Cell Structure');

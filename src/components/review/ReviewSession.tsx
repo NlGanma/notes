@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ArrowRight, BookOpen, Check, CircleHelp, Flag, Lightbulb, MessageCircleQuestion, ShieldCheck, Undo2, X } from 'lucide-react';
-import { canOverride, factOf, useReview, type Current } from '../../state/review';
+import { canOverride, factOf, questionNumber, useReview, type Current } from '../../state/review';
 import { sectionShown } from '../../lib/review/items';
 import { useAI } from '../../state/ai';
 import { useUI } from '../../state/ui';
@@ -84,7 +84,7 @@ export function ReviewSession() {
           <span style={{ width: `${progress * 100}%` }} />
         </div>
         <span className="rv-count-label">
-          {Math.min(session.index + (current.phase === 'feedback' ? 0 : 1), session.opts.length)} / {session.opts.length}
+          {questionNumber(session, current)} / {session.opts.length}
         </span>
       </div>
 
@@ -319,7 +319,7 @@ function FeedbackView({ current }: { current: Current }) {
     const note = useVault.getState().notes[src.noteId];
     useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'note', id: src.noteId } });
     void useAssistant.getState().askLibrary({
-      prompt: `Why: ${current.item.fact.replace(/\*\*|==/g, '')}`,
+      prompt: `Why is this so: ${current.item.fact.replace(/\*\*|==/g, '')}`,
       scope: { kind: 'note', id: src.noteId },
       scopeLabel: note?.meta.title,
     });
