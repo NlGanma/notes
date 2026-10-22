@@ -126,7 +126,7 @@ function inside(outer: Bounds, inner: Bounds): boolean {
 }
 
 /** A stroke that comes back to where it started: a circle or box drawn around something. */
-function isLoop(stroke: Stroke): boolean {
+export function isLoop(stroke: Stroke): boolean {
   if (stroke.closed) return true;
   const p = stroke.pts;
   if (p.length < 12) return false;

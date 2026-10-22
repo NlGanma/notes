@@ -260,6 +260,10 @@ await drag([wrap.x + m1.pts[0][0], wrap.y + m1.pts[0][1]], 30, 13);
 await page.keyboard.up('Alt');
 const m2 = byId(await inkNow()).get(massIds[0]);
 check(Math.abs(m2.pts[0][0] - m1.pts[0][0] - 30) < 0.6 && Math.abs(m2.pts[0][1] - m1.pts[0][1] - 13) < 0.6, `holding ⌥ drops the ink exactly where it was let go (moved ${(m2.pts[0][0] - m1.pts[0][0]).toFixed(1)}, ${(m2.pts[0][1] - m1.pts[0][1]).toFixed(1)})`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
+const m3 = byId(await inkNow()).get(massIds[0]);
+check(Math.abs(m3.pts[0][0] - m1.pts[0][0]) < 0.01 && Math.abs(m3.pts[0][1] - m1.pts[0][1]) < 0.01, `one ${MOD}+Z puts a dropped word back`);
 
 // 11d. A small blob moves from its middle instead of being resized (it used to grab a corner handle).
 await page.keyboard.press('Escape');
@@ -385,7 +389,7 @@ const kDy = kMoved.pts[0][1] - kFirst.pts[0][1];
 await drag([kFrom[0], kFrom[1] + kDy], 0, -kDy);
 check(Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 1, 'and dragged back to its line');
 
-// 11g. Arrow keys nudge (a burst is one undo step); ⌥↓ moves a whole line.
+// 11i. Arrow keys nudge (a burst is one undo step); ⌥↓ moves a whole line.
 const energy = handPaths('energy', wrap.x + 10 + handPaths('kinetic ', 0, 0, 18).width, wrap.y + R(3), 18).paths;
 await page.mouse.click(...mid(energy[0]));
 await page.waitForTimeout(200);
@@ -396,6 +400,7 @@ for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
 await page.waitForTimeout(150);
 now = byId(await inkNow());
 check(eCount > 1 && Math.abs(now.get(eId).pts[0][0] - was.get(eId).pts[0][0] - 5) < 0.01, 'five arrow presses nudge the selection 5px');
+const eIds = [...now.values()].filter((s) => Math.abs(s.pts[0][0] - (was.get(s.id)?.pts[0][0] ?? NaN) - 5) < 0.01).map((s) => s.id);
 await page.keyboard.press(`${MOD}+z`);
 await page.waitForTimeout(200);
 now = byId(await inkNow());
@@ -405,7 +410,29 @@ await page.waitForTimeout(150);
 now = byId(await inkNow());
 check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 32) < 0.01, '⌥↓ moves it down exactly one ruled line');
 
-// 11h. ⌘-drag with the pen picks ink up instead of drawing.
+// 11j. Resizing from a corner handle scales about the opposite corner; one undo puts it back.
+was = byId(await inkNow());
+const padOf = (s) => s.size * 0.7; // fountain pen: strokeBounds adds 0.7 × size
+const boxOf = (list) => ({
+  minX: Math.min(...list.flatMap((s) => s.pts.map((q) => q[0] - padOf(s)))),
+  minY: Math.min(...list.flatMap((s) => s.pts.map((q) => q[1] - padOf(s)))),
+});
+const eBefore = eIds.map((id) => was.get(id));
+const eBox = boxOf(eBefore);
+const hb = await page.locator(`${V} .sel-box circle`).nth(3).boundingBox();
+const handle = [hb.x + hb.width / 2, hb.y + hb.height / 2];
+await drag(handle, (handle[0] - (wrap.x + eBox.minX)) * 0.5, (handle[1] - (wrap.y + eBox.minY)) * 0.5);
+now = byId(await inkNow());
+const eAfter = eIds.map((id) => now.get(id));
+const eBox2 = boxOf(eAfter);
+const grew = eAfter[0].size / eBefore[0].size;
+check(Math.abs(grew - 1.5) < 0.03 && Math.abs(eBox2.minX - eBox.minX) < 1 && Math.abs(eBox2.minY - eBox.minY) < 1, `dragging the corner handle resizes the word about its opposite corner (×${grew.toFixed(2)})`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
+const eUndone = byId(await inkNow());
+check(eIds.every((id) => Math.abs(eUndone.get(id).size - was.get(id).size) < 0.001), `one ${MOD}+Z undoes the resize`);
+
+// 11k. ⌘-drag with the pen picks ink up instead of drawing.
 await page.keyboard.press('Escape');
 await page.keyboard.press('Alt+p');
 was = byId(await inkNow());
@@ -417,7 +444,49 @@ await page.keyboard.up('Meta');
 now = byId(await inkNow());
 check(now.size === was.size && Math.abs(now.get(eId).pts[0][0] - eNow.pts[0][0] - 24) < 0.6, `⌘-dragging handwriting with the pen moves it instead of drawing (${now.size - was.size} new strokes)`);
 
-// 11i. Dragging to the top edge scrolls the page, and the drop still lands under the pointer.
+// 11l. Ink written on the typed text stays ink when it is nudged: a circle around a word, a tick after the line.
+const onText = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  const p = ed.state.doc.child(0);
+  const i = p.textBetween(0, p.content.size, undefined, '￼').indexOf('conserved');
+  const a = ed.view.coordsAtPos(1 + i);
+  const b = ed.view.coordsAtPos(1 + i + 'conserved'.length);
+  const end = ed.view.coordsAtPos(1 + p.content.size);
+  return { left: a.left, right: b.left, top: a.top, bottom: a.bottom, endX: end.left, mid: (end.top + end.bottom) / 2 };
+});
+const inlineOnLine = async () => (JSON.stringify((await docJSON()).content[0]).match(/"inkInline"/g) ?? []).length;
+const inlinesBefore = await inlineOnLine();
+const strokesBefore = new Set((await inkNow()).map((s) => s.id));
+const ringC = [(onText.left + onText.right) / 2, (onText.top + onText.bottom) / 2];
+const ringR = [(onText.right - onText.left) / 2 + 8, (onText.bottom - onText.top) / 2 + 6];
+await page.mouse.move(ringC[0] + ringR[0], ringC[1]);
+await page.mouse.down();
+for (let i = 1; i <= 40; i++) {
+  const t = (i / 36) * Math.PI * 2;
+  await page.mouse.move(ringC[0] + Math.cos(t) * ringR[0], ringC[1] + Math.sin(t) * ringR[1]);
+}
+await page.mouse.up();
+await page.mouse.move(onText.endX + 14, onText.mid);
+await page.mouse.down();
+await page.mouse.move(onText.endX + 18, onText.mid + 5, { steps: 3 });
+await page.mouse.move(onText.endX + 28, onText.mid - 8, { steps: 4 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+was = await inkNow();
+const [ring, tick] = was.filter((s) => !strokesBefore.has(s.id));
+await page.keyboard.press('Alt+l');
+await drag([wrap.x + ring.pts[5][0], wrap.y + ring.pts[5][1]], 12, 0);
+await drag([wrap.x + tick.pts[1][0], wrap.y + tick.pts[1][1]], 12, 0);
+now = byId(await inkNow());
+check(
+  (await inlineOnLine()) === inlinesBefore && now.has(ring.id) && now.has(tick.id) && Math.abs(now.get(tick.id).pts[0][0] - tick.pts[0][0] - 12) < 0.6,
+  `nudging a circle around a typed word, or a tick after the line, keeps them as handwriting (inline sketches ${inlinesBefore} → ${await inlineOnLine()}, circle ${now.has(ring.id) ? 'kept' : 'gone'}, tick moved ${now.has(tick.id) ? (now.get(tick.id).pts[0][0] - tick.pts[0][0]).toFixed(1) : 'gone'})`,
+);
+await shot(page, 'ink-14-annotations');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Alt+p');
+
+// 11m. Dragging to the top edge scrolls the page, and the drop still lands under the pointer.
 await page.evaluate(() => {
   const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
   ed.commands.insertContentAt(ed.state.doc.content.size, Array.from({ length: 40 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Line ${i + 1}` }] })));
@@ -463,16 +532,16 @@ check(
   `after scrolling, the word lands under the pointer (moved ${f1 ? (f1.pts[0][1] - f0.pts[0][1]).toFixed(1) : '?'}, pointer moved ${wantDy.toFixed(1)})`,
 );
 check(!!f1 && farIds.every((id) => now.get(id)?.block === f1.block), 'and arrives whole, in one block');
-await shot(page, 'ink-14-autoscrolled');
+await shot(page, 'ink-15-autoscrolled');
 
-// 11j. Up against the toolbar, the selection menu opens below the selection instead of hiding under it.
+// 11n. Up against the toolbar, the selection menu opens below the selection instead of hiding under it.
 const selRect = await page.locator(`${V} .sel-box rect`).boundingBox();
 await scroller.evaluate((el, dy) => (el.scrollTop += dy), selRect.y - (dockBottom + 4));
 await page.waitForTimeout(250);
 const selNow = await page.locator(`${V} .sel-box rect`).boundingBox();
 const menuBox = await page.locator(`${V} .ink-sel-menu`).boundingBox();
 check(!!menuBox && !!selNow && menuBox.y > selNow.y + selNow.height - 1, `near the toolbar the selection menu opens below the selection (menu at ${menuBox?.y.toFixed(0)}, selection ends ${(selNow.y + selNow.height).toFixed(0)})`);
-await shot(page, 'ink-15-menu-below');
+await shot(page, 'ink-16-menu-below');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');

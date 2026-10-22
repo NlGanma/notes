@@ -33,6 +33,8 @@ import {
   fitInline,
   frameCorners,
   hitSelection,
+  isLoop,
+  rawBounds,
   resolveDropTarget,
   selectionFrame,
   snapMove,
@@ -129,6 +131,8 @@ interface Carried {
   baseline: number | null;
   /** Small enough to drop into a line of text. */
   inline: boolean;
+  /** The line of text it started on (its top), if any: nudging a note written on the text keeps it a note. */
+  home: number | null;
 }
 
 type Gesture =
@@ -632,7 +636,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     if (g.alt || !wrapRef.current) return { snap: free, text: null };
     if (inline && baseline !== null) {
       const text = findTextDropTarget(ed, wrapRef.current, s, { x: box.minX + g.dx, y: baseline + g.dy - l * 0.25 });
-      if (text) return { snap: free, text };
+      if (text && (g.carried.home === null || Math.abs(text.top - g.carried.home) > 2)) return { snap: free, text };
     }
     const tol = Math.min(SNAP / s, l * 0.3);
     // Snap to the lines first, then look for the end of a line of text at that height.
@@ -865,6 +869,16 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       const b = sel.bounds;
       const h = b.maxY - b.minY;
       const w = b.maxX - b.minX;
+      const baseline = estimateBaseline(placed, l);
+      // Highlights stay highlights, an underline isn't a word, and a circle or box drawn around words stays a drawing.
+      const inline =
+        baseline !== null &&
+        placed.every(({ stroke }) => stroke.brush !== 'highlighter') &&
+        h <= l * 2.4 &&
+        w <= 420 &&
+        !(h < l * 0.3 && w > l * 1.5) &&
+        !placed.some(({ stroke }) => isLoop(stroke) && rawBounds(stroke).maxY - rawBounds(stroke).minY >= l * 0.6);
+      const start = inline && wrapRef.current ? findTextDropTarget(propsRef.current.editor, wrapRef.current, propsRef.current.scale || 1, { x: b.minX, y: baseline - l * 0.25 }) : null;
       gesture.current = {
         kind: 'move',
         id: e.pointerId,
@@ -875,12 +889,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         moved: false,
         client: { x: e.clientX, y: e.clientY },
         alt: e.altKey,
-        carried: {
-          box: b,
-          baseline: estimateBaseline(placed, l),
-          // Highlights stay highlights, and an underline isn't a word.
-          inline: placed.every(({ stroke }) => stroke.brush !== 'highlighter') && h <= l * 2.4 && w <= 420 && !(h < l * 0.3 && w > l * 1.5),
-        },
+        carried: { box: b, baseline, inline, home: start?.top ?? null },
       };
       setHeld('press');
     };
@@ -906,7 +915,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         moved: false,
         client: { x: e.clientX, y: e.clientY },
         alt: e.altKey,
-        carried: { box: unionBounds(out.strokes.map(strokeBounds))!, baseline: out.baseline, inline: true },
+        carried: { box: unionBounds(out.strokes.map(strokeBounds))!, baseline: out.baseline, inline: true, home: null },
         popped: { pos, dom, strokes: out.strokes },
       };
       setHeld('press');
