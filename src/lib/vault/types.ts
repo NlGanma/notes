@@ -72,6 +72,8 @@ export interface VaultBackend {
   saveFolderMeta(meta: Record<string, FolderMeta>): Promise<void>;
   readKV(key: string): Promise<string | null>;
   writeKV(key: string, value: string): Promise<void>;
+  /** Best-effort synchronous write used while the window closes. */
+  writeKVSync?(key: string, value: string): void;
   reveal?(id: string): void;
 }
 
