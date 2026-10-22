@@ -19,8 +19,8 @@ const MODELS = [
 
 // Fault injection for the test harness: POST /__mock {fail, status, truncate, firstTokenMs}
 // makes the next chat requests fail, stop early (done_reason "length") or start slowly.
-// badQuestions makes the next Review questions carry a false premise (the app must reject them).
-const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0, badQuestions: 0 };
+// badQuestions makes the next Review questions slip (a false premise, or the answer in the question); the app must reject them.
+const faults = { fail: 0, status: 503, truncate: 0, firstTokenMs: 0, badQuestions: 0, badSeen: 0, questionCalls: 0 };
 const stats = { chat: 0, failed: 0, kinds: [], last: [] };
 
 /** Which feature a request came from (for tests: e.g. "no notes prompt was sent"). */
@@ -40,7 +40,8 @@ function kindOf(messages) {
 }
 function record(messages) {
   stats.kinds.push(kindOf(messages));
-  if (stats.kinds.length > 200) stats.kinds.shift();
+  // Tests count a step's requests by the list's length before and after it, so it must not roll over mid-run.
+  if (stats.kinds.length > 20000) stats.kinds.shift();
   stats.last = messages.map((m) => ({ role: m.role, content: String(m.content ?? '').slice(0, 4000) }));
 }
 
@@ -186,11 +187,20 @@ function masteryReply(q) {
     const line = [...lines].sort((a, b) => [...content(b)].filter((w) => nameW.has(w)).length - [...content(a)].filter((w) => nameW.has(w)).length)[0];
     if (!line) return '{"skip": true}';
     const clean = name.replace(/\*\*/g, '');
-    if (faults.badQuestions > 0) {
-      faults.badQuestions--;
-      return JSON.stringify({ question: `What did Napoleon say about ${clean} in 1805?`, proof: firstWords(line, 8), keyPoints: [firstWords(line, 6)] });
-    }
     const example = /use this example that is written in the excerpt: "([^"]*)"/.exec(q)?.[1];
+    // Every other question slips while slips are asked for (so good ones are phrased early too): in turn,
+    // an invented name and year, a premise in plain words the notes don't have, and (applying an idea) a
+    // question that names the idea it asks for.
+    if (faults.badQuestions > 0 && faults.questionCalls++ % 2 === 0) {
+      const slips = [
+        `What did Napoleon say about ${clean} in 1805?`,
+        `Why does ${clean} stop working at night, according to your notes?`,
+        example ? `Why is “${example}” an example of ${clean}?` : `What did Napoleon say about ${clean} in 1805?`,
+      ];
+      const question = slips[faults.badSeen++ % slips.length];
+      faults.badQuestions--;
+      return JSON.stringify({ question, proof: firstWords(line, 8), keyPoints: [firstWords(line, 6)] });
+    }
     const question =
       level === 'apply' && example
         ? `Which idea from your notes does this example show, and why? “${example}”`

@@ -48,6 +48,8 @@ const notInNotes = (text, noteIds) =>
     },
     { text, noteIds },
   );
+/** The mock model's slips (see badQuestions in scripts/mock-llm.mjs). */
+const SLIP = /Napoleon|1805|at night|an example of/;
 const waitPhase = (phases) =>
   page.waitForFunction((ph) => ph.includes(window.__nib.review.getState().current?.phase), phases, { timeout: 15000 });
 
@@ -117,7 +119,8 @@ await shot(page, 'review-01-picker');
 
 // ---------------------------------------------------------------- session
 await page.click('.seg button:has-text("Quick")');
-await mock({ badQuestions: 1 });
+// The model's next three questions slip: an invented name and year, a premise in plain words, the answer in the question.
+await mock({ badQuestions: 3 });
 const selected = await page.evaluate(() => window.__nib.review.getState().selection);
 await page.click('.rv-start');
 await page.waitForSelector('.rv-session .rv-card');
@@ -141,7 +144,7 @@ for (let turn = 0; turn < 40; turn++) {
   seq.push(s.group);
   formats.add(item.format);
   if (item.origin === 'model') modelPhrased++;
-  if (/Napoleon|1805/.test(item.prompt)) napoleon = true;
+  if (SLIP.test(item.prompt)) napoleon = true;
   // The grounding invariant, seen from outside: everything shown as the notes' is in the notes.
   for (const t of [item.fact, item.expected ?? '', ...(item.accept ?? []), ...(item.points ?? []), ...(item.choices ?? [])]) {
     const extra = await notInNotes(t, selected);
@@ -224,7 +227,7 @@ for (let turn = 0; turn < 40; turn++) {
   }, shown);
 }
 check(!ungrounded.length, `every answer, key point and choice shown is in the notes${ungrounded.length ? `: ${ungrounded.slice(0, 3).join(' | ')}` : ''}`);
-check(!napoleon, 'a model-phrased question with a false premise is never shown');
+check(!napoleon, 'a model-phrased question with a false premise, or with its own answer, is never shown');
 console.log(`     formats: ${[...formats].join(', ')} · model-phrased: ${modelPhrased} · classes: ${seq.join(' → ')}`);
 check(seq.includes('Calculus I') && seq.includes('Spanish II'), 'questions came from both classes');
 let run = 1;
@@ -253,7 +256,9 @@ await page.click('.rv-summary-actions .btn.is-primary');
 await page.waitForFunction(() => !window.__nib.scheduler.busy, null, { timeout: 30000 });
 const cached = await page.evaluate(() => Object.values(window.__nib.review.getState().file.questions).flat());
 check((await stats()).kinds.includes('mastery-question'), 'the Mastery Engine phrased questions for the higher levels');
-check(cached.length > 0 && !cached.some((q) => /Napoleon|1805/.test(q.prompt)), `…and only the ones that passed the checks were kept (${cached.length})`);
+check(cached.length > 0 && !cached.some((q) => SLIP.test(q.prompt)), `…and only the ones that passed the checks were kept (${cached.length})`);
+const slipped = 3 - (await fetch(`${MOCK}/__mock`).then((r) => r.json())).faults.badQuestions;
+check(slipped > 0, `…though the model slipped (${slipped} of its questions were rejected)`);
 await page.click('.rv-start');
 await page.waitForSelector('.rv-session .rv-card');
 let phrased = null;
