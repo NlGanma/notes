@@ -4,7 +4,8 @@ import { TopBar } from './components/TopBar';
 import { NoteGrid } from './components/NoteGrid';
 import { LibraryView } from './components/library/LibraryView';
 import { ClassView } from './components/classes/ClassView';
-import { ClassDialog } from './components/classes/ClassDialog';
+import { ClassesView } from './components/classes/ClassesView';
+import { ClassDialog, CustomizeDialog } from './components/classes/ClassDialog';
 import { HomeworkView } from './components/homework/HomeworkView';
 import { ReviewView } from './components/review/ReviewView';
 import { NewHomeworkDialog } from './components/homework/NewHomeworkDialog';
@@ -73,6 +74,12 @@ export function App() {
     if (backend) void useReview.getState().load();
   }, [backend]);
 
+  // The window title names the open note, so Mission Control and the Window menu can tell windows apart.
+  const openTitle = view.kind === 'note' ? (notes[view.id]?.meta.title || 'Untitled') : null;
+  useEffect(() => {
+    document.title = openTitle ? `${openTitle} — Nib` : 'Nib';
+  }, [openTitle]);
+
   // Keep the open note in the tab strip; drop tabs whose note is gone.
   useEffect(() => {
     if (!ready) return;
@@ -81,9 +88,9 @@ export function App() {
     const v = ui.view;
     // A class or folder page whose folder is gone (deleted, or renamed outside Nib) goes home.
     if ((v.kind === 'class' && folderMeta[v.path]?.kind !== 'class') || ((v.kind === 'class' || v.kind === 'folder') && !folders.includes(v.path)))
-      ui.set({ view: { kind: 'home' } });
+      ui.set({ view: { kind: 'classes' } });
     if (ui.libraryScope.kind === 'folder' && !folders.includes(ui.libraryScope.path)) ui.set({ libraryScope: { kind: 'all' } });
-    if (v.kind === 'note' && (!notes[v.id] || notes[v.id].meta.trashed)) ui.set({ view: { kind: 'home' }, tabs: valid });
+    if (v.kind === 'note' && (!notes[v.id] || notes[v.id].meta.trashed)) ui.set({ view: { kind: 'classes' }, tabs: valid });
     else if (v.kind === 'note' && !valid.includes(v.id)) ui.set({ tabs: [...valid, v.id] });
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
   }, [ready, notes, folderMeta, folders]);
@@ -133,13 +140,15 @@ export function App() {
         }
       }}
     >
-      {sidebar && <Sidebar />}
+      <TopBar />
+      <div className="app-body">
+      <Sidebar />
       <main className="main">
-        <TopBar />
         <div className="content">
           {error && <div className="vault-error">Couldn’t open the vault: {error}</div>}
           {view.kind === 'library' && <LibraryView />}
-          {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} />}
+          {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} tab={view.kind === 'class' ? view.tab : undefined} />}
+          {view.kind === 'classes' && <ClassesView archived={!!view.archived} />}
           {view.kind === 'homework' && <HomeworkView filter={view.filter} />}
           {view.kind === 'review' && <ReviewView preset={view.preset} />}
           {(view.kind === 'home' ||
@@ -156,10 +165,12 @@ export function App() {
         </div>
       </main>
       {showAssistant && <AssistantPanel />}
+      </div>
       <SlashMenu />
       <CommandPalette />
       <SettingsModal />
       <ClassDialog />
+      <CustomizeDialog />
       <NewHomeworkDialog />
       <LinkNotesDialog />
       <DialogHost />

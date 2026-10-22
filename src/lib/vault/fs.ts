@@ -112,5 +112,8 @@ export function createFsVault(bridge: NibBridge, root: string): VaultBackend {
       const cur = paths.get(id);
       if (cur) v.reveal(root, cur);
     },
+    revealFolder(path) {
+      if (path) v.reveal(root, path);
+    },
   };
 }

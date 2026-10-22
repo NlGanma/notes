@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware';
 import type { Scope } from '../lib/ai/rag';
 
 export type View =
+  /** Home: every class as a card (Google Classroom's home); `archived` shows archived classes. */
+  | { kind: 'classes'; archived?: boolean }
+  /** All notes. */
   | { kind: 'home' }
   | { kind: 'note'; id: string }
   | { kind: 'folder'; path: string }
@@ -11,14 +14,19 @@ export type View =
   | { kind: 'recent' }
   | { kind: 'trash' }
   | { kind: 'library' }
-  | { kind: 'class'; path: string }
-  | { kind: 'homework'; filter?: 'todo' | 'done' }
+  | { kind: 'class'; path: string; tab?: ClassTab }
+  /** Homework (Classroom's To-do): 'todo' is the Assigned tab. */
+  | { kind: 'homework'; filter?: 'todo' | 'missing' | 'done' }
   /** Review: `preset` picks these notes when it opens. */
   | { kind: 'review'; preset?: string[] };
+
+export type ClassTab = 'stream' | 'classwork' | 'study';
 
 /** Modal dialogs that several places can open. */
 export type Dialog =
   | { kind: 'class'; path: string | null }
+  /** A class's appearance (theme colour and banner icon), from the banner's "Customize". */
+  | { kind: 'customize'; path: string }
   | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
   | { kind: 'linkNotes'; noteId: string };
 
@@ -39,8 +47,6 @@ export interface UIState {
   focusTitle: string | null;
   /** Block to scroll to & flash when a note opens (citations). */
   reveal: { noteId: string; blockId: string; at: number } | null;
-  /** Sidebar item being renamed inline ("folder:<path>" or "note:<id>"). */
-  renaming: string | null;
   /** What "Ask your notes" searches. */
   libraryScope: Scope;
   dialog: Dialog | null;
@@ -60,7 +66,7 @@ export interface UIState {
 export const useUI = create<UIState>()(
   persist(
     (set, get) => ({
-      view: { kind: 'home' },
+      view: { kind: 'classes' },
       tabs: [],
       sidebar: true,
       assistant: false,
@@ -72,7 +78,6 @@ export const useUI = create<UIState>()(
       sort: 'updated',
       focusTitle: null,
       reveal: null,
-      renaming: null,
       libraryScope: { kind: 'all' },
       dialog: null,
       openDialog: (d) => set({ dialog: d }),
@@ -102,7 +107,7 @@ export const useUI = create<UIState>()(
         const next = tabs.filter((t) => t !== id);
         if (view.kind === 'note' && view.id === id) {
           const neighbour = next[Math.min(i, next.length - 1)];
-          set({ tabs: next, view: neighbour ? { kind: 'note', id: neighbour } : { kind: 'home' } });
+          set({ tabs: next, view: neighbour ? { kind: 'note', id: neighbour } : { kind: 'classes' } });
         } else set({ tabs: next });
       },
       setView: (v) => set({ view: v }),
@@ -117,7 +122,7 @@ export const useUI = create<UIState>()(
     {
       name: 'nib.ui',
       partialize: (s) => ({
-        view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'home' } : s.view,
+        view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'classes' } : s.view,
         tabs: s.tabs,
         sidebar: s.sidebar,
         assistant: s.assistant,

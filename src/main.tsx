@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@fontsource-variable/inter';
+import '@fontsource-variable/google-sans/opsz.css';
 import '@fontsource-variable/source-serif-4';
 import 'katex/dist/katex.min.css';
 import './styles/tokens.css';
@@ -9,7 +9,10 @@ import './styles/doc.css';
 import './styles/editor.css';
 import './styles/components.css';
 import './styles/ai.css';
+import './styles/library.css';
 import './styles/school.css';
+import './styles/classroom.css';
+import './styles/homework.css';
 import './styles/review.css';
 import './styles/print.css';
 import { App } from './App';

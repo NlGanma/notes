@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { FileText } from 'lucide-react';
 import type { SourceRef } from '../../state/assistant';
 import { useUI } from '../../state/ui';
 import { citedInAnswer, renderMarkdown } from '../../lib/ai/markdown';
@@ -20,37 +21,86 @@ export function trimExcerpt(text: string): string {
   return body.slice(0, 420).replace(/\s+\S*$/, '') + ' …';
 }
 
-/** Click a [n] chip → a preview of exactly what the note says, with a jump to it. */
-export function useCitePreview() {
-  const [preview, setPreview] = useState<{ el: HTMLElement; src: SourceRef } | null>(null);
+/**
+ * A [n] chip → a card with exactly what the note says (NotebookLM's citation
+ * popover: the section, the passage, then the note it's from, which opens it).
+ * Clicking a chip pins the card; `hover` also shows it while the pointer rests
+ * on a chip or the card.
+ */
+export function useCitePreview(opts: { placement?: 'top' | 'right' | 'left' } = {}) {
+  const [preview, setPreview] = useState<{ el: HTMLElement; src: SourceRef; pinned: boolean } | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const later = (fn: () => void, ms: number) => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(fn, ms);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // The open chip looks pressed.
+  useEffect(() => {
+    const el = preview?.el;
+    el?.classList.add('is-active');
+    return () => el?.classList.remove('is-active');
+  }, [preview?.el]);
+
   const show = (n: number, el: HTMLElement, sources: SourceRef[] | undefined) => {
     const src = sources?.find((s) => s.n === n);
-    if (src) setPreview({ el, src });
+    window.clearTimeout(timer.current);
+    if (src) setPreview({ el, src, pinned: true });
   };
+  /** Pointer handlers for an element holding chips (one answer, whose sources they cite). */
+  const hover = (sources: SourceRef[] | undefined) => ({
+    onPointerOver: (e: React.PointerEvent) => {
+      const el = (e.target as HTMLElement).closest('.cite') as HTMLElement | null;
+      if (!el || e.pointerType === 'touch') return;
+      const src = sources?.find((s) => s.n === Number(el.dataset.cite));
+      if (!src) return;
+      later(() => setPreview((p) => (p?.el === el ? p : { el, src, pinned: false })), 150);
+    },
+    onPointerOut: (e: React.PointerEvent) => {
+      if (!(e.target as HTMLElement).closest('.cite')) return;
+      later(() => setPreview((p) => (p && !p.pinned ? null : p)), 200);
+    },
+  });
+  const side = opts.placement === 'right' || opts.placement === 'left';
+  const src = preview?.src;
+  const heading = src ? src.section.split(' › ').pop() || src.title : '';
+  const where = src?.folder.split('/')[0];
   const popover = (
-    <Popover anchor={preview?.el ?? null} open={!!preview} onClose={() => setPreview(null)} placement="top" className="cite-pop">
-      {preview && (
-        <div className="cite-preview">
-          <div className="cite-preview-head">
-            <span className="cite-n">{preview.src.n}</span>
-            <span className="cite-preview-title">{preview.src.title}</span>
-            {preview.src.section && <span className="cite-preview-sec">› {preview.src.section}</span>}
+    <Popover
+      anchor={preview?.el ?? null}
+      open={!!preview}
+      onClose={() => setPreview(null)}
+      placement={opts.placement ?? 'top'}
+      align={side ? 'start' : 'center'}
+      className="cite-pop"
+    >
+      {src && (
+        <div
+          className="cite-preview"
+          onPointerEnter={() => window.clearTimeout(timer.current)}
+          onPointerLeave={() => later(() => setPreview((p) => (p && !p.pinned ? null : p)), 200)}
+        >
+          <div className="cite-preview-body">
+            <div className="cite-preview-head">{heading}</div>
+            <div className="cite-preview-text md" dangerouslySetInnerHTML={{ __html: renderMarkdown(trimExcerpt(src.text)) }} />
           </div>
-          <div className="cite-preview-text md" dangerouslySetInnerHTML={{ __html: renderMarkdown(trimExcerpt(preview.src.text)) }} />
           <button
-            className="btn is-small is-secondary"
+            className="btn cite-preview-foot"
+            title="Open in note"
             onClick={() => {
               setPreview(null);
-              openSource(preview.src);
+              openSource(src);
             }}
           >
-            Open in note
+            <FileText size={16} />
+            <span className="cite-preview-title">{src.title}</span>
+            {where && <span className="cite-preview-sec">· {where}</span>}
           </button>
         </div>
       )}
     </Popover>
   );
-  return { show, popover };
+  return { show, hover, popover };
 }
 
 /** The notes an answer used (only the ones it actually cited, when it cited any). */

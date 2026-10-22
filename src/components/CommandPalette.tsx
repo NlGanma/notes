@@ -20,6 +20,7 @@ import {
   ClipboardList,
   GraduationCap,
   Target,
+  X,
 } from 'lucide-react';
 import { listClasses } from '../lib/classes';
 import { ClassBadge } from './classes/ClassIcon';
@@ -109,7 +110,7 @@ function Palette() {
           group: term ? 'Notes' : 'Recent notes',
           label: n.meta.title || 'Untitled',
           sub: [n.meta.folder, formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
-          icon: <FileText size={15} style={n.meta.color ? { color: n.meta.color } : undefined} />,
+          icon: <FileText size={20} style={n.meta.color ? { color: n.meta.color } : undefined} />,
           run: () => useUI.getState().openNote(n.meta.id, { newTab: true }),
         });
       }
@@ -123,7 +124,7 @@ function Palette() {
             group: 'In your notes',
             label: snippet(h.chunk.text, term, 110),
             sub: [h.chunk.title, h.chunk.section].filter(Boolean).join(' › '),
-            icon: <TextSearch size={15} />,
+            icon: <TextSearch size={20} />,
             run: () => useUI.getState().openNote(h.chunk.noteId, { newTab: true, blockId: h.chunk.blockIds[0] }),
           });
         }
@@ -135,7 +136,7 @@ function Palette() {
             group: 'Classes',
             label: c.name,
             sub: [c.code, c.instructor].filter(Boolean).join(' · '),
-            icon: <ClassBadge cls={c} size={18} />,
+            icon: <ClassBadge cls={c} size={24} />,
             run: () => openClass(c.path),
           });
         }
@@ -145,7 +146,7 @@ function Palette() {
             group: 'Folders',
             label: f.split('/').pop()!,
             sub: f,
-            icon: <Folder size={15} />,
+            icon: <Folder size={20} />,
             run: () => useUI.getState().setView({ kind: 'folder', path: f }),
           });
         }
@@ -153,7 +154,7 @@ function Palette() {
           id: 'ask-library',
           group: 'Ask',
           label: `Ask your notes: “${term}”`,
-          icon: <MessageCircleQuestion size={15} />,
+          icon: <MessageCircleQuestion size={20} />,
           run: () => {
             openLibrary();
             setTimeout(() => window.dispatchEvent(new CustomEvent('nib:library-ask', { detail: term })), 50);
@@ -165,41 +166,41 @@ function Palette() {
     const noteId = currentNoteId();
     const classes = listClasses(folders, folderMeta);
     const commands: Item[] = [
-      { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus size={15} />, hint: `${MOD}N`, run: () => newNote() },
-      { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList size={15} />, run: () => newHomework() },
-      { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap size={15} />, run: () => newClass() },
+      { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus size={20} />, hint: `${MOD}N`, run: () => newNote() },
+      { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList size={20} />, run: () => newHomework() },
+      { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap size={20} />, run: () => newClass() },
       {
         id: 'c:hwlist',
         group: 'Commands',
         label: 'Go to Homework',
-        icon: <ClipboardList size={15} />,
+        icon: <ClipboardList size={20} />,
         run: () => useUI.getState().setView({ kind: 'homework' }),
       },
       // Before the per-class commands: searching "review" keeps only the first few matches.
-      { id: 'c:review', group: 'Commands', label: 'Review…', sub: 'Pick any notes, mix classes', icon: <Target size={15} />, hint: `${SHIFT}${MOD}E`, run: () => openReview() },
+      { id: 'c:review', group: 'Commands', label: 'Review…', sub: 'Pick any notes, mix classes', icon: <Target size={20} />, hint: `${SHIFT}${MOD}E`, run: () => openReview() },
       {
         id: 'c:review-due',
         group: 'Commands',
         label: 'Review what’s due',
-        icon: <Target size={15} />,
+        icon: <Target size={20} />,
         run: () => openReview(dueNotes().ids),
       },
       ...(noteId && notes[noteId] && isReviewable(notes[noteId])
-        ? [{ id: 'c:review-note', group: 'Commands', label: 'Review this note', icon: <Target size={15} />, run: () => reviewNote(noteId) }]
+        ? [{ id: 'c:review-note', group: 'Commands', label: 'Review this note', icon: <Target size={20} />, run: () => reviewNote(noteId) }]
         : []),
       ...classes.flatMap((c) => [
         {
           id: `c:note:${c.path}`,
           group: 'Commands',
           label: `New ${c.name} note`,
-          icon: <ClassBadge cls={c} size={18} />,
+          icon: <ClassBadge cls={c} size={24} />,
           run: () => newNote(c.path),
         },
         {
           id: `c:hw:${c.path}`,
           group: 'Commands',
           label: `New ${c.name} homework`,
-          icon: <ClassBadge cls={c} size={18} />,
+          icon: <ClassBadge cls={c} size={24} />,
           run: () => newHomework(c.path),
         },
         {
@@ -207,7 +208,7 @@ function Palette() {
           group: 'Commands',
           label: `Ask ${c.name}`,
           sub: 'Answers only from this class’s notes',
-          icon: <ClassBadge cls={c} size={18} />,
+          icon: <ClassBadge cls={c} size={24} />,
           run: () => openLibrary({ kind: 'folder', path: c.path }),
         },
         {
@@ -215,21 +216,21 @@ function Palette() {
           group: 'Commands',
           label: `Review ${c.name}`,
           sub: 'Practise until you know it — from this class’s notes',
-          icon: <ClassBadge cls={c} size={18} />,
+          icon: <ClassBadge cls={c} size={24} />,
           run: () => reviewFolder(c.path),
         },
       ]),
-      { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={15} />, run: () => void newFolder() },
-      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={15} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
-      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <MessageCircleQuestion size={15} />, hint: `${MOD}J`, run: () => toggleAssistant() },
-      { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={15} />, run: () => void importFiles() },
+      { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={20} />, run: () => void newFolder() },
+      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={20} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
+      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <MessageCircleQuestion size={20} />, hint: `${MOD}J`, run: () => toggleAssistant() },
+      { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={20} />, run: () => void importFiles() },
       ...(noteId
         ? [
             {
               id: 'c:pdf',
               group: 'Commands',
               label: 'Export note as PDF',
-              icon: <FileDown size={15} />,
+              icon: <FileDown size={20} />,
               hint: `${MOD}P`,
               run: () => void exportNote(noteId, 'pdf'),
             },
@@ -239,16 +240,16 @@ function Palette() {
         id: 'c:sidebar',
         group: 'Commands',
         label: 'Toggle sidebar',
-        icon: <PanelLeft size={15} />,
+        icon: <PanelLeft size={20} />,
         hint: `${MOD}\\`,
         run: () => useUI.getState().toggleSidebar(),
       },
-      { id: 'c:ai', group: 'Commands', label: 'AI settings — connect a local model', icon: <Cpu size={15} />, run: () => useUI.getState().openSettings('ai') },
+      { id: 'c:ai', group: 'Commands', label: 'AI settings — connect a local model', icon: <Cpu size={20} />, run: () => useUI.getState().openSettings('ai') },
       {
         id: 'c:settings',
         group: 'Commands',
         label: 'Settings',
-        icon: <Settings size={15} />,
+        icon: <Settings size={20} />,
         hint: `${MOD},`,
         run: () => useUI.getState().openSettings('writing'),
       },
@@ -256,11 +257,11 @@ function Palette() {
         id: 'c:keys',
         group: 'Commands',
         label: 'Keyboard shortcuts',
-        icon: <Keyboard size={15} />,
+        icon: <Keyboard size={20} />,
         hint: `${MOD}/`,
         run: () => useUI.getState().openSettings('shortcuts'),
       },
-      { id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <Folder size={15} />, run: () => void openVaultFolder() },
+      { id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <Folder size={20} />, run: () => void openVaultFolder() },
     ];
     // Per-class commands only show up when searched for, so the default list stays short.
     const cmdMatches = commands.filter((c) => (term ? fuzzyScore(c.label, term) > (isCmd ? 0 : 30) : !c.id.split(':')[2]));
@@ -284,7 +285,7 @@ function Palette() {
     <div className="palette-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div className="palette" role="dialog" aria-label="Quick open">
         <div className="palette-input">
-          <Search size={17} />
+          <Search size={24} />
           <input
             ref={inputRef}
             value={q}
@@ -306,7 +307,9 @@ function Palette() {
               }
             }}
           />
-          <kbd>esc</kbd>
+          <button className="icon-btn" onClick={close} aria-label="Close search">
+            <X size={24} />
+          </button>
         </div>
         <div className="palette-list" ref={listRef}>
           {items.length === 0 && <div className="palette-empty">No matches. Press ↵ to create “{q}”.</div>}
@@ -325,9 +328,9 @@ function Palette() {
                   {it.hint ? (
                     <kbd>{it.hint}</kbd>
                   ) : i === index ? (
-                    <CornerDownLeft size={13} className="palette-enter" />
+                    <CornerDownLeft size={18} className="palette-enter" />
                   ) : (
-                    <ArrowRight size={13} className="palette-arrow" />
+                    <ArrowRight size={18} className="palette-arrow" />
                   )}
                 </button>
               </div>

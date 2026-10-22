@@ -1,7 +1,7 @@
 // End-to-end test of the local-AI features against scripts/mock-llm.mjs.
 //   node scripts/mock-llm.mjs &   (port 11434)
 //   node tests/e2e/ai.mjs
-import { launch, shot, BASE } from './lib.mjs';
+import { launch, shot, BASE, openClassNote } from './lib.mjs';
 
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
 const V = '.note-view:not(.is-hidden)';
@@ -20,8 +20,7 @@ const status = await page.textContent('.ai-status');
 check(/qwen2\.5vl/.test(status), `connected to the local model server, chose a vision model (${status.trim()})`);
 
 // 1. Tutor on the handwritten worked example.
-await page.click('.tree-row:has-text("Calculus I")');
-await page.click('.note-card:has-text("Lecture 4")');
+await openClassNote(page, 'Calculus I', 'Lecture 4');
 await page.waitForTimeout(800);
 const inkBlock = page.locator(`${V} .ink-block-node`).first();
 await inkBlock.scrollIntoViewIfNeeded();
@@ -120,7 +119,7 @@ await shot(page, 'ai-09-quiz');
 // 8. Polish → read handwriting in the background-transcription path.
 await page.click('.tab:has-text("Lecture 4")');
 await page.waitForTimeout(500);
-await page.click('.top-btn:has-text("Polish")');
+await page.click('.top-btn[aria-label="Polish"]');
 await page.waitForSelector('.polish');
 await shot(page, 'ai-10-polish');
 const read = page.locator('.polish-row:has-text("searchable") button');

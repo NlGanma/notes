@@ -47,7 +47,7 @@ Create a class (name, course code, teacher, term, colour, icon) and everything f
 ![The homework helper marking what is not from the notes](docs/screenshots/homework.png)
 
 ### An assistant that sees the whole page
-- **Ask about anything.** Select text, lasso handwriting, or drag the **✦ Ask** tool over any area, and the model gets the whole note plus exactly what you pointed at.
+- **Ask about anything.** Select text, lasso handwriting, or drag the **Ask** tool over any area, and the model gets the whole note plus exactly what you pointed at.
 - **Tutor mode for math.** It works out what you're trying to do from your own steps and gives one hint at a time. Ask for *Check my work* to mark each step ✓/✗, or *Solve* for the full solution.
 - **Insert into note.** Put an answer straight into the note, right after the problem it's about — anything not from your notes stays marked when it's inserted.
 

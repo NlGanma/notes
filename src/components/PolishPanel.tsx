@@ -12,7 +12,6 @@ import {
   Pilcrow,
   ScanText,
   Sigma,
-  Cpu,
   Tags,
   Text,
 } from 'lucide-react';
@@ -25,18 +24,18 @@ import { toast } from './common/toast';
 import { cx } from '../lib/util';
 
 const ICONS: Record<Suggestion['icon'], React.ReactNode> = {
-  title: <CaseSensitive size={16} />,
-  tags: <Tags size={16} />,
-  space: <FoldVertical size={16} />,
-  lines: <Pilcrow size={16} />,
-  list: <List size={16} />,
-  colors: <Palette size={16} />,
-  read: <ScanText size={16} />,
-  math: <Sigma size={16} />,
-  bullets: <Text size={16} />,
-  summary: <AlignLeft size={16} />,
-  headings: <Heading size={16} />,
-  class: <GraduationCap size={16} />,
+  title: <CaseSensitive size={20} />,
+  tags: <Tags size={20} />,
+  space: <FoldVertical size={20} />,
+  lines: <Pilcrow size={20} />,
+  list: <List size={20} />,
+  colors: <Palette size={20} />,
+  read: <ScanText size={20} />,
+  math: <Sigma size={20} />,
+  bullets: <Text size={20} />,
+  summary: <AlignLeft size={20} />,
+  headings: <Heading size={20} />,
+  class: <GraduationCap size={20} />,
 };
 
 function useSuggestions(noteId: string | null) {
@@ -80,13 +79,16 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
   return (
     <div className="polish">
       <div className="polish-head">
-        <div className="polish-title">Polish</div>
+        <div className="polish-title">
+          Polish
+          {suggestions.length > 0 && <span className="polish-count">{suggestions.length - done.length}</span>}
+        </div>
         <div className="polish-sub">Small changes for clean, consistent notes. Everything can be undone with ⌘Z.</div>
       </div>
       {!suggestions.length && (
         <div className="polish-empty">
-          <Check size={18} />
-          <div>Looking tidy — nothing to suggest right now.</div>
+          <Check size={20} />
+          <div>Looking tidy. Nothing to suggest right now.</div>
         </div>
       )}
       {quick.length > 0 && (
@@ -111,9 +113,7 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
       )}
       {smart.length > 0 && (
         <div className="polish-group">
-          <div className="polish-group-label">
-            <Cpu size={12} /> With your local AI {ai.chatModel && <span className="polish-model">· {ai.chatModel}</span>}
-          </div>
+          <div className="polish-group-label">Using your local model</div>
           {smart.map((s) => (
             <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
           ))}
@@ -131,13 +131,13 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
 function Row({ s, busy, done, onApply }: { s: Suggestion; busy: boolean; done: boolean; onApply(): void }) {
   return (
     <div className={cx('polish-row', done && 'is-done')}>
-      <span className={cx('polish-icon', s.ai && 'is-ai')}>{ICONS[s.icon]}</span>
+      <span className="polish-icon">{ICONS[s.icon]}</span>
       <div className="polish-text">
         <div className="polish-row-title">{s.title}</div>
         <div className="polish-row-detail">{s.detail}</div>
       </div>
-      <button className={cx('btn is-small', s.ai ? 'is-ai' : 'is-secondary')} disabled={busy || done} onClick={onApply}>
-        {busy ? <Loader2 size={13} className="spin" /> : done ? <Check size={13} /> : s.action}
+      <button className="btn is-ghost is-small" disabled={busy || done} onClick={onApply}>
+        {busy ? <Loader2 size={18} className="spin" /> : done ? <Check size={18} /> : s.action}
       </button>
     </div>
   );

@@ -1,55 +1,107 @@
 import { useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ClipboardList, Link2, Plus, ScanText, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
+import type { JSONContent } from '@tiptap/core';
+import { FileText, Folder, MessageSquareText, Paperclip, Plus, SendHorizontal, X } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI, visionModel } from '../../state/ai';
-import { classForFolder, classInfo, inFolder } from '../../lib/classes';
-import { dueLabel, homeworkSources, suggestSources } from '../../lib/homework';
-import { linkNotes, toggleAssistant } from '../../lib/commands';
+import { useAssistant } from '../../state/assistant';
+import { classForFolder, classInfo, inFolder, themeVars } from '../../lib/classes';
+import { homeworkSources, isMissing, suggestSources } from '../../lib/homework';
+import { toggleAssistant } from '../../lib/commands';
+import { pickFiles, scanToBlocks, SCAN_TYPES } from '../../lib/import';
 import { needsReading, readScannedPages } from '../../lib/scan';
-import { ClassBadge } from '../../components/classes/ClassIcon';
+import { editors } from '../registry';
+import { Popover } from '../../components/common/Popover';
 import { toast } from '../../components/common/toast';
-import { cx, plural } from '../../lib/util';
+import { DuePicker } from '../../components/homework/DuePicker';
+import { openLinkPicker } from '../../components/homework/LinkNotesDialog';
+import { dueLine, folderName, shortDate } from '../../components/homework/sources';
+import { cx, formatRelativeTime, plural } from '../../lib/util';
 
-function toDateInput(t?: number) {
-  if (!t) return '';
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** One attachment of "Your work": a 56px tile with a thumbnail cell, title, type line and remove button. */
+function Attachment({
+  thumb,
+  title,
+  sub,
+  source,
+  onOpen,
+  onRemove,
+}: {
+  thumb: React.ReactNode;
+  title: string;
+  sub: string;
+  /** Linked sources keep the old class name the tests look for. */
+  source?: boolean;
+  onOpen(): void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className={cx('hw-att', source && 'hw-source-chip')}>
+      <button className="hw-att-main" onClick={onOpen} title={title}>
+        <span className="hw-att-thumb">{thumb}</span>
+        <span className="hw-att-text">
+          <span className="hw-att-title">{title}</span>
+          <span className="hw-att-sub">{sub}</span>
+        </span>
+      </button>
+      {onRemove && (
+        <button className="icon-btn hw-att-x" onClick={onRemove} aria-label={`Remove ${title}`} title="Remove">
+          <X size={20} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**
- * The strip under a homework's title: due date, done, and the notes its
- * answers may come from (with one-click suggestions when none are linked).
+ * The top of a homework's page, after Google Classroom's assignment page: the
+ * meta line, linked notes and due date, the class-colour rule, then the "Your
+ * work" card (status, the notes it answers from as attachments, Add or create,
+ * Mark as done) and the card to ask the assistant about it.
  */
-export function HomeworkBar({ note }: { note: NoteDoc }) {
+export function HomeworkBar({ note, tags }: { note: NoteDoc; /** The page's hashtags, shown above the class-colour rule. */ tags?: React.ReactNode }) {
   const notes = useVault((s) => s.notes);
   const folderMeta = useVault((s) => s.folderMeta);
   const hw = note.meta.homework!;
   const [reading, setReading] = useState(false);
-  const dateRef = useRef<HTMLInputElement>(null);
+  const [needsVision, setNeedsVision] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [dueOpen, setDueOpen] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [question, setQuestion] = useState('');
+  const addBtn = useRef<HTMLButtonElement>(null);
+  const dueBtn = useRef<HTMLButtonElement>(null);
+
   const sources = useMemo(() => homeworkSources(note, notes), [note, notes]);
   const classPath = classForFolder(note.meta.folder, folderMeta);
   const cls = classPath ? classInfo(classPath, folderMeta[classPath]) : null;
   const suggestions = useMemo(() => (sources.length ? [] : suggestSources(note, notes, 2, classPath)), [sources.length, note, notes, classPath]);
-  const unreadPages = useMemo(() => (note.content.content ?? []).filter((b) => b.type === 'image' && needsReading(b.attrs)).length, [note.content]);
-  const due = dueLabel(hw.due);
-  const update = (patch: Partial<typeof hw>) => useVault.getState().updateMeta(note.meta.id, { homework: { ...hw, ...patch } });
+  const pages = useMemo(() => (note.content.content ?? []).filter((b) => b.type === 'image'), [note.content]);
+  const unreadPages = pages.filter((b) => needsReading(b.attrs)).length;
+  // Read fresh, so an Undo from the snackbar doesn't roll back changes made since.
+  const update = (patch: Partial<typeof hw>) => {
+    const cur = useVault.getState().notes[note.meta.id]?.meta.homework ?? hw;
+    useVault.getState().updateMeta(note.meta.id, { homework: { ...cur, ...patch } });
+  };
 
-  // Linked folders show as one chip ("All Calculus I notes"); single notes as their own chips.
-  const folderChips = hw.folders.map((f) => ({
-    key: `f:${f}`,
-    label: folderMeta[f]?.kind === 'class' ? `All ${classInfo(f, folderMeta[f]).name} notes` : `All of ${f.split('/').pop()}`,
-    count: sources.filter((n) => inFolder(n, f)).length,
-    remove: () => update({ folders: hw.folders.filter((x) => x !== f) }),
-  }));
-  const noteChips = hw.sources
-    .map((id) => notes[id])
-    .filter((n): n is NoteDoc => !!n && !n.meta.trashed && !hw.folders.some((f) => inFolder(n, f)))
-    .map((n) => ({ key: n.meta.id, note: n }));
+  const missing = isMissing(hw);
+  const late = hw.done && !!hw.due && hw.due < new Date(note.meta.updated).setHours(0, 0, 0, 0);
+  const status = hw.done ? (late ? 'Done late' : 'Done') : missing ? 'Missing' : 'Assigned';
+  const edited = note.meta.updated - note.meta.created > 60_000;
+  const clsName = (folder: string) => {
+    const p = classForFolder(folder, folderMeta);
+    return p ? classInfo(p, folderMeta[p]).name : null;
+  };
+
+  const markDone = (done: boolean) => {
+    update({ done });
+    if (done) toast.info('Marked as done', undefined, { label: 'Undo', run: () => update({ done: false }) });
+  };
 
   const readPages = async () => {
     if (!visionModel(useAI.getState())) {
+      setNeedsVision(true);
       toast.error('No vision model', 'Reading scanned pages needs a model that can see images (e.g. qwen2.5vl). Set one in Settings → Local AI.');
       return;
     }
@@ -64,101 +116,251 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
     }
   };
 
+  // A scan or photo becomes pages of the homework, before "My work" (as when it's made from a scan).
+  const addScan = async () => {
+    setMenuOpen(false);
+    const [f] = await pickFiles({ accept: SCAN_TYPES, multiple: false, title: 'Add a scan to your homework' });
+    if (!f) return;
+    let blocks: JSONContent[];
+    try {
+      blocks = await scanToBlocks(f);
+    } catch (e) {
+      toast.error('Couldn’t import this file', String((e as Error).message ?? e));
+      return;
+    }
+    const ed = editors.get(note.meta.id);
+    if (ed && !ed.isDestroyed) {
+      let at = ed.state.doc.content.size;
+      ed.state.doc.forEach((node, pos) => {
+        if (at === ed.state.doc.content.size && node.type.name === 'heading' && node.textContent.trim() === 'My work') at = pos;
+      });
+      ed.chain().insertContentAt(at, blocks).run();
+    } else {
+      const content = note.content.content ?? [];
+      useVault.getState().updateContent(note.meta.id, { ...note.content, content: [...blocks, ...content] });
+    }
+    if (useAI.getState().status === 'online' && visionModel()) void readScannedPages(note.meta.id, { priority: 'background' }).catch(() => undefined);
+  };
+
+  const createBlank = () => {
+    setMenuOpen(false);
+    const doc = useVault.getState().createNote({ folder: classPath ?? '', title: `Notes for ${note.meta.title || 'homework'}` });
+    update({ sources: [...hw.sources, doc.meta.id] });
+    useUI.getState().openNote(doc.meta.id, { newTab: true });
+  };
+
+  const scrollToPages = () => {
+    const img = document.querySelector('.note-view:not(.is-hidden) .ProseMirror img');
+    img?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const ask = () => {
+    const prompt = question.trim();
+    if (!prompt) return;
+    toggleAssistant(true);
+    void useAssistant.getState().ask(note.meta.id, { prompt });
+    setQuestion('');
+    setAsking(false);
+  };
+
+  // Attachments: linked classes and units, single notes, then the scanned pages.
+  const folderTiles = hw.folders.map((f) => {
+    const name = folderName(f, folderMeta);
+    const count = sources.filter((n) => inFolder(n, f)).length;
+    return (
+      <Attachment
+        key={`f:${f}`}
+        source
+        thumb={<Folder size={24} />}
+        title={`All ${name} notes`}
+        sub={`${plural(count, 'note')} · includes new ones`}
+        onOpen={() => useUI.getState().setView(folderMeta[f]?.kind === 'class' ? { kind: 'class', path: f } : { kind: 'folder', path: f })}
+        onRemove={hw.done ? undefined : () => update({ folders: hw.folders.filter((x) => x !== f) })}
+      />
+    );
+  });
+  const noteTiles = hw.sources
+    .map((id) => notes[id])
+    .filter((n): n is NoteDoc => !!n && !n.meta.trashed && !hw.folders.some((f) => inFolder(n, f)))
+    .map((n) => {
+      const c = clsName(n.meta.folder);
+      return (
+        <Attachment
+          key={n.meta.id}
+          source
+          thumb={<FileText size={24} />}
+          title={n.meta.title || 'Untitled'}
+          sub={c ? `Note · ${c}` : 'Note'}
+          onOpen={() => useUI.getState().openNote(n.meta.id, { newTab: true })}
+          onRemove={hw.done ? undefined : () => update({ sources: hw.sources.filter((x) => x !== n.meta.id) })}
+        />
+      );
+    });
+  const firstPage = pages[0]?.attrs;
+
   return (
-    <div className="hw-bar" style={cls ? { ['--class' as string]: cls.color } : undefined}>
-      <div className="hw-bar-row">
-        <span className="hw-badge">
-          <ClipboardList size={13} /> Homework
-        </span>
-        {cls && (
-          <button className="hw-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })}>
-            <ClassBadge cls={cls} size={16} />
+    <div className="hw-bar" style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}>
+      <div className="hw-meta">
+        {/* The class name links back to the class, like the page header's on ordinary notes. */}
+        {cls ? (
+          <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })}>
             {cls.name}
           </button>
+        ) : (
+          'No class'
         )}
-        <button
-          className={cx('due-pill is-button', due ? `is-${due.tone}` : 'is-unset')}
-          onClick={() => {
-            const el = dateRef.current;
-            if (!el) return;
-            try {
-              el.showPicker();
-            } catch {
-              el.focus();
-            }
-          }}
-        >
-          <CalendarDays size={12} />
-          {hw.done ? 'Done' : (due?.text ?? 'Set due date')}
-          <input
-            ref={dateRef}
-            className="hw-date-input"
-            type="date"
-            value={toDateInput(hw.due)}
-            onChange={(e) => {
-              const [y, m, d] = e.target.value.split('-').map(Number);
-              update({ due: e.target.value ? new Date(y, m - 1, d, 23, 59).getTime() : undefined });
-            }}
-            tabIndex={-1}
-            aria-label="Due date"
-          />
+        {[
+          '',
+          cls?.instructor,
+          `Added ${shortDate(note.meta.created)}${edited ? ` (Edited ${formatRelativeTime(note.meta.updated).replace(/^Just/, 'just')})` : ''}`,
+        ]
+          .filter((x) => x !== undefined)
+          .join(' • ')}
+      </div>
+      <div className="hw-meta-row">
+        <button className="hw-link-btn" onClick={() => openLinkPicker(note.meta.id)}>
+          {sources.length ? plural(sources.length, 'linked note') : 'No linked notes'}
         </button>
-        <button className={cx('hw-done', hw.done && 'is-on')} onClick={() => update({ done: !hw.done })}>
-          <span className="hw-check-mini">{hw.done && <Check size={10} strokeWidth={3} />}</span>
-          {hw.done ? 'Done' : 'Mark done'}
-        </button>
-        <span className="grow" />
-        {unreadPages > 0 && (
-          <button className="hw-read" onClick={() => void readPages()} disabled={reading} title="Read the scanned pages so the assistant can see the questions">
-            {reading ? <span className="spinner" /> : <ScanText size={13} />} {reading ? 'Reading…' : `Read ${plural(unreadPages, 'page')}`}
-          </button>
-        )}
-        <button className="btn is-ai is-small" onClick={() => toggleAssistant(true)}>
-          <MessageCircleQuestion size={13} /> Help with this
+        <button ref={dueBtn} className={cx('hw-due-btn', missing && 'is-missing')} onClick={() => setDueOpen((v) => !v)} aria-haspopup="dialog">
+          {!hw.due ? 'No due date' : missing ? `Missing · was due ${shortDate(hw.due)}` : dueLine(hw.due)}
         </button>
       </div>
-      <div className="hw-bar-row is-sources">
-        <span className="hw-sources-label">
-          <Link2 size={12} /> Answers only from
-        </span>
-        {folderChips.map((c) => (
-          <span key={c.key} className="hw-source-chip is-folder">
-            {c.label}
-            <span className="hw-source-count">{c.count}</span>
-            <button onClick={c.remove} aria-label="Unlink">
-              <X size={11} />
+      {tags}
+      <div className="hw-rule" />
+
+      <section className="hw-work" aria-label="Your work">
+        <div className="hw-work-head">
+          <h2 className="hw-work-title">Your work</h2>
+          <span className={cx('hw-status', `is-${status === 'Assigned' ? 'assigned' : status === 'Done' ? 'done' : 'missing'}`)}>{status}</span>
+          <span className="grow" />
+          <div className="hw-work-actions">
+            {!hw.done && (
+              <button ref={addBtn} className="btn is-secondary hw-add-btn" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
+                <Plus size={18} /> Add or create
+              </button>
+            )}
+            <button className={cx('btn hw-done', hw.done ? 'is-secondary is-on' : 'is-primary')} onClick={() => markDone(!hw.done)}>
+              {hw.done ? 'Mark as not done' : 'Mark as done'}
             </button>
-          </span>
-        ))}
-        {noteChips.map(({ key, note: n }) => (
-          <span key={key} className="hw-source-chip">
-            <button className="hw-source-open" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
-              {n.meta.title || 'Untitled'}
+          </div>
+        </div>
+        <div className="hw-atts">
+          {folderTiles}
+          {noteTiles}
+          {pages.length > 0 && (
+            <div className="hw-att-group">
+              <Attachment
+                thumb={firstPage?.src ? <img src={String(firstPage.src)} alt="" /> : <FileText size={24} />}
+                title={/\.\w{2,4}$/.test(String(firstPage?.title ?? '')) ? String(firstPage!.title) : 'Scanned worksheet'}
+                sub={`Scan · ${plural(pages.length, 'page')}`}
+                onOpen={scrollToPages}
+              />
+              {unreadPages > 0 && (
+                <div className="hw-read-row">
+                  <button className="btn is-ghost is-small hw-read" onClick={() => void readPages()} disabled={reading}>
+                    {reading && <span className="spinner" />}
+                    {reading ? 'Reading…' : `Read ${plural(unreadPages, 'page')}`}
+                  </button>
+                  {needsVision && <span className="hw-read-hint">Needs a vision model, set one in Settings → Local AI</span>}
+                </div>
+              )}
+            </div>
+          )}
+          {!sources.length && (
+            <div className="hw-no-sources">
+              <span>No notes linked yet.</span>
+              {!hw.done &&
+                suggestions.map((s) => (
+                  <button
+                    key={s.note.meta.id}
+                    className="btn is-ghost is-small hw-suggest"
+                    onClick={() => update({ sources: [...hw.sources, s.note.meta.id] })}
+                    title={s.terms.length ? `Matches ${s.terms.join(', ')}` : undefined}
+                  >
+                    <Plus size={18} /> {s.note.meta.title || 'Untitled'}
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
+      </section>
+      <div className="hw-work-note">
+        {sources.length ? 'The assistant answers only from these notes.' : 'Link notes so the assistant can answer from them.'}
+      </div>
+
+      <section className="hw-help" aria-label="Ask about this homework">
+        <div className="hw-help-head">
+          <MessageSquareText size={20} /> Ask about this homework
+        </div>
+        {asking ? (
+          <div className="hw-help-input">
+            <input
+              autoFocus
+              value={question}
+              placeholder="Ask about problem 2…"
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) ask();
+                else if (e.key === 'Escape') setAsking(false);
+              }}
+              onBlur={() => !question.trim() && setAsking(false)}
+            />
+            <button className="icon-btn" onMouseDown={(e) => e.preventDefault()} onClick={ask} disabled={!question.trim()} aria-label="Ask">
+              <SendHorizontal size={20} />
             </button>
-            <button onClick={() => update({ sources: hw.sources.filter((x) => x !== n.meta.id) })} aria-label="Unlink">
-              <X size={11} />
-            </button>
-          </span>
-        ))}
-        {!sources.length && (
-          <span className="hw-no-sources">
-            <TriangleAlert size={12} /> No notes linked — answers would be general knowledge
-          </span>
+          </div>
+        ) : (
+          <button className="hw-help-link" onClick={() => setAsking(true)}>
+            Ask the assistant about this homework
+          </button>
         )}
-        {suggestions.map((s) => (
+      </section>
+
+      <Popover anchor={addBtn.current} open={menuOpen} onClose={() => setMenuOpen(false)} align="start" offset={4} className="menu-pop">
+        <div className="menu hw-add-menu" role="menu">
           <button
-            key={s.note.meta.id}
-            className="hw-suggest"
-            onClick={() => update({ sources: [...hw.sources, s.note.meta.id] })}
-            title={`Matches: ${s.terms.join(', ')}`}
+            className="menu-item"
+            onClick={() => {
+              setMenuOpen(false);
+              openLinkPicker(note.meta.id);
+            }}
           >
-            <Plus size={11} /> {s.note.meta.title || 'Untitled'}
+            <FileText size={20} />
+            <span className="menu-label">Note…</span>
           </button>
-        ))}
-        <button className="hw-link-btn" onClick={() => linkNotes(note.meta.id)}>
-          {sources.length ? 'Edit' : 'Choose notes…'}
-        </button>
-      </div>
+          <button
+            className="menu-item"
+            onClick={() => {
+              setMenuOpen(false);
+              openLinkPicker(note.meta.id, 'all');
+            }}
+          >
+            <Folder size={20} />
+            <span className="menu-label">Whole class…</span>
+          </button>
+          <div className="menu-sep" />
+          <button className="menu-item" onClick={() => void addScan()}>
+            <Paperclip size={20} />
+            <span className="menu-label">Scan or file</span>
+          </button>
+          <div className="menu-sep" />
+          <div className="menu-title">Create new</div>
+          <button className="menu-item" onClick={createBlank}>
+            <Plus size={20} />
+            <span className="menu-label">{cls ? `Blank note in ${cls.name}` : 'Blank note'}</span>
+          </button>
+        </div>
+      </Popover>
+      <Popover anchor={dueBtn.current} open={dueOpen} onClose={() => setDueOpen(false)} align="end" offset={4}>
+        <DuePicker
+          value={hw.due}
+          onDone={(due) => {
+            update({ due });
+            setDueOpen(false);
+          }}
+        />
+      </Popover>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import {
-  ArrowUp,
+  ArrowRight,
   BookOpenCheck,
   GraduationCap,
   Lightbulb,
@@ -20,7 +20,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import { findBlock } from '../../editor/ink/ops';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
-import { useAI, visionModel } from '../../state/ai';
+import { useAI } from '../../state/ai';
 import { useAssistant, type ChatMsg } from '../../state/assistant';
 import { useTools } from '../../state/tools';
 import { MessageView, shownMarkdown } from './Message';
@@ -37,10 +37,10 @@ import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
 const STARTERS = [
-  { icon: <Lightbulb size={14} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain },
-  { icon: <ListChecks size={14} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz },
-  { icon: <BookOpenCheck size={14} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam },
-  { icon: <Quote size={14} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets },
+  { icon: <Lightbulb size={18} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain },
+  { icon: <ListChecks size={18} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz },
+  { icon: <BookOpenCheck size={18} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam },
+  { icon: <Quote size={18} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets },
 ];
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
@@ -48,14 +48,14 @@ const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show j
 /** Homework quick actions — each one answers strictly from the linked notes. */
 const HOMEWORK_STARTERS: { icon: React.ReactNode; label: string; mode: 'explain' | 'tutor' | 'check' | 'solve'; prompt: string }[] = [
   {
-    icon: <Compass size={14} />,
+    icon: <Compass size={18} />,
     label: 'How do I approach this?',
     mode: 'explain',
     prompt: 'How should I approach this problem, using the method from my notes?',
   },
-  { icon: <Lightbulb size={14} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
-  { icon: <SearchCheck size={14} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
-  { icon: <Wand2 size={14} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
+  { icon: <Lightbulb size={18} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
+  { icon: <SearchCheck size={18} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
+  { icon: <Wand2 size={18} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
 ];
 
 /** Inserts a reply into the note as an "assistant" callout, right after the block it was about. */
@@ -99,7 +99,6 @@ export function AssistantPanel() {
   const noteId = view.kind === 'note' ? view.id : null;
   const note = useVault((s) => (noteId ? s.notes[noteId] : null));
   const ai = useAI();
-  const vision = visionModel(ai);
   const key = noteId ?? '__none__';
   const thread = useAssistant((s) => s.threads[key]);
   const draft = useAssistant((s) => s.drafts[key]) ?? { attachments: [], text: '', mode: 'chat' as const };
@@ -111,7 +110,8 @@ export function AssistantPanel() {
   const allNotes = useVault((s) => s.notes);
   const isHomework = !!note?.meta.homework;
   const linked = note && isHomework ? homeworkSources(note, allNotes) : [];
-  const cite = useCitePreview();
+  // The panel is at the window's right edge: the passage opens to the left, over the note.
+  const cite = useCitePreview({ placement: 'left' });
 
   const messages: ChatMsg[] = thread?.messages ?? [];
 
@@ -161,54 +161,42 @@ export function AssistantPanel() {
     <aside className="assistant">
       <div className="assistant-head drag">
         <div className="assistant-title no-drag">
-          <span className="assistant-spark">
-            <MessageCircleQuestion size={15} />
-          </span>
-          <div>
-            <div className="assistant-name">{isHomework ? 'Homework helper' : 'Assistant'}</div>
-            <div className="assistant-sub">
-              {note ? (
-                isHomework ? (
-                  <>
-                    Answers only from <b>{linked.length === 1 ? '1 linked note' : `${linked.length} linked notes`}</b>
-                  </>
-                ) : (
-                  <>
-                    Reading <b>{note.meta.title || 'Untitled'}</b>
-                  </>
-                )
+          <div className="assistant-name">{isHomework ? 'Homework helper' : 'Assistant'}</div>
+          <div className="assistant-sub">
+            {note ? (
+              isHomework ? (
+                <>
+                  Answers only from <b>{linked.length === 1 ? '1 linked note' : `${linked.length} linked notes`}</b>
+                </>
               ) : (
-                'Open a note to ask about it'
-              )}
-            </div>
+                <>
+                  Reading <b>{note.meta.title || 'Untitled'}</b>
+                </>
+              )
+            ) : (
+              'Open a note to ask about it'
+            )}
           </div>
         </div>
         <div className="no-drag assistant-head-actions">
           {messages.length > 0 && (
-            <button className="icon-btn" onClick={() => noteId && useAssistant.getState().clear(noteId)} title="New conversation">
-              <MessageSquarePlus size={16} />
+            <button className="icon-btn" onClick={() => noteId && useAssistant.getState().clear(noteId)} title="New conversation" aria-label="New conversation">
+              <MessageSquarePlus size={20} />
             </button>
           )}
-          <button className="icon-btn" onClick={() => useUI.getState().setAssistant(false)} title={`Close  ${MOD}J`}>
-            <X size={16} />
+          <button className="icon-btn" onClick={() => useUI.getState().setAssistant(false)} title={`Close  ${MOD}J`} aria-label="Close">
+            <X size={20} />
           </button>
         </div>
       </div>
 
-      <button className={cx('model-chip', `is-${ai.status}`)} onClick={() => useUI.getState().openSettings('ai')}>
-        <span className="ai-dot" />
-        {ai.status === 'online' ? (
-          <>
-            <span className="model-name">{ai.chatModel}</span>
-            {vision && <span className="model-tag">sees images</span>}
-            <span className="model-local">on-device</span>
-          </>
-        ) : ai.status === 'checking' ? (
-          'Connecting to your local model…'
-        ) : (
-          'No local model connected — set up'
-        )}
-      </button>
+      {/* The app bar shows the model when it's running; here only what needs doing when it isn't. */}
+      {ai.status !== 'online' && (
+        <button className={cx('model-chip', `is-${ai.status}`)} onClick={() => useUI.getState().openSettings('ai')}>
+          <span className="ai-dot" />
+          {ai.status === 'checking' ? 'Connecting to your local model…' : 'No local model connected — set up'}
+        </button>
+      )}
 
       <div
         className="assistant-list"
@@ -220,27 +208,28 @@ export function AssistantPanel() {
       >
         {!messages.length && isHomework && note && (
           <div className="assistant-empty is-homework">
-            <div className="hw-helper-card">
-              <div className="hw-helper-head">
-                <ClipboardList size={15} /> Strictly from your notes
+            <div className="assistant-empty-title">Get help with this homework</div>
+            <div className="asst-hw-card">
+              <div className="asst-hw-head">
+                <ClipboardList size={18} /> Strictly from your notes
               </div>
-              <div className="hw-helper-text">
+              <div className="asst-hw-text">
                 Answers follow your linked notes exactly — same method, same steps, every claim cited. If your notes don’t cover something, it’s put in an
                 amber box marked as <b>the AI’s own knowledge</b>.
               </div>
-              <div className="hw-helper-sources">
+              <div className="asst-hw-sources">
                 {linked.slice(0, 4).map((n) => (
-                  <button key={n.meta.id} className="hw-helper-source" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
-                    <FileText size={12} /> {n.meta.title || 'Untitled'}
+                  <button key={n.meta.id} className="asst-hw-source" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
+                    <FileText size={16} /> <span>{n.meta.title || 'Untitled'}</span>
                   </button>
                 ))}
-                {linked.length > 4 && <span className="hw-helper-more">+{linked.length - 4} more</span>}
-                <button className="hw-helper-link" onClick={() => linkNotes(note.meta.id)}>
-                  <Link2 size={12} /> {linked.length ? 'Change' : 'Link notes'}
+                {linked.length > 4 && <span className="asst-hw-more">+{linked.length - 4} more</span>}
+                <button className="btn is-ghost is-small asst-hw-link" onClick={() => linkNotes(note.meta.id)}>
+                  <Link2 size={16} /> {linked.length ? 'Change' : 'Link notes'}
                 </button>
               </div>
             </div>
-            <div className="assistant-empty-sub">Select a problem (or lasso your handwriting) first to point at it, then pick:</div>
+            <div className="assistant-empty-sub">Select a problem (or lasso your handwriting) to point at it, then pick:</div>
             <div className="starters">
               {HOMEWORK_STARTERS.map((s) => (
                 <button
@@ -260,13 +249,12 @@ export function AssistantPanel() {
         )}
         {!messages.length && !isHomework && (
           <div className="assistant-empty">
-            <div className="assistant-empty-title">Ask anything about this page</div>
+            <div className="assistant-empty-title">Ask about this note</div>
             <div className="assistant-empty-sub">
-              Your model sees the whole note — typed text, math, and handwriting. Select text, lasso ink, or use <b>✦ Ask</b> in the toolbar to point at
-              something specific.
+              It reads the whole note — typed text, math and handwriting. Select text or lasso ink to point at something specific.
             </div>
             <div className="starters">
-              {STARTERS.map((s) => (
+              {STARTERS.slice(0, note && isReviewable(note) ? 3 : 4).map((s) => (
                 <button key={s.label} className="starter" onClick={() => send(s.prompt)} disabled={!noteId}>
                   {s.icon}
                   {s.label}
@@ -274,7 +262,7 @@ export function AssistantPanel() {
               ))}
               {note && isReviewable(note) && (
                 <button className="starter" onClick={() => reviewNote(note.meta.id)} title="Practise this note until you know it — questions and answers come only from it">
-                  <Target size={14} />
+                  <Target size={18} />
                   Review this note
                 </button>
               )}
@@ -282,9 +270,10 @@ export function AssistantPanel() {
           </div>
         )}
         {messages.map((m) => (
+          <div key={m.id} className="assistant-turn" {...cite.hover(m.sources)}>
           <MessageView
-            key={m.id}
             msg={m}
+            iconActions
             citations={!!m.grounding && m.grounding !== 'transform'}
             onCite={(n, el) => cite.show(n, el, m.sources)}
             onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, shownMarkdown(m), anchorFor(messages, m), m.sources?.length) : undefined}
@@ -297,6 +286,7 @@ export function AssistantPanel() {
               <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />
             )}
           </MessageView>
+          </div>
         ))}
         {tutorActive && !streaming && lastBot && lastBot.status === 'done' && (
           <div className="followups">
@@ -367,28 +357,30 @@ export function AssistantPanel() {
         />
         <div className="composer-row">
           <div className="mode-toggle" role="radiogroup" aria-label="Mode">
-            <button className={cx(draft.mode === 'chat' && 'is-active')} onClick={() => useAssistant.getState().setDraft(key, { mode: 'chat' })}>
-              <MessageCircleQuestion size={13} /> Ask
+            <button role="radio" aria-checked={draft.mode === 'chat'} className={cx(draft.mode === 'chat' && 'is-active')} onClick={() => useAssistant.getState().setDraft(key, { mode: 'chat' })}>
+              <MessageCircleQuestion size={16} /> Ask
             </button>
             <button
+              role="radio"
+              aria-checked={draft.mode === 'tutor'}
               className={cx(draft.mode === 'tutor' && 'is-active')}
               onClick={() => useAssistant.getState().setDraft(key, { mode: 'tutor' })}
               title="Guides you step by step instead of giving the answer"
             >
-              <GraduationCap size={13} /> Tutor
+              <GraduationCap size={16} /> Tutor
             </button>
           </div>
-          <button className="icon-btn" title="Point at part of the page (✦ Ask tool)" onClick={() => useTools.getState().setTool('ask')} disabled={!noteId}>
-            <ScanSearch size={16} />
+          <button className="icon-btn" title="Point at part of the page (Ask tool)" aria-label="Point at part of the page" onClick={() => useTools.getState().setTool('ask')} disabled={!noteId}>
+            <ScanSearch size={20} />
           </button>
           <span className="grow" />
           {streaming ? (
-            <button className="send-btn is-stop" onClick={() => useAssistant.getState().stop()} aria-label="Stop">
+            <button className="send-btn is-stop" onClick={() => useAssistant.getState().stop()} aria-label="Stop" title="Stop">
               <Square size={12} fill="currentColor" />
             </button>
           ) : (
-            <button className="send-btn" onClick={() => send()} disabled={!noteId || (!draft.text.trim() && !draft.attachments.length)} aria-label="Send">
-              <ArrowUp size={16} />
+            <button className="send-btn" onClick={() => send()} disabled={!noteId || (!draft.text.trim() && !draft.attachments.length)} aria-label="Send" title="Send">
+              <ArrowRight size={20} />
             </button>
           )}
         </div>

@@ -1,25 +1,16 @@
 import { memo, useMemo } from 'react';
-import { ArrowDownUp, Clock, Folder, FolderPlus, Hash, Home, LayoutGrid, List, MoreHorizontal, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { ArrowDownUp, Check, ChevronRight, ClipboardList, FileText, Folder, FolderPlus, LayoutGrid, List, MoreVertical, Plus, RotateCcw, Star, Tag, Trash2 } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useUI, type View } from '../state/ui';
 import { useSettings } from '../state/settings';
 import type { NoteDoc } from '../lib/vault/types';
 import { docToHTML } from '../lib/doc/toHTML';
-import { docToText } from '../lib/ai/context';
-import { cx, formatRelativeTime, hashString, plural } from '../lib/util';
-import { newFolder, newNote, openClass } from '../lib/commands';
-import { classHomework, classInfo, classNotes } from '../lib/classes';
-import { ClassGlyph } from './classes/ClassIcon';
-import { noteMenu, noteTitle, FOLDER_COLORS } from './FileTree';
+import { cx, plural } from '../lib/util';
+import { newFolder, newNote } from '../lib/commands';
+import { classForFolder, classInfo, themeVars } from '../lib/classes';
+import { folderMenu, noteMenu, noteTitle } from './FileTree';
 import { openContextMenu } from './common/ContextMenu';
 import { confirmDialog } from './common/dialogs';
-
-const COVER_PALETTE = ['#2160e8', '#7346e6', '#1f9d4c', '#e35d14', '#0f8073', '#d62f7a', '#c98a04', '#1f3a8a'];
-
-export function coverColor(key: string, explicit?: string) {
-  if (explicit) return explicit;
-  return COVER_PALETTE[parseInt(hashString(key), 36) % COVER_PALETTE.length];
-}
 
 const thumbCache = new Map<string, string>();
 
@@ -47,25 +38,33 @@ export const NoteThumb = memo(function NoteThumb({ note, width = 200 }: { note: 
   );
 });
 
-function viewTitle(v: View): { title: string; icon: React.ReactNode } {
+function viewTitle(v: View): string {
   switch (v.kind) {
     case 'home':
-      return { title: 'All notes', icon: <Home size={20} /> };
+      return 'All notes';
     case 'folder':
-      return { title: v.path.split('/').pop()!, icon: <Folder size={20} /> };
+      return v.path.split('/').pop()!;
     case 'tag':
-      return { title: `#${v.tag}`, icon: <Hash size={20} /> };
+      return v.tag;
     case 'favorites':
-      return { title: 'Favorites', icon: <Star size={20} /> };
+      return 'Favorites';
     case 'recent':
-      return { title: 'Recent', icon: <Clock size={20} /> };
+      return 'Recent';
     case 'trash':
-      return { title: 'Trash', icon: <Trash2 size={20} /> };
+      return 'Trash';
     default:
-      return { title: '', icon: null };
+      return '';
   }
 }
 
+/** The class a note belongs to, for its avatar letter and theme. */
+function useClassOf(n: NoteDoc) {
+  const folderMeta = useVault((s) => s.folderMeta);
+  const p = classForFolder(n.meta.folder, folderMeta);
+  return p ? classInfo(p, folderMeta[p]) : null;
+}
+
+/** Notes and folders as Google Drive shows files: folder tiles, then note cards (or a list). */
 export function NoteGrid({ view }: { view: View }) {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
@@ -94,183 +93,174 @@ export function NoteGrid({ view }: { view: View }) {
     return l;
   }, [notes, view, sort]);
 
+  // All notes shows plain folders only: classes have their own pages.
   const subfolders = useMemo(() => {
-    if (view.kind === 'home') return folders.filter((f) => !f.includes('/'));
+    if (view.kind === 'home') return folders.filter((f) => !f.includes('/') && !classForFolder(f, folderMeta));
     if (view.kind === 'folder') return folders.filter((f) => f.startsWith(view.path + '/') && !f.slice(view.path.length + 1).includes('/'));
     return [];
-  }, [folders, view]);
+  }, [folders, folderMeta, view]);
 
   const folderCount = (path: string) =>
     Object.values(notes).filter((n) => !n.meta.trashed && (n.meta.folder === path || n.meta.folder.startsWith(path + '/'))).length;
 
-  const { title, icon } = viewTitle(view);
+  const title = viewTitle(view);
   const folderPath = view.kind === 'folder' ? view.path : '';
   const canCreate = view.kind === 'home' || view.kind === 'folder' || view.kind === 'tag';
+  const sortLabel = sort === 'updated' ? 'Last edited' : sort === 'title' ? 'Name' : 'Date created';
 
   return (
-    <div className="collection">
-      <div className="collection-head">
-        <div className="collection-title">
-          <span className="collection-icon" style={view.kind === 'folder' ? { color: coverColor(view.path, folderMeta[view.path]?.color) } : undefined}>
-            {icon}
-          </span>
-          <div>
-            {view.kind === 'folder' && view.path.includes('/') && (
-              <div className="collection-crumbs">
-                {view.path
-                  .split('/')
-                  .slice(0, -1)
-                  .map((part, i, arr) => (
-                    <button key={i} onClick={() => useUI.getState().setView({ kind: 'folder', path: [...arr.slice(0, i), part].join('/') })}>
-                      {part} /
-                    </button>
-                  ))}
-              </div>
-            )}
-            <h1>{title}</h1>
-            <div className="collection-sub">
-              {plural(list.length, 'note')}
-              {subfolders.length ? ` · ${plural(subfolders.length, 'folder')}` : ''}
-            </div>
-          </div>
-        </div>
-        <div className="collection-actions">
-          {view.kind === 'trash' && list.length > 0 && (
-            <button
-              className="btn is-ghost is-danger-text"
-              onClick={async () => {
-                if (
-                  await confirmDialog({
-                    title: 'Empty the Trash?',
-                    message: `${plural(list.length, 'note')} will be deleted permanently.`,
-                    confirm: 'Empty Trash',
-                    danger: true,
-                  })
-                )
-                  void useVault.getState().emptyTrash();
-              }}
-            >
-              <Trash2 size={15} /> Empty Trash
-            </button>
-          )}
-          {view.kind !== 'trash' && view.kind !== 'recent' && (
-            <button
-              className="btn is-ghost"
-              onClick={() => useUI.getState().set({ sort: sort === 'updated' ? 'title' : sort === 'title' ? 'created' : 'updated' })}
-              title="Sort"
-            >
-              <ArrowDownUp size={14} /> {sort === 'updated' ? 'Last edited' : sort === 'title' ? 'Name' : 'Created'}
-            </button>
-          )}
-          <div className="seg">
-            <button className={cx(gridMode === 'grid' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'grid' })} aria-label="Grid">
-              <LayoutGrid size={15} />
-            </button>
-            <button className={cx(gridMode === 'list' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'list' })} aria-label="List">
-              <List size={15} />
-            </button>
-          </div>
-          {(view.kind === 'home' || view.kind === 'folder') && (
-            <button className="btn is-ghost" onClick={() => void newFolder(folderPath)}>
-              <FolderPlus size={15} /> Folder
-            </button>
-          )}
-          {canCreate && (
-            <button
-              className="btn is-primary"
-              onClick={() => {
-                const doc = newNote(folderPath);
-                if (view.kind === 'tag') useVault.getState().updateMeta(doc.meta.id, { tags: [view.tag] });
-              }}
-            >
-              <Plus size={15} /> New note
-            </button>
-          )}
+    <div className="page notes-view">
+      <div className="page-head">
+        {view.kind === 'folder' && view.path.includes('/') ? (
+          <nav className="crumbs" aria-label="Breadcrumb">
+            {view.path
+              .split('/')
+              .slice(0, -1)
+              .map((part, i, arr) => (
+                <span key={i} className="crumb-step">
+                  <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'folder', path: [...arr.slice(0, i), part].join('/') })}>
+                    {part}
+                  </button>
+                  <ChevronRight size={20} className="crumb-sep" />
+                </span>
+              ))}
+            <h1 className="page-title">{title}</h1>
+          </nav>
+        ) : (
+          <h1 className="page-title">
+            {view.kind === 'tag' && <Tag size={20} className="page-title-icon" />}
+            {title}
+          </h1>
+        )}
+        <span className="grow" />
+        {view.kind !== 'trash' && view.kind !== 'recent' && (
+          <button
+            className="btn is-ghost is-quiet"
+            onClick={() => useUI.getState().set({ sort: sort === 'updated' ? 'title' : sort === 'title' ? 'created' : 'updated' })}
+            title="Change the order"
+          >
+            <ArrowDownUp size={18} /> {sortLabel}
+          </button>
+        )}
+        <div className="seg" role="radiogroup" aria-label="Layout">
+          <button className={cx(gridMode === 'list' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'list' })} aria-label="List" title="List layout">
+            {gridMode === 'list' && <Check size={16} />}
+            <List size={18} />
+          </button>
+          <button className={cx(gridMode === 'grid' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'grid' })} aria-label="Grid" title="Grid layout">
+            {gridMode === 'grid' && <Check size={16} />}
+            <LayoutGrid size={18} />
+          </button>
         </div>
       </div>
 
-      {subfolders.length > 0 && (
-        <div className="notebooks">
-          {subfolders.map((f) =>
-            folderMeta[f]?.kind === 'class' ? (
-              <ClassCover key={f} path={f} />
-            ) : (
+      <div className="page-scroll">
+        <div className="notes-body">
+          {view.kind === 'trash' && list.length > 0 && (
+            <div className="info-bar">
+              <span>Notes in the Trash stay here until you empty it.</span>
+              <span className="grow" />
               <button
-                key={f}
-                className="notebook"
-                onClick={() => {
-                  useUI.getState().setView({ kind: 'folder', path: f });
-                  useUI.getState().toggleFolder(f, true);
+                className="btn is-ghost"
+                onClick={async () => {
+                  if (
+                    await confirmDialog({
+                      title: 'Empty the Trash?',
+                      message: `${plural(list.length, 'note')} will be deleted permanently.`,
+                      confirm: 'Empty Trash',
+                      danger: true,
+                    })
+                  )
+                    void useVault.getState().emptyTrash();
                 }}
-                onContextMenu={(e) =>
-                  openContextMenu(e, [
-                    { label: 'New note here', icon: <Plus size={15} />, run: () => newNote(f) },
-                    {
-                      label: 'Change colour',
-                      icon: <span className="menu-dot" style={{ background: coverColor(f, folderMeta[f]?.color) }} />,
-                      run: () => {
-                        const cur = FOLDER_COLORS.indexOf(folderMeta[f]?.color ?? '');
-                        useVault.getState().setFolderMeta(f, { color: FOLDER_COLORS[(cur + 1) % FOLDER_COLORS.length] || COVER_PALETTE[0] });
-                      },
-                    },
-                  ])
-                }
               >
-                <span className="notebook-cover" style={{ ['--cover' as string]: coverColor(f, folderMeta[f]?.color) }}>
-                  <span className="notebook-spine" />
-                  <span className="notebook-label">{f.split('/').pop()}</span>
-                </span>
-                <span className="notebook-meta">{plural(folderCount(f), 'note')}</span>
+                Empty trash
               </button>
-            ),
+            </div>
+          )}
+
+          {canCreate && (
+            <div className="notes-toolbar">
+              <button
+                className="btn is-primary is-create"
+                onClick={() => {
+                  const doc = newNote(folderPath);
+                  if (view.kind === 'tag') useVault.getState().updateMeta(doc.meta.id, { tags: [view.tag] });
+                }}
+              >
+                <Plus size={22} /> New note
+              </button>
+              {(view.kind === 'home' || view.kind === 'folder') && (
+                <button className="btn is-secondary" onClick={() => void newFolder(folderPath)}>
+                  <FolderPlus size={18} /> Folder
+                </button>
+              )}
+            </div>
+          )}
+
+          {subfolders.length > 0 && (
+            <>
+              <h2 className="notes-section">Folders</h2>
+              <div className="folder-grid">
+                {subfolders.map((f) => (
+                  <div
+                    key={f}
+                    className="folder-tile notebook"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      useUI.getState().setView({ kind: 'folder', path: f });
+                      useUI.getState().toggleFolder(f, true);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && useUI.getState().setView({ kind: 'folder', path: f })}
+                    onContextMenu={(e) => openContextMenu(e, folderMenu(f))}
+                    title={`${f.split('/').pop()} · ${plural(folderCount(f), 'note')}`}
+                  >
+                    <Folder size={22} className="folder-tile-icon" style={folderMeta[f]?.color ? { color: folderMeta[f]!.color, fill: folderMeta[f]!.color } : undefined} />
+                    <span className="folder-tile-name">{f.split('/').pop()}</span>
+                    <button
+                      className="icon-btn folder-tile-more"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openContextMenu(e, folderMenu(f));
+                      }}
+                      aria-label="More"
+                    >
+                      <MoreVertical size={20} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {list.length === 0 && subfolders.length === 0 ? (
+            <EmptyState view={view} />
+          ) : list.length === 0 ? null : gridMode === 'grid' ? (
+            <>
+              {subfolders.length > 0 && <h2 className="notes-section">Notes</h2>}
+              <div className="note-grid">
+                {list.map((n) => (
+                  <NoteCard key={n.meta.id} note={n} trash={view.kind === 'trash'} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="note-list" role="table">
+              <div className="note-list-head" role="row">
+                <span className="note-list-name">Name</span>
+                <span className="note-list-where">Location</span>
+                <span className="note-list-date">{view.kind === 'trash' ? 'Trashed' : 'Last edited'}</span>
+                <span className="note-list-more" />
+              </div>
+              {list.map((n) => (
+                <NoteListRow key={n.meta.id} note={n} trash={view.kind === 'trash'} />
+              ))}
+            </div>
           )}
         </div>
-      )}
-
-      {list.length === 0 && subfolders.length === 0 ? (
-        <EmptyState view={view} />
-      ) : gridMode === 'grid' ? (
-        <div className="note-grid">
-          {list.map((n) => (
-            <NoteCard key={n.meta.id} note={n} trash={view.kind === 'trash'} />
-          ))}
-        </div>
-      ) : (
-        <div className="note-list">
-          {list.map((n) => (
-            <NoteListRow key={n.meta.id} note={n} trash={view.kind === 'trash'} />
-          ))}
-        </div>
-      )}
+      </div>
     </div>
-  );
-}
-
-/** A class on the home page: a notebook cover with its icon, code and what's due. */
-function ClassCover({ path }: { path: string }) {
-  const notes = useVault((s) => s.notes);
-  const meta = useVault((s) => s.folderMeta[path]);
-  const cls = classInfo(path, meta);
-  const count = classNotes(path, notes).length;
-  const due = classHomework(path, notes).filter((n) => !n.meta.homework!.done).length;
-  return (
-    <button className="notebook is-class" onClick={() => openClass(path)}>
-      <span className="notebook-cover" style={{ ['--cover' as string]: cls.color }}>
-        <span className="notebook-spine" />
-        <span className="notebook-label">
-          {cls.name}
-          {cls.code && <span className="notebook-code">{cls.code}</span>}
-        </span>
-        <span className="notebook-glyph">
-          <ClassGlyph icon={cls.icon} size={30} />
-        </span>
-        {due > 0 && <span className="notebook-due">{due} due</span>}
-      </span>
-      <span className="notebook-meta">
-        {plural(count, 'note')}
-        {cls.instructor ? ` · ${cls.instructor}` : ''}
-      </span>
-    </button>
   );
 }
 
@@ -281,18 +271,18 @@ function open(n: NoteDoc, trash: boolean, e?: React.MouseEvent) {
 
 function trashMenu(n: NoteDoc) {
   return [
-    { label: 'Restore', icon: <RotateCcw size={15} />, run: () => useVault.getState().restoreNote(n.meta.id) },
+    { label: 'Restore', icon: <RotateCcw size={20} />, run: () => useVault.getState().restoreNote(n.meta.id) },
     { separator: true },
     {
-      label: 'Delete permanently',
-      icon: <Trash2 size={15} />,
+      label: 'Delete forever',
+      icon: <Trash2 size={20} />,
       danger: true,
       run: async () => {
         if (
           await confirmDialog({
-            title: 'Delete permanently?',
+            title: 'Delete forever?',
             message: `“${noteTitle(n)}” can’t be recovered from Nib afterwards.`,
-            confirm: 'Delete',
+            confirm: 'Delete forever',
             danger: true,
           })
         )
@@ -302,100 +292,107 @@ function trashMenu(n: NoteDoc) {
   ];
 }
 
+const edited = (t: number) => {
+  const d = new Date(t);
+  return new Date().toDateString() === d.toDateString()
+    ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+/** A note as a Google Drive grid card: type icon, title and ⋮; a page preview; who/where and when. */
 export const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc; trash: boolean }) {
+  const cls = useClassOf(note);
+  const menu = (e: React.MouseEvent) => openContextMenu(e, trash ? trashMenu(note) : noteMenu(note));
   return (
     <div
       className="note-card"
       role="button"
       tabIndex={0}
+      style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
       onClick={(e) => open(note, trash, e)}
       onKeyDown={(e) => e.key === 'Enter' && open(note, trash)}
-      onContextMenu={(e) => openContextMenu(e, trash ? trashMenu(note) : noteMenu(note))}
+      onContextMenu={menu}
     >
+      <div className="note-card-top">
+        {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
+        <span className={cx('note-card-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
+        <button
+          className="icon-btn note-card-more"
+          onClick={(e) => {
+            e.stopPropagation();
+            menu(e);
+          }}
+          aria-label="More"
+        >
+          <MoreVertical size={20} />
+        </button>
+      </div>
       <div className="note-card-thumb">
-        <NoteThumb note={note} width={188} />
-        {note.meta.color && <span className="note-card-ribbon" style={{ background: note.meta.color }} />}
-        {!trash && (
-          <button
-            className={cx('note-card-star', note.meta.pinned && 'is-on')}
-            onClick={(e) => {
-              e.stopPropagation();
-              useVault.getState().updateMeta(note.meta.id, { pinned: !note.meta.pinned, updated: note.meta.updated });
-            }}
-            aria-label="Favorite"
-          >
-            <Star size={14} />
-          </button>
+        <NoteThumb note={note} width={196} />
+        {note.meta.pinned && !trash && <Star size={16} className="note-card-star is-on" />}
+      </div>
+      <div className="note-card-meta">
+        {cls ? (
+          <span className="class-letter is-small" title={cls.name}>
+            {cls.name.charAt(0).toUpperCase()}
+          </span>
+        ) : (
+          <Folder size={16} className="note-card-folder-icon" />
         )}
+        <span className="note-card-when">
+          {trash ? 'Trashed' : 'Edited'} {edited(note.meta.updated)}
+        </span>
         {trash && (
           <button
-            className="note-card-restore"
+            className="icon-btn is-tiny note-card-restore"
+            aria-label="Restore"
+            title="Restore"
             onClick={(e) => {
               e.stopPropagation();
               useVault.getState().restoreNote(note.meta.id);
             }}
           >
-            <RotateCcw size={13} /> Restore
+            <RotateCcw size={18} />
           </button>
         )}
-      </div>
-      <div className="note-card-info">
-        <div className={cx('note-card-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</div>
-        <div className="note-card-meta">
-          {formatRelativeTime(note.meta.updated)}
-          {note.meta.folder && <span className="note-card-folder"> · {note.meta.folder.split('/').pop()}</span>}
-        </div>
       </div>
     </div>
   );
 });
 
+/** A note as a Google Drive list row: Name | Location | Last edited | ⋮. */
 export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) {
-  const snippet = useMemo(
-    () =>
-      docToText(note.content)
-        .replace(/[#*=`>$]/g, '')
-        .replace(/\s+/g, ' ')
-        .slice(0, 140),
-    [note.content],
-  );
+  const cls = useClassOf(note);
+  const where = cls ? cls.name + (note.meta.folder !== cls.path ? ` › ${note.meta.folder.split('/').pop()}` : '') : note.meta.folder.split('/').pop() || 'Notes';
   return (
     <div
       className="note-row"
-      role="button"
+      role="row"
       tabIndex={0}
+      style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
       onClick={(e) => open(note, trash, e)}
+      onKeyDown={(e) => e.key === 'Enter' && open(note, trash)}
       onContextMenu={(e) => openContextMenu(e, trash ? trashMenu(note) : noteMenu(note))}
     >
-      <div className="note-row-mini">
-        <NoteThumb note={note} width={44} />
-      </div>
-      <div className="note-row-main">
-        <div className={cx('note-row-title', !note.meta.title && 'is-untitled')}>
-          {noteTitle(note)}
-          {note.meta.pinned && <Star size={12} className="note-row-star" />}
-        </div>
-        <div className="note-row-snippet">{snippet || 'Empty note'}</div>
-      </div>
-      <div className="note-row-tags">
-        {note.meta.tags.slice(0, 3).map((t) => (
-          <span key={t} className="tag-mini">
-            #{t}
-          </span>
-        ))}
-      </div>
-      <div className="note-row-folder">{note.meta.folder.split('/').pop()}</div>
-      <div className="note-row-date">{formatRelativeTime(note.meta.updated)}</div>
-      <button
-        className="icon-btn is-tiny"
-        onClick={(e) => {
-          e.stopPropagation();
-          openContextMenu(e, trash ? trashMenu(note) : noteMenu(note));
-        }}
-        aria-label="More"
-      >
-        <MoreHorizontal size={15} />
-      </button>
+      <span className="note-list-name">
+        {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
+        <span className={cx('note-row-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
+        {note.meta.pinned && <Star size={14} className="note-row-star" />}
+      </span>
+      <span className="note-list-where">{where}</span>
+      <span className="note-list-date">{edited(note.meta.updated)}</span>
+      <span className="note-list-more">
+        <button
+          className="icon-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            openContextMenu(e, trash ? trashMenu(note) : noteMenu(note));
+          }}
+          aria-label="More"
+        >
+          <MoreVertical size={20} />
+        </button>
+      </span>
     </div>
   );
 }
@@ -403,29 +400,13 @@ export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) 
 function EmptyState({ view }: { view: View }) {
   const text =
     view.kind === 'trash'
-      ? ['The Trash is empty', 'Notes you delete stay here until you empty it.']
+      ? 'Nothing in the Trash'
       : view.kind === 'favorites'
-        ? ['No favorites yet', 'Star a note to keep it one click away.']
+        ? 'No favorites yet. Star a note to keep it here.'
         : view.kind === 'tag'
-          ? ['No notes with this tag', 'Add tags under a note’s title.']
-          : ['Nothing here yet', 'Create a note — type, write by hand, or both.'];
-  return (
-    <div className="empty">
-      <div className="empty-art" aria-hidden>
-        <svg viewBox="0 0 120 90" width="120" height="90">
-          <rect x="22" y="10" width="64" height="76" rx="6" fill="#fff" stroke="#e4e4e2" />
-          <path d="M32 30h44M32 42h44M32 54h30" stroke="#ececea" strokeWidth="2" strokeLinecap="round" />
-          <path d="M34 66c6-6 10 4 16-2s10 3 14-1" fill="none" stroke="#2160e8" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M86 18l14-8 4 6-14 9z" fill="#1c1c1e" />
-        </svg>
-      </div>
-      <div className="empty-title">{text[0]}</div>
-      <div className="empty-sub">{text[1]}</div>
-      {(view.kind === 'home' || view.kind === 'folder') && (
-        <button className="btn is-primary" onClick={() => newNote(view.kind === 'folder' ? view.path : '')}>
-          <Plus size={15} /> New note
-        </button>
-      )}
-    </div>
-  );
+          ? 'No notes with this label'
+          : view.kind === 'recent'
+            ? 'No recent notes'
+            : 'No notes here yet';
+  return <div className="page-empty">{text}</div>;
 }

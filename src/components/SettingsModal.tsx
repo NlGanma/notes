@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Cpu, Eye, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, ShieldCheck, Type, HardDrive } from 'lucide-react';
+import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, ShieldCheck, HardDrive, X } from 'lucide-react';
 import { Modal } from './common/Modal';
 import { useUI, type SettingsSection } from '../state/ui';
 import { useAI } from '../state/ai';
@@ -13,29 +13,39 @@ import { bridge, isElectron, MOD, SHIFT, ALT } from '../lib/platform';
 import { openVaultFolder } from '../lib/commands';
 import { cx, formatRelativeTime } from '../lib/util';
 import { chatRobust, useActivity } from '../lib/ai/engine';
+import { NibMark } from './TopBar';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
-  { id: 'ai', label: 'Local AI', icon: <Cpu size={16} /> },
-  { id: 'writing', label: 'Writing & ink', icon: <PenLine size={16} /> },
-  { id: 'vault', label: 'Vault', icon: <HardDrive size={16} /> },
-  { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={16} /> },
-  { id: 'about', label: 'About', icon: <Info size={16} /> },
+  { id: 'ai', label: 'Local AI', icon: <Cpu size={20} /> },
+  { id: 'writing', label: 'Writing & ink', icon: <PenLine size={20} /> },
+  { id: 'vault', label: 'Vault', icon: <HardDrive size={20} /> },
+  { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={20} /> },
+  { id: 'about', label: 'About', icon: <Info size={20} /> },
 ];
 
 export function SettingsModal() {
   const section = useUI((s) => s.settings);
+  const close = () => useUI.getState().openSettings(null);
   return (
-    <Modal open={!!section} onClose={() => useUI.getState().openSettings(null)} width={820} bare className="settings">
+    <Modal open={!!section} onClose={close} width={960} bare className="settings">
       <div className="settings-layout">
-        <nav className="settings-nav">
-          <div className="settings-nav-title">Settings</div>
+        <nav className="settings-nav" aria-label="Settings">
+          <h1 className="settings-nav-title">Settings</h1>
           {SECTIONS.map((s) => (
-            <button key={s.id} className={cx('settings-nav-item', section === s.id && 'is-active')} onClick={() => useUI.getState().openSettings(s.id)}>
+            <button
+              key={s.id}
+              className={cx('settings-nav-item', section === s.id && 'is-active')}
+              aria-current={section === s.id ? 'page' : undefined}
+              onClick={() => useUI.getState().openSettings(s.id)}
+            >
               {s.icon}
               {s.label}
             </button>
           ))}
         </nav>
+        <button className="icon-btn settings-close" onClick={close} aria-label="Close">
+          <X size={20} />
+        </button>
         <div className="settings-body">
           {section === 'ai' && <AISection />}
           {section === 'writing' && <WritingSection />}
@@ -48,14 +58,29 @@ export function SettingsModal() {
   );
 }
 
+/** A Google Drive settings row: the setting's name on the left, its control and a line of help on the right. */
 function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="field">
-      <div className="field-text">
-        <div className="field-label">{label}</div>
+      <div className="field-label">{label}</div>
+      <div className="field-body">
+        <div className="field-control">{children}</div>
         {hint && <div className="field-hint">{hint}</div>}
       </div>
-      <div className="field-control">{children}</div>
+    </div>
+  );
+}
+
+/** M3 segmented buttons: the chosen segment is filled and shows a check. */
+function Segmented<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange(v: T): void }) {
+  return (
+    <div className="seg" role="radiogroup">
+      {options.map(([v, label]) => (
+        <button key={String(v)} role="radio" aria-checked={value === v} className={cx(value === v && 'is-active')} onClick={() => onChange(v)}>
+          {value === v && <Check size={18} />}
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -111,7 +136,7 @@ function CopyCmd({ cmd, note }: { cmd: string; note: string }) {
         }}
         aria-label="Copy"
       >
-        {ok ? <Check size={13} /> : <Copy size={13} />}
+        {ok ? <Check size={18} /> : <Copy size={18} />}
       </button>
     </div>
   );
@@ -144,43 +169,44 @@ function AISection() {
       <p className="settings-lead">
         Nib talks only to a model running on your own machine. Your notes never leave it.
         <span className="privacy">
-          <ShieldCheck size={13} /> Private by design
+          <ShieldCheck size={16} /> Private by design
         </span>
       </p>
 
-      <div className={cx('status-card', `is-${ai.status}`)}>
-        <span className="ai-dot" />
-        <div className="status-text">
-          <div className="status-title">{statusText}</div>
-          <div className="status-sub">
-            {ai.status === 'offline' ? ai.lastError : `${ai.provider === 'ollama' ? 'Ollama' : 'OpenAI-compatible'} · ${ai.baseUrl}`}
+      <Field label="Connection">
+        <div className={cx('status-card', `is-${ai.status}`)}>
+          <span className="ai-dot" />
+          <div className="status-text">
+            <div className="status-title">{statusText}</div>
+            <div className="status-sub">
+              {ai.status === 'offline' ? ai.lastError : `${ai.provider === 'ollama' ? 'Ollama' : 'OpenAI-compatible'} · ${ai.baseUrl}`}
+            </div>
           </div>
+          <button
+            className="btn is-secondary"
+            disabled={detecting}
+            onClick={async () => {
+              setDetecting(true);
+              await ai.autodetect();
+              setDetecting(false);
+            }}
+          >
+            {detecting ? <Loader2 size={18} className="spin" /> : <Radar size={18} />} Detect
+          </button>
+          <button className="icon-btn" onClick={() => void ai.refresh()} aria-label="Refresh" title="Refresh model list">
+            <RefreshCw size={18} />
+          </button>
         </div>
-        <button
-          className="btn is-secondary"
-          disabled={detecting}
-          onClick={async () => {
-            setDetecting(true);
-            await ai.autodetect();
-            setDetecting(false);
-          }}
-        >
-          {detecting ? <Loader2 size={14} className="spin" /> : <Radar size={14} />} Detect
-        </button>
-        <button className="icon-btn" onClick={() => void ai.refresh()} aria-label="Refresh" title="Refresh model list">
-          <RefreshCw size={15} />
-        </button>
-      </div>
-
+      </Field>
       <Field label="Server" hint="Ollama, or anything that speaks the OpenAI API — LM Studio, llama.cpp, Jan, vLLM.">
-        <div className="seg is-wide">
-          <button className={cx(ai.provider === 'ollama' && 'is-active')} onClick={() => ai.set({ provider: 'ollama', baseUrl: DEFAULT_URLS.ollama })}>
-            Ollama
-          </button>
-          <button className={cx(ai.provider === 'openai' && 'is-active')} onClick={() => ai.set({ provider: 'openai', baseUrl: DEFAULT_URLS.openai })}>
-            OpenAI-compatible
-          </button>
-        </div>
+        <Segmented
+          value={ai.provider}
+          options={[
+            ['ollama', 'Ollama'],
+            ['openai', 'OpenAI-compatible'],
+          ]}
+          onChange={(v) => ai.set({ provider: v, baseUrl: DEFAULT_URLS[v] })}
+        />
       </Field>
       <Field label="Address">
         <input
@@ -198,19 +224,10 @@ function AISection() {
         </Field>
       )}
 
-      <div className="settings-divider" />
-
       <Field label="Chat model" hint="Answers questions, tutors, summarises.">
         <ModelSelect value={ai.chatModel} onChange={(v) => ai.set({ chatModel: v })} models={ai.models} filter={(m) => !m.embedding} />
       </Field>
-      <Field
-        label="Vision model"
-        hint={
-          <>
-            <Eye size={12} /> Reads your handwriting and what’s on screen.
-          </>
-        }
-      >
+      <Field label="Vision model" hint="Reads your handwriting and what’s on screen.">
         <ModelSelect
           value={ai.visionModel}
           onChange={(v) => ai.set({ visionModel: v })}
@@ -252,44 +269,51 @@ function AISection() {
           max={1.2}
           step={0.1}
           value={ai.temperature}
+          style={{ '--pct': `${(ai.temperature / 1.2) * 100}%` } as React.CSSProperties}
           onChange={(e) => ai.set({ temperature: Number(e.target.value) })}
         />
       </Field>
-      <div className="toggles">
-        <Toggle
-          checked={ai.autoTranscribe}
-          onChange={(v) => ai.set({ autoTranscribe: v })}
-          label="Read handwriting in the background"
-          hint="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
-        />
-        <Toggle
-          checked={ai.outsideKnowledge === 'auto'}
-          onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
-          label="When my notes don’t cover a question, answer from the AI’s own knowledge"
-          hint="Nib says first that your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
-        />
-        <Toggle
-          checked={ai.doubleCheck}
-          onChange={(v) => ai.set({ doubleCheck: v })}
-          label="Double-check loosely matched sentences"
-          hint="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
-        />
-        <Toggle
-          checked={ai.forceVision}
-          onChange={(v) => ai.set({ forceVision: v })}
-          label="My chat model can see images"
-          hint="Turn on if detection missed it."
-        />
-      </div>
+      <Field label="Answers">
+        <div className="toggles">
+          <Toggle
+            checked={ai.outsideKnowledge === 'auto'}
+            onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
+            label="When my notes don’t cover a question, answer from the AI’s own knowledge"
+            hint="Nib says first that your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
+          />
+          <Toggle
+            checked={ai.doubleCheck}
+            onChange={(v) => ai.set({ doubleCheck: v })}
+            label="Double-check loosely matched sentences"
+            hint="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
+          />
+        </div>
+      </Field>
+      <Field label="Handwriting">
+        <div className="toggles">
+          <Toggle
+            checked={ai.autoTranscribe}
+            onChange={(v) => ai.set({ autoTranscribe: v })}
+            label="Read handwriting in the background"
+            hint="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
+          />
+          <Toggle
+            checked={ai.forceVision}
+            onChange={(v) => ai.set({ forceVision: v })}
+            label="My chat model can see images"
+            hint="Turn on if detection missed it."
+          />
+        </div>
+      </Field>
 
-      <div className="recommend">
-        <div className="recommend-title">Recommended models</div>
-        <div className="recommend-sub">Install Ollama from ollama.com, then run:</div>
-        <CopyCmd cmd="ollama pull qwen2.5vl:7b" note="Reads handwriting & math · 6 GB" />
-        <CopyCmd cmd="ollama pull gemma3:4b" note="Fast, sees images · 3 GB" />
-        <CopyCmd cmd="ollama pull nomic-embed-text" note="Semantic search · 0.3 GB" />
-        <CopyCmd cmd="ollama pull llama3.2-vision" note="Alternative vision model · 8 GB" />
-      </div>
+      <Field label="Get models" hint="Install Ollama from ollama.com, then run one of these in Terminal.">
+        <div className="recommend">
+          <CopyCmd cmd="ollama pull qwen2.5vl:7b" note="Reads handwriting & math · 6 GB" />
+          <CopyCmd cmd="ollama pull gemma3:4b" note="Fast, sees images · 3 GB" />
+          <CopyCmd cmd="ollama pull nomic-embed-text" note="Semantic search · 0.3 GB" />
+          <CopyCmd cmd="ollama pull llama3.2-vision" note="Alternative vision model · 8 GB" />
+        </div>
+      </Field>
 
       <ActivityLog />
     </div>
@@ -317,17 +341,13 @@ function ActivityLog() {
     }
   };
   return (
-    <div className="activity">
+    <Field label="Activity" hint="Every request to your model, newest first. Questions you ask jump ahead of background work.">
+      <div className="activity">
       <div className="activity-head">
-        <div>
-          <div className="recommend-title">Activity</div>
-          <div className="recommend-sub">Every request to your model, newest first. Questions you ask jump ahead of background work.</div>
-        </div>
-        <span className="grow" />
-        {testing && <span className="activity-test">{testing}</span>}
-        <button className="btn is-secondary is-small" onClick={() => void runTest()}>
+        <button className="btn is-secondary" onClick={() => void runTest()}>
           Test model
         </button>
+        {testing && <span className="activity-test">{testing}</span>}
       </div>
       {entries.length === 0 ? (
         <div className="activity-empty">Nothing yet.</div>
@@ -353,7 +373,8 @@ function ActivityLog() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </Field>
   );
 }
 
@@ -374,55 +395,60 @@ function WritingSection() {
         </div>
       </Field>
       <Field label="Line spacing" hint="Typed text and handwriting share these lines.">
-        <div className="seg">
-          {(['compact', 'comfortable', 'roomy'] as LineSpacing[]).map((v) => (
-            <button key={v} className={cx(s.lineSpacing === v && 'is-active')} onClick={() => s.set({ lineSpacing: v })}>
-              {v[0].toUpperCase() + v.slice(1)}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          value={s.lineSpacing}
+          options={(['compact', 'comfortable', 'roomy'] as LineSpacing[]).map((v) => [v, v[0].toUpperCase() + v.slice(1)])}
+          onChange={(v) => s.set({ lineSpacing: v })}
+        />
       </Field>
       <Field label="Typeface">
-        <div className="seg">
-          {(
+        <Segmented
+          value={s.font}
+          options={
             [
               ['sans', 'Sans'],
               ['serif', 'Serif'],
               ['mono', 'Mono'],
             ] as [FontChoice, string][]
-          ).map(([v, l]) => (
-            <button key={v} className={cx(`font-${v}`, s.font === v && 'is-active')} onClick={() => s.set({ font: v })}>
-              <Type size={13} /> {l}
-            </button>
-          ))}
-        </div>
+          }
+          onChange={(v) => s.set({ font: v })}
+        />
       </Field>
       <Field label="Page size" hint="Matches the exported PDF.">
-        <div className="seg">
-          {(['letter', 'a4'] as PageSize[]).map((v) => (
-            <button key={v} className={cx(s.pageSize === v && 'is-active')} onClick={() => s.set({ pageSize: v })}>
-              {v === 'letter' ? 'US Letter' : 'A4'}
-            </button>
-          ))}
+        <Segmented
+          value={s.pageSize}
+          options={
+            [
+              ['letter', 'US Letter'],
+              ['a4', 'A4'],
+            ] as [PageSize, string][]
+          }
+          onChange={(v) => s.set({ pageSize: v })}
+        />
+      </Field>
+      <Field label="Page">
+        <div className="toggles">
+          <Toggle checked={s.fitWidth} onChange={(v) => s.set({ fitWidth: v })} label="Fit the page to the window" />
+          <Toggle checked={s.spellcheck} onChange={(v) => s.set({ spellcheck: v })} label="Check spelling" />
         </div>
       </Field>
-      <div className="toggles">
-        <Toggle checked={s.fitWidth} onChange={(v) => s.set({ fitWidth: v })} label="Fit the page to the window" />
-        <Toggle checked={s.spellcheck} onChange={(v) => s.set({ spellcheck: v })} label="Check spelling" />
-        <Toggle
-          checked={t.stylusDraws}
-          onChange={(v) => t.set({ stylusDraws: v })}
-          label="Stylus always draws"
-          hint="With a drawing tablet or Sidecar Apple Pencil, the pen writes and the mouse types — no switching."
-        />
-        <Toggle
-          checked={t.holdToSnap}
-          onChange={(v) => t.set({ holdToSnap: v })}
-          label="Hold to snap shapes"
-          hint="Pause at the end of a stroke to turn it into a clean line, circle or box."
-        />
-        <Toggle checked={t.highlighter.straighten} onChange={(v) => t.setHighlighter({ straighten: v })} label="Straighten highlighter strokes" />
-      </div>
+      <Field label="Pen">
+        <div className="toggles">
+          <Toggle
+            checked={t.stylusDraws}
+            onChange={(v) => t.set({ stylusDraws: v })}
+            label="Stylus always draws"
+            hint="With a drawing tablet or Sidecar Apple Pencil, the pen writes and the mouse types — no switching."
+          />
+          <Toggle
+            checked={t.holdToSnap}
+            onChange={(v) => t.set({ holdToSnap: v })}
+            label="Hold to snap shapes"
+            hint="Pause at the end of a stroke to turn it into a clean line, circle or box."
+          />
+          <Toggle checked={t.highlighter.straighten} onChange={(v) => t.setHighlighter({ straighten: v })} label="Straighten highlighter strokes" />
+        </div>
+      </Field>
     </div>
   );
 }
@@ -440,20 +466,22 @@ function VaultSection() {
           ? 'Your notes are ordinary files in a folder on your Mac — put it in iCloud Drive or Dropbox to sync, and back it up like any other folder.'
           : 'In the browser, notes are stored in this browser’s local storage.'}
       </p>
-      <div className="vault-card">
-        <FolderOpen size={20} />
-        <div className="vault-card-text">
-          <div className="vault-path">{backend?.label}</div>
-          <div className="vault-stats">
-            {live} notes · {folders.length} folders
+      <Field label={isElectron ? 'Folder' : 'Storage'}>
+        <div className="vault-card">
+          <FolderOpen size={20} />
+          <div className="vault-card-text">
+            <div className="vault-path">{backend?.label}</div>
+            <div className="vault-stats">
+              {live} notes · {folders.length} folders
+            </div>
           </div>
         </div>
         {bridge && (
-          <button className="btn is-secondary" onClick={() => void openVaultFolder()}>
+          <button className="btn is-secondary vault-open" onClick={() => void openVaultFolder()}>
             Open another folder…
           </button>
         )}
-      </div>
+      </Field>
     </div>
   );
 }
@@ -539,17 +567,7 @@ function AboutSection() {
   return (
     <div className="settings-section about">
       <div className="about-mark">
-        <svg viewBox="0 0 32 32" width="56" height="56">
-          <rect x="1" y="1" width="30" height="30" rx="8" fill="#1c1c1e" />
-          <path
-            d="M11 22.5c2.4-5.6 4.2-9.6 5.2-12.2.4-1 1.7-1 2 .1l.3 1.2c.3 1.2 1.1 2.4 2.3 3.1"
-            fill="none"
-            stroke="#fff"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
-          <circle cx="22.5" cy="9.5" r="1.8" fill="#8cc6ff" />
-        </svg>
+        <NibMark size={64} />
       </div>
       <h2>Nib</h2>
       <p>A notebook where typing and handwriting share the page — and a study assistant that runs entirely on your own computer.</p>

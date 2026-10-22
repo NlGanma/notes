@@ -1,0 +1,1087 @@
+/*
+ * Homework detail surfaces, copied from Google Classroom (2025): the student's assignment page header and
+ * "Your work" card, the full-window Create assignment form, and the Google Drive picker it opens.
+ */
+
+/* ------------------------------------------------------------ assignment header (in the page) */
+
+.hw-bar {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text);
+}
+.hw-meta {
+  color: var(--text-2);
+}
+.hw-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+}
+.hw-link-btn,
+.hw-due-btn {
+  font-weight: 500;
+  color: var(--text);
+  border-radius: var(--radius-xs);
+}
+.hw-link-btn:hover,
+.hw-due-btn:hover {
+  text-decoration: underline;
+}
+.hw-due-btn.is-missing {
+  color: var(--danger);
+}
+/* The one colour stroke on the page: the class colour. */
+.hw-rule {
+  height: 1px;
+  margin: 16px 0 24px;
+  background: var(--class-main, var(--accent));
+}
+
+/* "Your work": Classroom's right-rail card, laid out across the page (its narrow-window form). */
+.hw-work {
+  container-type: inline-size;
+  padding: 16px;
+  border-radius: var(--radius-s);
+  background: #fff;
+  box-shadow: var(--shadow-s);
+}
+.hw-work-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-height: 40px;
+}
+.hw-work-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 400;
+  color: var(--text);
+}
+.hw-status {
+  font-weight: 500;
+}
+.hw-status.is-assigned {
+  color: var(--success);
+}
+.hw-status.is-missing {
+  color: var(--danger);
+}
+.hw-status.is-done {
+  color: var(--text-2);
+}
+.hw-work-actions {
+  display: flex;
+  gap: 8px;
+}
+.hw-work-actions .btn {
+  height: 40px;
+  padding: 0 24px;
+}
+.hw-work-actions .hw-add-btn {
+  padding: 0 24px 0 16px;
+}
+@container (max-width: 520px) {
+  .hw-work-actions {
+    width: 100%;
+  }
+  .hw-work-actions .btn {
+    flex: 1;
+  }
+}
+.hw-atts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.hw-atts:empty {
+  display: none;
+}
+.hw-att {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  background: #fff;
+  transition: background 0.15s var(--ease);
+}
+.hw-att:hover {
+  background: var(--bg-hover);
+}
+.hw-att-main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.hw-att-thumb {
+  width: 56px;
+  height: 100%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: #f8f9fa;
+  border-right: 1px solid var(--border);
+  color: var(--class-main, var(--accent));
+  overflow: hidden;
+}
+.hw-att-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.hw-att-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hw-att-title,
+.hw-att-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-att-title {
+  font-weight: 500;
+}
+.hw-att-sub {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-2);
+}
+.hw-att-x {
+  width: 40px;
+  height: 40px;
+  margin-right: 4px;
+}
+.hw-att:hover .hw-att-x {
+  color: var(--text);
+}
+.hw-att-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.hw-att-group > .hw-att {
+  align-self: stretch;
+}
+.hw-read-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.hw-read-row .spinner {
+  width: 16px;
+  height: 16px;
+}
+.hw-read-hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-2);
+}
+.hw-no-sources {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--text-2);
+}
+.hw-no-sources .btn {
+  max-width: 100%;
+}
+.hw-work-note {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-2);
+}
+
+/* The help card (where Classroom has "Private comments"). */
+.hw-help {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--radius-s);
+  background: #fff;
+  box-shadow: var(--shadow-s);
+}
+.hw-help-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  line-height: 24px;
+}
+.hw-help-head svg {
+  color: var(--text-2);
+}
+.hw-help-link {
+  margin-top: 12px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.hw-help-link:hover {
+  text-decoration: underline;
+}
+.hw-help-input {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin-top: 12px;
+  padding-left: 16px;
+  border-radius: 20px;
+  background: var(--bg-field);
+}
+.hw-help-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  user-select: text;
+}
+.hw-help-input input::placeholder {
+  color: var(--text-2);
+}
+.hw-help-input .icon-btn {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+}
+.hw-help-input .icon-btn:disabled {
+  opacity: 1;
+  color: rgba(31, 31, 31, 0.38);
+}
+
+.hw-add-menu {
+  width: 256px;
+}
+
+/* ------------------------------------------------------------ due date picker (GM3 docked) */
+
+.due-picker {
+  width: 304px;
+  padding: 4px 12px 8px;
+}
+.due-picker-head {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding-left: 12px;
+}
+.due-picker-month {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.due-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+}
+.due-picker-wd,
+.due-picker-day {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+.due-picker-wd {
+  color: var(--text);
+}
+.due-picker-day {
+  border-radius: 50%;
+  color: var(--text);
+}
+.due-picker-day:hover {
+  background: var(--bg-hover);
+}
+.due-picker-day.is-today {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.due-picker-day.is-selected {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: none;
+}
+.due-picker-actions {
+  display: flex;
+  align-items: center;
+  padding-top: 8px;
+}
+.due-picker-actions .btn {
+  height: 40px;
+}
+
+/* ------------------------------------------------------------ new homework (Create assignment form) */
+
+.modal-backdrop:has(> .hw-create) {
+  padding: 0;
+}
+.modal.hw-create {
+  width: 100% !important;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  animation: hw-rise 0.22s var(--ease);
+}
+@keyframes hw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+.hw-create-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.hw-appbar {
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 24px 0 8px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.hw-appbar-close {
+  width: 40px;
+  height: 40px;
+}
+.hw-appbar-icon {
+  width: 36px;
+  height: 36px;
+  margin-left: 4px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f0fe;
+  color: var(--accent);
+}
+.hw-appbar-title {
+  margin: 0 0 0 12px;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+.hw-appbar-status {
+  margin-right: 16px;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--text-2);
+}
+/* Split button: Create | ▾ */
+.hw-split {
+  display: flex;
+  gap: 1px;
+}
+.hw-split .hw-create-btn {
+  height: 40px;
+  padding: 0 24px;
+  border-radius: 20px 0 0 20px;
+}
+.hw-split-arrow {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 0 20px 20px 0;
+  background: var(--accent);
+  color: #fff;
+  transition: background 0.15s var(--ease);
+}
+.hw-split-arrow:hover:not(:disabled) {
+  background: #1a5fd8;
+}
+.hw-split-arrow:disabled {
+  background: rgba(31, 31, 31, 0.12);
+  color: rgba(31, 31, 31, 0.38);
+}
+/* Material's arrow_drop_down. */
+.hw-caret {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid currentColor;
+}
+.spinner.is-light {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+.btn:disabled .spinner.is-light {
+  border-color: rgba(31, 31, 31, 0.12);
+  border-top-color: rgba(31, 31, 31, 0.38);
+}
+
+.hw-create-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.hw-form {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px 48px;
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.hw-card {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: #fff;
+}
+.hw-card-title {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Instructions: a filled field with Classroom's formatting toolbar inside it. */
+.hw-instr {
+  position: relative;
+  margin-top: 16px;
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: #f8f9fa;
+  box-shadow: inset 0 -1px 0 var(--text-2);
+  transition: background 0.15s var(--ease);
+}
+.hw-instr:hover {
+  background: #f1f3f4;
+}
+.hw-instr.is-focused {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.hw-instr-input {
+  flex: 1;
+  min-height: 116px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 24px 16px 8px;
+  outline: none;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
+}
+.hw-instr-input ul,
+.hw-instr-input ol {
+  margin: 0;
+  padding-left: 24px;
+}
+.hw-instr-label {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text-2);
+  pointer-events: none;
+  transition:
+    top 0.15s var(--ease),
+    font-size 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.hw-instr.has-value .hw-instr-label,
+.hw-instr.is-focused .hw-instr-label {
+  top: 6px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.hw-instr.is-focused .hw-instr-label {
+  color: var(--accent);
+}
+.hw-instr-tools {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+/* Attach: round 50px tiles with the label under them. */
+.hw-attach-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hw-attach-tile {
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text);
+  text-align: center;
+}
+.hw-attach-circle {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #e8eaed;
+  background: #fff;
+  color: var(--text-2);
+  transition: background 0.15s var(--ease);
+}
+.hw-attach-tile:hover .hw-attach-circle {
+  background: var(--bg-hover);
+}
+.hw-attach-tile.is-notes .hw-attach-circle {
+  color: var(--accent);
+}
+.hw-attach-tile.is-blank .hw-attach-circle {
+  color: var(--success);
+}
+.hw-attach-tile:disabled {
+  color: rgba(31, 31, 31, 0.38);
+}
+.hw-attached {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+.hw-attached-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 72px;
+  padding-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.hw-attached-thumb {
+  width: 112px;
+  height: 100%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: #f8f9fa;
+  border-right: 1px solid var(--border);
+  color: var(--text-2);
+  overflow: hidden;
+}
+.hw-attached-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.hw-attached-thumb .spinner {
+  width: 16px;
+  height: 16px;
+}
+.hw-attached-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hw-attached-title,
+.hw-attached-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-attached-title {
+  font-weight: 500;
+}
+.hw-attached-sub {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-2);
+}
+.hw-attached-sub.is-error {
+  color: var(--danger);
+}
+
+/* The right panel: label, control, then the next group. */
+.hw-side {
+  width: 380px;
+  flex: none;
+  overflow-y: auto;
+  padding: 32px 24px;
+  background: #fff;
+  border-left: 1px solid var(--border);
+}
+.hw-side-group + .hw-side-group {
+  margin-top: 28px;
+}
+.hw-side-label {
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text);
+}
+.hw-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 48px;
+  padding: 0 44px 0 16px;
+  border-radius: var(--radius-xs);
+  background: #f8f9fa;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+  transition: background 0.15s var(--ease);
+}
+.hw-select:hover {
+  background: #f1f3f4;
+}
+.hw-select::after {
+  content: '';
+  position: absolute;
+  right: 19px;
+  top: 50%;
+  margin-top: -2px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--text-2);
+  pointer-events: none;
+}
+.hw-select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 44px 0 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+.hw-select:has(select:focus-visible),
+button.hw-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.hw-select-dot {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.hw-select:has(.hw-select-dot) select {
+  padding-left: 40px;
+}
+/* Unit: Classroom's taller filled select with an underline (its Topic field). */
+.hw-select.is-filled {
+  height: 56px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--bg-field);
+  box-shadow: inset 0 -1px 0 var(--text-2);
+}
+.hw-select.is-filled:hover {
+  background: #e9eef6;
+}
+.hw-select.is-filled select {
+  font-size: 16px;
+}
+.hw-select.is-disabled select {
+  color: rgba(31, 31, 31, 0.38);
+}
+.hw-select.is-disabled::after {
+  border-top-color: rgba(31, 31, 31, 0.38);
+}
+/* "Answers from": an outlined pill that sums up the choice (Classroom's "Assign to: All students"). */
+.hw-answers {
+  width: 100%;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  transition: background 0.15s var(--ease);
+}
+.hw-answers:hover {
+  background: var(--accent-tint);
+}
+.hw-answers svg {
+  flex: none;
+}
+.hw-answers span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-drop {
+  position: absolute;
+  inset: 64px 0 0;
+  display: grid;
+  place-items: center;
+  background: rgba(211, 227, 253, 0.5);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-selected);
+}
+@media (max-width: 760px) {
+  .hw-create-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .hw-form {
+    flex: none;
+    overflow: visible;
+    padding: 16px;
+  }
+  .hw-side {
+    width: auto;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Menus and the date picker open over the full-window form. */
+.popover.hw-pop {
+  z-index: 700;
+}
+
+.hw-small-dialog .gdialog-actions {
+  justify-content: flex-end;
+}
+
+/* ------------------------------------------------------------ link notes (Google Drive picker) */
+
+.modal.link-dialog {
+  max-width: calc(100vw - 96px);
+  height: min(650px, calc(100vh - 96px));
+  max-height: none;
+}
+.link-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.link-head {
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 24px;
+}
+.link-head svg:first-child {
+  flex: none;
+}
+.link-head-title {
+  flex: 0 1 auto;
+  max-width: 340px;
+  margin-right: 12px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-search {
+  flex: 0 1 476px;
+  min-width: 200px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px 0 16px;
+  border-radius: var(--radius-s);
+  background: #f1f3f4;
+  color: var(--text-2);
+  transition:
+    background 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.link-search:focus-within {
+  background: #fff;
+  box-shadow: var(--shadow-s);
+}
+.link-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
+  user-select: text;
+}
+.link-search input::placeholder {
+  color: var(--text-2);
+}
+.link-close {
+  width: 40px;
+  height: 40px;
+}
+/* Drive's tabs: 32px between labels, an underline the width of the label. */
+.gtabs.link-tabs {
+  padding-left: 8px;
+  box-shadow: inset 0 -1px 0 #e0e0e0;
+}
+.link-tabs .gtab {
+  padding: 0 16px;
+}
+.link-tabs .gtab:not(.is-active) {
+  color: var(--text-3);
+}
+.link-tabs .gtab.is-active::after {
+  left: 15px;
+  right: 15px;
+}
+.link-crumbs {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 16px;
+  color: var(--text-2);
+}
+.link-crumbs button {
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  font-size: 14px;
+  color: var(--text-2);
+}
+.link-crumbs button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.link-crumbs button:disabled {
+  color: var(--text);
+  font-weight: 500;
+}
+.link-cols,
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px 0 24px;
+}
+.link-cols {
+  height: 40px;
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-bottom: 1px solid #e0e0e0;
+}
+.link-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+}
+.link-row {
+  height: 48px;
+  font-size: 14px;
+  color: var(--text);
+  border-bottom: 1px solid #f1f3f4;
+  outline: none;
+}
+.link-row:hover {
+  background: var(--bg-hover);
+}
+.link-row.is-on {
+  background: var(--bg-selected);
+  color: var(--on-selected);
+}
+.link-row.is-on:hover {
+  background: #b3dcfa;
+}
+.link-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.link-lead {
+  width: 40px;
+  height: 100%;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.link-glyph {
+  display: grid;
+  color: var(--text-2);
+}
+/* The checkbox takes the glyph's place on hover and when selected (Drive). */
+.link-box {
+  display: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px var(--text-2);
+  color: #fff;
+}
+.link-row:hover .link-glyph,
+.link-row:focus-visible .link-glyph,
+.link-row.is-on .link-glyph {
+  display: none;
+}
+.link-row:hover .link-box,
+.link-row:focus-visible .link-box,
+.link-row.is-on .link-box {
+  display: grid;
+}
+.link-row.is-on .link-box {
+  background: var(--accent);
+  box-shadow: none;
+}
+/* Included with a linked folder: selected, but greyed. */
+.link-row.is-included .link-box {
+  background: rgba(31, 31, 31, 0.38);
+}
+.link-row.is-included .link-name {
+  color: var(--text-2);
+}
+.link-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.link-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-hit {
+  background: none;
+  color: inherit;
+  font-weight: 500;
+}
+.link-why {
+  /* The reason gives way before the title does. */
+  flex: 0 1000 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-class,
+.link-date {
+  flex: none;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-class {
+  width: 180px;
+}
+.link-date {
+  width: 120px;
+  text-align: right;
+}
+.link-open {
+  width: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.link-empty {
+  padding: 96px 24px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.link-foot {
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px;
+  border-top: 1px solid #e0e0e0;
+}
+.link-foot .btn {
+  height: 40px;
+}
+.link-foot .btn.is-primary {
+  padding: 0 24px;
+}
+.link-count {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+/* Mac app: the traffic lights sit in the form's app bar corner, as they do in the main window's. */
+html.is-electron.is-mac .hw-appbar {
+  padding-left: 80px;
+  -webkit-app-region: drag;
+}
+html.is-electron.is-mac .hw-appbar button {
+  -webkit-app-region: no-drag;
+}

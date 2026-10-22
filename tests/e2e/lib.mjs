@@ -52,6 +52,20 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
   return { browser, context, page, errors };
 }
 
+/** Opens a note filed in a class: the class in the drawer, its Classwork tab, then the note's row. */
+export async function openClassNote(page, cls, title) {
+  await page.click(`.tree-row.is-class:has-text("${cls}")`);
+  await page.click('.gtab:has-text("Classwork")');
+  await page.click(`.cw-row:has-text("${title}")`);
+}
+
+/** Opens the Create class dialog from the app bar's + menu. */
+export async function createClassDialog(page) {
+  await page.click('button[aria-label="Create"]');
+  await page.click('.menu-item:has-text("Class")');
+  await page.waitForSelector('.class-name-input input');
+}
+
 export async function shot(page, name, opts = {}) {
   const file = path.join(OUT, `${name}.png`);
   // Fades are finished first, so the picture shows the screen as it settles (not a card half faded in).

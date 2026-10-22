@@ -490,7 +490,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     <div className={cx('note-view', !active && 'is-hidden')} data-note={noteId}>
       <div className="note-scroll" ref={scrollRef}>
         <div className="toolbar-dock">
-          <InkToolbar editor={editor} />
+          <InkToolbar editor={editor} note={note} />
         </div>
         <div className="page-scaler" style={{ width: pageWidth * scale, height: pageHeight * scale + 80 }}>
           <div

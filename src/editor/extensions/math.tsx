@@ -2,10 +2,11 @@ import { InputRule, mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, MessageCircleQuestion, Copy, Check } from 'lucide-react';
+import { Copy, GraduationCap, MessageCircleQuestion, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { renderMath } from '../../lib/katex';
 import { editorBus } from '../bus';
 import { cx } from '../../lib/util';
+import { Popover } from '../../components/common/Popover';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -244,9 +245,24 @@ export const MathBlock = Node.create({
 function MathBlockView({ node, updateAttributes, selected, editor, getPos, deleteNode }: ReactNodeViewProps) {
   const latex = node.attrs.latex as string;
   const [editing, setEditing] = useState(!latex);
-  const [copied, setCopied] = useState(false);
+  const [menu, setMenu] = useState(false);
   const html = useMemo(() => renderMath(latex, true), [latex]);
   const rootRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const item = (icon: React.ReactNode, label: string, run: () => void, hint?: string, danger?: boolean) => (
+    <button
+      className={cx('menu-item', danger && 'is-danger')}
+      role="menuitem"
+      onClick={() => {
+        setMenu(false);
+        run();
+      }}
+    >
+      {icon}
+      <span className="menu-label">{label}</span>
+      {hint && <span className="menu-hint">{hint}</span>}
+    </button>
+  );
 
   useEffect(() => {
     const el = rootRef.current;
@@ -287,35 +303,35 @@ function MathBlockView({ node, updateAttributes, selected, editor, getPos, delet
         onDoubleClick={() => setEditing(true)}
         dangerouslySetInnerHTML={{ __html: latex || editing ? html : renderMath('\\text{Empty equation}', true) }}
       />
-      {!editing && latex && (
+      {!editing && (
         <div className="math-actions" data-ui contentEditable={false}>
           <button
-            className="ink-action"
-            title="Explain this"
-            onClick={() => editorBus.emit('math:ask', { editor, latex, mode: 'explain', blockId: node.attrs.id })}
+            ref={moreRef}
+            className={cx('ink-action ink-more', menu && 'is-on')}
+            title="Equation actions"
+            aria-label="Equation actions"
+            aria-haspopup="menu"
+            aria-expanded={menu}
+            onClick={() => setMenu((v) => !v)}
           >
-            <MessageCircleQuestion size={14} />
-          </button>
-          <button
-            className="ink-action is-math"
-            title="Tutor me through it"
-            onClick={() => editorBus.emit('math:ask', { editor, latex, mode: 'tutor', blockId: node.attrs.id })}
-          >
-            <GraduationCap size={14} />
-          </button>
-          <button
-            className="ink-action"
-            title="Copy LaTeX"
-            onClick={() => {
-              navigator.clipboard?.writeText(latex).catch(() => undefined);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1200);
-            }}
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
+            <MoreHorizontal size={18} />
           </button>
         </div>
       )}
+      <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
+        <div className="menu ink-menu" role="menu">
+          {latex && item(<MessageCircleQuestion size={20} />, 'Ask about this', () => editorBus.emit('math:ask', { editor, latex, mode: 'explain', blockId: node.attrs.id }))}
+          {latex && item(<GraduationCap size={20} />, 'Tutor me through it', () => editorBus.emit('math:ask', { editor, latex, mode: 'tutor', blockId: node.attrs.id }))}
+          {latex && <div className="menu-sep" />}
+          {item(<Pencil size={20} />, 'Edit equation', () => setEditing(true), 'Enter')}
+          {latex &&
+            item(<Copy size={20} />, 'Copy LaTeX', () => {
+              navigator.clipboard?.writeText(latex).catch(() => undefined);
+            })}
+          <div className="menu-sep" />
+          {item(<Trash2 size={20} />, 'Delete', () => deleteNode(), undefined, true)}
+        </div>
+      </Popover>
       {editing && <MathEditor initial={latex} onDone={finish} />}
     </NodeViewWrapper>
   );

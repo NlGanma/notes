@@ -5,6 +5,7 @@ import { flushReview } from '../state/review';
 import { editors } from '../editor/registry';
 import { bridge, isElectron } from './platform';
 import { toast } from '../components/common/toast';
+import { promptDialog } from '../components/common/dialogs';
 import { classForFolder, homeworkFolderFor } from './classes';
 import { isReviewable } from './review/tree';
 import type { Scope } from './ai/rag';
@@ -92,10 +93,10 @@ export function linkNotes(noteId: string) {
 }
 
 export async function newFolder(parent = currentFolder()) {
-  const path = await useVault.getState().createFolder(`${parent ? parent + '/' : ''}New folder`);
-  const ui = useUI.getState();
-  if (parent) ui.toggleFolder(parent, true);
-  ui.set({ renaming: `folder:${path}` });
+  const name = await promptDialog({ title: 'New folder', label: 'Folder name', value: 'Untitled folder', confirm: 'Create' });
+  if (!name) return null;
+  const path = await useVault.getState().createFolder(`${parent ? parent + '/' : ''}${name}`);
+  if (parent) useUI.getState().toggleFolder(parent, true);
   return path;
 }
 

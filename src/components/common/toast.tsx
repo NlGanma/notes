@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createPortal } from 'react-dom';
-import { CircleCheck, Info, TriangleAlert, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { cx, uid } from '../../lib/util';
 
 export interface Toast {
@@ -40,10 +40,7 @@ export function Toasts() {
   return createPortal(
     <div className="toasts">
       {toasts.map((t) => (
-        <div key={t.id} className={cx('toast', `is-${t.kind}`)}>
-          <span className="toast-icon">
-            {t.kind === 'success' ? <CircleCheck size={16} /> : t.kind === 'error' ? <TriangleAlert size={16} /> : <Info size={16} />}
-          </span>
+        <div key={t.id} className={cx('toast', `is-${t.kind}`)} role={t.kind === 'error' ? 'alert' : 'status'}>
           <div className="toast-body">
             <div className="toast-title">{t.title}</div>
             {t.detail && <div className="toast-detail">{t.detail}</div>}
@@ -60,7 +57,7 @@ export function Toasts() {
             </button>
           )}
           <button className="toast-x" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-            <X size={13} />
+            <X size={20} />
           </button>
         </div>
       ))}

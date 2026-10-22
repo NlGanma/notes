@@ -89,6 +89,33 @@ export function suggestSources(hw: NoteDoc, notes: Record<string, NoteDoc>, k = 
     });
 }
 
+/** Google's wording for a due date: 'Today', 'Tomorrow', the weekday within a week, else 'Oct 28'. */
+export function dueDay(due: number, now = Date.now(), weekday: 'long' | 'short' = 'long'): string {
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  const days = Math.floor((due - startToday.getTime()) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days > 1 && days < 7) return new Date(due).toLocaleDateString(undefined, { weekday });
+  return new Date(due).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** The due time, unless it's the default end of day (Google hides 11:59 PM). */
+export function dueTime(due: number): string {
+  const d = new Date(due);
+  if (d.getHours() === 23 && d.getMinutes() >= 59) return '';
+  if (d.getHours() === 0 && d.getMinutes() === 0) return '';
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Past its due date and not done: Classroom's "Missing". */
+export function isMissing(hw: { done?: boolean; due?: number } | undefined, now = Date.now()): boolean {
+  if (!hw || hw.done || !hw.due) return false;
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  return hw.due < startToday.getTime();
+}
+
 export function dueLabel(due?: number, now = Date.now()): { text: string; tone: 'overdue' | 'soon' | 'later' } | null {
   if (!due) return null;
   const day = 86_400_000;

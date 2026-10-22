@@ -109,7 +109,7 @@ export function buildSeedNotes(): NoteDoc[] {
         [false, 'Type a sentence, write a symbol right after it, then keep typing ', fixInline(), ' — it joins the sentence'],
         [false, 'Press ⌘D to sketch a symbol inline, exactly at the cursor'],
         [false, 'Draw a circle or a box and ', i('hold'), ' at the end — it snaps into a clean shape'],
-        [false, 'Pick ', b('✦ Ask'), ' in the toolbar and drag over anything on the page to ask about it'],
+        [false, 'Pick ', b('Ask'), ' in the toolbar and drag over anything on the page to ask about it'],
         [false, 'Open ', b('Ask your notes'), ' (⇧⌘L) and ask a question across every notebook'],
         [
           false,
@@ -125,7 +125,7 @@ export function buildSeedNotes(): NoteDoc[] {
         ['Type ', b('/'), ' for any block: headings, checklists, equations, callouts, handwriting areas.'],
         ['Markdown works as you type: ', b('#'), ' heading, ', b('-'), ' list, ', b('[]'), ' checklist, ', b('$x^2$'), ' math, ', b('$$'), ' equation.'],
         ['Everything snaps to the same baseline grid, so typed text and handwriting always line up.'],
-        ['The ', b('✦ Polish'), ' button suggests cleanups: tidy spacing, harmonise ink colours, typeset handwritten math.'],
+        ['The ', b('Polish'), ' button suggests cleanups: tidy spacing, harmonise ink colours, typeset handwritten math.'],
       ),
       h(2, 'Your AI stays on your Mac'),
       p(

@@ -8,6 +8,7 @@ import {
   CornerDownLeft,
   Globe,
   Link2,
+  Pin,
   PlayCircle,
   RefreshCw,
   Search,
@@ -113,14 +114,6 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
   );
 }
 
-function metricsLabel(msg: ChatMsg): string | null {
-  const m = msg.metrics;
-  if (!m) return null;
-  const parts = [`${(m.totalMs / 1000).toFixed(m.totalMs < 10_000 ? 1 : 0)}s`];
-  if (m.tokensPerSec) parts.push(`${Math.round(m.tokensPerSec)} tok/s`);
-  return parts.join(' · ');
-}
-
 export const MessageView = memo(function MessageView({
   msg,
   onCite,
@@ -129,6 +122,9 @@ export const MessageView = memo(function MessageView({
   onContinue,
   onForce,
   onLink,
+  onSave,
+  saved,
+  iconActions,
   citations,
   children,
 }: {
@@ -141,6 +137,11 @@ export const MessageView = memo(function MessageView({
   onForce?(): void;
   /** Homework with no notes linked: link some. */
   onLink?(): void;
+  /** "Save to note" (NotebookLM's pill at the start of the action row). */
+  onSave?(): void;
+  saved?: boolean;
+  /** Copy and Retry as icon buttons (with tooltips) instead of labelled ones. */
+  iconActions?: boolean;
   citations?: boolean;
   children?: React.ReactNode;
 }) {
@@ -296,38 +297,38 @@ export const MessageView = memo(function MessageView({
       {children}
       {!streaming && md && (
         <div className="msg-actions">
+          {onSave && (
+            <button className="msg-save" onClick={onSave} disabled={saved}>
+              {saved ? <Check size={18} /> : <Pin size={18} />} {saved ? 'Saved to note' : 'Save to note'}
+            </button>
+          )}
+          {/* With icon actions, inserting is the one labelled action (like NotebookLM's "Save to note"). */}
+          {onInsert && iconActions && (
+            <button className="msg-act msg-save" onClick={onInsert}>
+              <CornerDownLeft size={18} /> Insert into note
+            </button>
+          )}
           <button
-            className="msg-act"
+            className={cx('msg-act', iconActions && 'is-icon')}
+            title={iconActions ? (copied ? 'Copied' : 'Copy') : undefined}
+            aria-label={iconActions ? 'Copy' : undefined}
             onClick={() => {
               navigator.clipboard?.writeText(copyText(msg)).catch(() => undefined);
               setCopied(true);
               setTimeout(() => setCopied(false), 1400);
             }}
           >
-            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
+            {iconActions ? copied ? <Check size={20} /> : <Copy size={20} /> : <>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</>}
           </button>
-          {onInsert && (
+          {onInsert && !iconActions && (
             <button className="msg-act" onClick={onInsert}>
               <CornerDownLeft size={13} /> Insert into note
             </button>
           )}
           {onRegenerate && (
-            <button className="msg-act" onClick={onRegenerate}>
-              <RefreshCw size={13} /> Retry
+            <button className={cx('msg-act', iconActions && 'is-icon')} onClick={onRegenerate} title={iconActions ? 'Retry' : undefined} aria-label={iconActions ? 'Retry' : undefined}>
+              {iconActions ? <RefreshCw size={20} /> : <><RefreshCw size={13} /> Retry</>}
             </button>
-          )}
-          {msg.model && (
-            <span
-              className="msg-model"
-              title={
-                msg.metrics
-                  ? `First token ${msg.metrics.firstTokenMs ? Math.round(msg.metrics.firstTokenMs) + ' ms' : '—'} · ${msg.metrics.tokens} tokens`
-                  : undefined
-              }
-            >
-              {msg.model}
-              {metricsLabel(msg) && <span className="msg-metrics"> · {metricsLabel(msg)}</span>}
-            </span>
           )}
         </div>
       )}

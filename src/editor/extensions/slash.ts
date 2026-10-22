@@ -6,13 +6,17 @@ import { useTools } from '../../state/tools';
 import { NOTE_STARTERS } from '../../lib/ai/prompts';
 import { editorBus } from '../bus';
 
+export type SlashGroup = 'Basic blocks' | 'Handwriting & math' | 'Media' | 'Assistant';
+export const SLASH_GROUPS: SlashGroup[] = ['Basic blocks', 'Handwriting & math', 'Media', 'Assistant'];
+
 export interface SlashItem {
   id: string;
   title: string;
+  /** One line for the preview card. */
   hint: string;
   icon: string; // lucide icon name, resolved by the menu component
   keywords: string;
-  group: 'Basic' | 'Lists' | 'Ink & math' | 'Blocks' | 'AI';
+  group: SlashGroup;
   shortcut?: string;
   run: (editor: Editor, range: Range) => void;
 }
@@ -21,79 +25,119 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     id: 'text',
     title: 'Text',
-    hint: 'Plain paragraph',
+    hint: 'Just start writing with plain text.',
     icon: 'Pilcrow',
     keywords: 'paragraph body plain',
-    group: 'Basic',
+    group: 'Basic blocks',
     run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run(),
   },
   {
     id: 'h1',
     title: 'Heading 1',
-    hint: 'Big section title',
+    hint: 'Big section heading.',
     icon: 'Heading1',
     keywords: 'title h1 #',
-    group: 'Basic',
+    group: 'Basic blocks',
     shortcut: '#',
     run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 1 }).run(),
   },
   {
     id: 'h2',
     title: 'Heading 2',
-    hint: 'Section',
+    hint: 'Medium section heading.',
     icon: 'Heading2',
     keywords: 'subtitle h2 ##',
-    group: 'Basic',
+    group: 'Basic blocks',
     shortcut: '##',
     run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 2 }).run(),
   },
   {
     id: 'h3',
     title: 'Heading 3',
-    hint: 'Sub-section',
+    hint: 'Small section heading.',
     icon: 'Heading3',
     keywords: 'h3 ###',
-    group: 'Basic',
+    group: 'Basic blocks',
     shortcut: '###',
     run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 3 }).run(),
   },
   {
     id: 'bullets',
     title: 'Bulleted list',
-    hint: 'Simple list',
+    hint: 'Create a simple bulleted list.',
     icon: 'List',
     keywords: 'ul unordered bullet -',
-    group: 'Lists',
+    group: 'Basic blocks',
     shortcut: '-',
     run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run(),
   },
   {
     id: 'numbers',
     title: 'Numbered list',
-    hint: 'Ordered steps',
+    hint: 'Create a list with numbering.',
     icon: 'ListOrdered',
     keywords: 'ol ordered numbered 1.',
-    group: 'Lists',
+    group: 'Basic blocks',
     shortcut: '1.',
     run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run(),
   },
   {
     id: 'todo',
     title: 'Checklist',
-    hint: 'Track tasks',
+    hint: 'Track tasks with a checklist.',
     icon: 'ListChecks',
-    keywords: 'todo task check []',
-    group: 'Lists',
+    keywords: 'todo to-do task check []',
+    group: 'Basic blocks',
     shortcut: '[]',
     run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run(),
   },
   {
+    id: 'quote',
+    title: 'Quote',
+    hint: 'Capture a quote or a definition.',
+    icon: 'Quote',
+    keywords: 'blockquote cite definition >',
+    group: 'Basic blocks',
+    shortcut: '>',
+    run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run(),
+  },
+  {
+    // Tip and Important are colours of one callout now: click its icon to change it (Notion).
+    id: 'callout',
+    title: 'Callout',
+    hint: 'Make a key idea stand out. Click its icon to change the colour.',
+    icon: 'Info',
+    keywords: 'note box info callout tip important warning exam',
+    group: 'Basic blocks',
+    run: (e, r) => e.chain().focus().deleteRange(r).setCallout('note').run(),
+  },
+  {
+    id: 'divider',
+    title: 'Divider',
+    hint: 'Visually divide sections.',
+    icon: 'Minus',
+    keywords: 'hr rule line separator ---',
+    group: 'Basic blocks',
+    shortcut: '---',
+    run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run(),
+  },
+  {
+    id: 'code',
+    title: 'Code',
+    hint: 'Capture a code snippet.',
+    icon: 'Code',
+    keywords: 'code snippet program ```',
+    group: 'Basic blocks',
+    shortcut: '```',
+    run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run(),
+  },
+  {
     id: 'ink',
     title: 'Handwriting area',
-    hint: 'Space to write or sketch by hand',
+    hint: 'Space to write or sketch by hand.',
     icon: 'PenLine',
     keywords: 'ink draw sketch scribble handwriting pen canvas',
-    group: 'Ink & math',
+    group: 'Handwriting & math',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).insertInkBlock(5).run();
       e.commands.blur();
@@ -103,10 +147,10 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     id: 'sketch',
     title: 'Inline sketch',
-    hint: 'Draw a symbol inside this line',
+    hint: 'Draw a symbol inside this line.',
     icon: 'Signature',
     keywords: 'inline ink symbol glyph draw',
-    group: 'Ink & math',
+    group: 'Handwriting & math',
     shortcut: '⌘D',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).run();
@@ -116,87 +160,30 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     id: 'math',
     title: 'Equation',
-    hint: 'Display math (LaTeX)',
+    hint: 'Write a LaTeX equation on its own line.',
     icon: 'Sigma',
     keywords: 'math latex equation formula katex $$',
-    group: 'Ink & math',
+    group: 'Handwriting & math',
     shortcut: '$$',
     run: (e, r) => e.chain().focus().deleteRange(r).insertMathBlock('').run(),
   },
   {
     id: 'imath',
-    title: 'Inline math',
-    hint: 'Math inside a sentence',
+    title: 'Inline equation',
+    hint: 'Math inside a sentence.',
     icon: 'Radical',
     keywords: 'math latex inline $',
-    group: 'Ink & math',
+    group: 'Handwriting & math',
     shortcut: '$x$',
     run: (e, r) => e.chain().focus().deleteRange(r).insertMathInline('').run(),
   },
   {
-    id: 'callout',
-    title: 'Callout',
-    hint: 'Highlight a key idea',
-    icon: 'Info',
-    keywords: 'note box info callout',
-    group: 'Blocks',
-    run: (e, r) => e.chain().focus().deleteRange(r).setCallout('note').run(),
-  },
-  {
-    id: 'tip',
-    title: 'Tip',
-    hint: 'Green callout',
-    icon: 'Lightbulb',
-    keywords: 'tip hint callout',
-    group: 'Blocks',
-    run: (e, r) => e.chain().focus().deleteRange(r).setCallout('tip').run(),
-  },
-  {
-    id: 'important',
-    title: 'Important',
-    hint: 'Will be on the exam',
-    icon: 'TriangleAlert',
-    keywords: 'warning important exam callout',
-    group: 'Blocks',
-    run: (e, r) => e.chain().focus().deleteRange(r).setCallout('important').run(),
-  },
-  {
-    id: 'quote',
-    title: 'Quote',
-    hint: 'Quotation or definition',
-    icon: 'Quote',
-    keywords: 'blockquote cite >',
-    group: 'Blocks',
-    shortcut: '>',
-    run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run(),
-  },
-  {
-    id: 'code',
-    title: 'Code',
-    hint: 'Code snippet',
-    icon: 'Code',
-    keywords: 'code snippet program ```',
-    group: 'Blocks',
-    shortcut: '```',
-    run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run(),
-  },
-  {
-    id: 'divider',
-    title: 'Divider',
-    hint: 'Separate sections',
-    icon: 'Minus',
-    keywords: 'hr rule line separator ---',
-    group: 'Blocks',
-    shortcut: '---',
-    run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run(),
-  },
-  {
     id: 'image',
     title: 'Image',
-    hint: 'Insert a picture or screenshot',
+    hint: 'Insert a picture or a screenshot.',
     icon: 'Image',
     keywords: 'picture photo screenshot png jpg',
-    group: 'Blocks',
+    group: 'Media',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).run();
       window.dispatchEvent(new CustomEvent('nib:pick-image'));
@@ -205,10 +192,10 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     id: 'ask',
     title: 'Ask about this note',
-    hint: 'About this note, with full context',
+    hint: 'Ask the assistant, with this note as context.',
     icon: 'MessageCircleQuestion',
     keywords: 'ai assistant ask chat question explain llm',
-    group: 'AI',
+    group: 'Assistant',
     shortcut: '⌘J',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).run();
@@ -218,10 +205,10 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     id: 'summarize',
     title: 'Summarize note',
-    hint: 'Insert a summary here',
+    hint: 'Insert a summary of this note here.',
     icon: 'AlignLeft',
     keywords: 'ai summary tldr',
-    group: 'AI',
+    group: 'Assistant',
     run: (e, r) => {
       e.chain().focus().deleteRange(r).run();
       window.dispatchEvent(new CustomEvent('nib:assistant', { detail: { prompt: NOTE_STARTERS.summary, send: true } }));
@@ -247,6 +234,9 @@ export function filterSlashItems(query: string): SlashItem[] {
 interface SlashState {
   open: boolean;
   items: SlashItem[];
+  /** What was typed after "/", and its length the last time something matched. */
+  query: string;
+  matched: number;
   index: number;
   rect: DOMRect | null;
   pick: ((item: SlashItem) => void) | null;
@@ -256,6 +246,8 @@ interface SlashState {
 export const useSlash = create<SlashState>((set) => ({
   open: false,
   items: [],
+  query: '',
+  matched: 0,
   index: 0,
   rect: null,
   pick: null,
@@ -288,6 +280,8 @@ export const SlashCommand = Extension.create({
             useSlash.getState().set({
               open: true,
               items: props.items,
+              query: props.query,
+              matched: 0,
               index: 0,
               rect: props.clientRect?.() ?? null,
               pick: (item) => props.command(item),
@@ -296,6 +290,8 @@ export const SlashCommand = Extension.create({
           onUpdate: (props) => {
             useSlash.getState().set({
               items: props.items,
+              query: props.query,
+              matched: props.items.length ? props.query.length : useSlash.getState().matched,
               index: 0,
               rect: props.clientRect?.() ?? null,
               pick: (item) => props.command(item),
@@ -304,6 +300,12 @@ export const SlashCommand = Extension.create({
           onKeyDown: ({ event }) => {
             const s = useSlash.getState();
             if (!s.open) return false;
+            if (event.key === 'Escape') {
+              s.set({ open: false });
+              return true;
+            }
+            // Nothing matches: the keys belong to the text again.
+            if (!s.items.length) return false;
             if (event.key === 'ArrowDown') {
               s.set({ index: (s.index + 1) % Math.max(1, s.items.length) });
               return true;
@@ -319,10 +321,6 @@ export const SlashCommand = Extension.create({
                 return true;
               }
               return false;
-            }
-            if (event.key === 'Escape') {
-              s.set({ open: false });
-              return true;
             }
             return false;
           },

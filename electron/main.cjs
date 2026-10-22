@@ -1,7 +1,7 @@
 // Nib — Electron main process.
 //
 // Responsibilities:
-//  * a macOS-native window (inset traffic lights, sidebar vibrancy, native menus)
+//  * a macOS-native window (inset traffic lights, native menus)
 //  * vault file access (plain .nib JSON files in ordinary folders, like Obsidian)
 //  * a streaming HTTP proxy so the renderer can talk to a local LLM server
 //    (Ollama, LM Studio, llama.cpp, …) without any CORS configuration
@@ -66,12 +66,11 @@ function createWindow() {
     ...(isMac
       ? {
           titleBarStyle: 'hiddenInset',
-          trafficLightPosition: { x: 18, y: 18 },
-          vibrancy: 'sidebar',
-          visualEffectState: 'followWindow',
-          backgroundColor: '#00000000',
+          // Centred in the 64px app bar.
+          trafficLightPosition: { x: 20, y: 26 },
+          backgroundColor: '#f8fafd',
         }
-      : { backgroundColor: '#ffffff', autoHideMenuBar: false }),
+      : { backgroundColor: '#f8fafd', autoHideMenuBar: false }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

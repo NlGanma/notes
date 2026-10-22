@@ -75,6 +75,8 @@ export interface VaultBackend {
   /** Best-effort synchronous write used while the window closes. */
   writeKVSync?(key: string, value: string): void;
   reveal?(id: string): void;
+  /** Shows a folder in Finder. */
+  revealFolder?(path: string): void;
 }
 
 export const EMPTY_DOC: JSONContent = { type: 'doc', content: [{ type: 'paragraph' }] };

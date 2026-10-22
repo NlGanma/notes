@@ -1,12 +1,13 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
-import { useEffect, useRef, useState } from 'react';
-import { GraduationCap, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Eye, EyeOff, GraduationCap, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
 import { useTools } from '../../state/tools';
 import type { InkTranscript, Stroke } from '../../lib/ink/types';
 import { deleteBlock, fittedHeight, inkOf, insertParagraphInInk, setInkBlockHeight, trimInkBlock } from '../ink/ops';
 import { editorBus } from '../bus';
 import { cx } from '../../lib/util';
+import { Popover } from '../../components/common/Popover';
 import { renderMath } from '../../lib/katex';
 
 declare module '@tiptap/core' {
@@ -94,16 +95,23 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
   const [showTranscript, setShowTranscript] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = (e: PointerEvent) => {
-      if (!rootRef.current?.querySelector('.ink-menu')?.contains(e.target as globalThis.Node)) setMenu(false);
-    };
-    window.addEventListener('pointerdown', close, true);
-    return () => window.removeEventListener('pointerdown', close, true);
-  }, [menu]);
+  const moreRef = useRef<HTMLButtonElement>(null);
 
   const line = () => lineHeightOf(editor.view.dom);
+  const item = (icon: React.ReactNode, label: string, run: () => void, hint?: string, danger?: boolean) => (
+    <button
+      className={cx('menu-item', danger && 'is-danger')}
+      role="menuitem"
+      onClick={() => {
+        setMenu(false);
+        run();
+      }}
+    >
+      {icon}
+      <span className="menu-label">{label}</span>
+      {hint && <span className="menu-hint">{hint}</span>}
+    </button>
+  );
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-ui]')) return;
@@ -159,79 +167,35 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
     >
       {!ink.length && <div className="ink-block-hint">Handwriting area — pick a pen and write, or click to type</div>}
 
+      {/* One hover-only handle in the left gutter (Notion's block handle) instead of a column of icons. */}
       <div className="ink-actions" data-ui contentEditable={false}>
-        {transcript && !transcript.stale && (
-          <button className={cx('ink-action', showTranscript && 'is-on')} title="Show what Nib read" onClick={() => setShowTranscript((v) => !v)}>
-            <ScanText size={14} />
-          </button>
-        )}
-        <button className="ink-action" title="Ask about this handwriting" onClick={() => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'explain' })}>
-          <MessageCircleQuestion size={14} />
+        <button
+          ref={moreRef}
+          className={cx('ink-action ink-more', menu && 'is-on')}
+          title="Handwriting actions"
+          aria-label="Handwriting actions"
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          onClick={() => setMenu((v) => !v)}
+        >
+          <MoreHorizontal size={18} />
         </button>
-        {(isMath || ink.length > 0) && (
-          <button
-            className={cx('ink-action', isMath && 'is-math')}
-            title="Math tutor — guide me through this"
-            onClick={() => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'tutor' })}
-          >
-            <GraduationCap size={14} />
-          </button>
-        )}
-        <button className={cx('ink-action', menu && 'is-on')} title="More" onClick={() => setMenu((v) => !v)}>
-          <MoreHorizontal size={14} />
-        </button>
-        {menu && (
-          <div className="menu ink-menu" role="menu">
-            <button
-              className="menu-item"
-              onClick={() => {
-                setMenu(false);
-                editorBus.emit('ink:transcribe', { editor, blockId: id });
-              }}
-            >
-              <ScanText size={15} /> Read handwriting
-              <span className="menu-hint">makes it searchable</span>
-            </button>
-            <button
-              className="menu-item"
-              onClick={() => {
-                setMenu(false);
-                editorBus.emit('ink:convert', { editor, blockId: id, to: 'text' });
-              }}
-            >
-              <Type size={15} /> Convert to typed text
-            </button>
-            <button
-              className="menu-item"
-              onClick={() => {
-                setMenu(false);
-                editorBus.emit('ink:convert', { editor, blockId: id, to: 'math' });
-              }}
-            >
-              <Sigma size={15} /> Convert to typeset math
-            </button>
-            <div className="menu-sep" />
-            <button
-              className="menu-item"
-              onClick={() => {
-                setMenu(false);
-                trimInkBlock(editor, id, line());
-              }}
-            >
-              <FoldVertical size={15} /> Remove empty space
-            </button>
-            <button
-              className="menu-item is-danger"
-              onClick={() => {
-                setMenu(false);
-                deleteBlock(editor, id);
-              }}
-            >
-              <Trash2 size={15} /> Delete handwriting area
-            </button>
-          </div>
-        )}
       </div>
+      <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
+        <div className="menu ink-menu" role="menu">
+          {item(<MessageCircleQuestion size={20} />, 'Ask about this', () => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'explain' }))}
+          {(isMath || ink.length > 0) &&
+            item(<GraduationCap size={20} />, 'Tutor me through it', () => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'tutor' }))}
+          <div className="menu-sep" />
+          {transcript && !transcript.stale && item(showTranscript ? <EyeOff size={20} /> : <Eye size={20} />, showTranscript ? 'Hide what Nib read' : 'Show what Nib read', () => setShowTranscript((v) => !v))}
+          {item(<ScanText size={20} />, 'Read handwriting', () => editorBus.emit('ink:transcribe', { editor, blockId: id }), 'Makes it searchable')}
+          {item(<Type size={20} />, 'Convert to typed text', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'text' }))}
+          {item(<Sigma size={20} />, 'Convert to typeset math', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'math' }))}
+          <div className="menu-sep" />
+          {item(<FoldVertical size={20} />, 'Remove empty space', () => trimInkBlock(editor, id, line()))}
+          {item(<Trash2 size={20} />, 'Delete', () => deleteBlock(editor, id), undefined, true)}
+        </div>
+      </Popover>
 
       {showTranscript && transcript && (
         <div className="ink-transcript" data-ui contentEditable={false}>

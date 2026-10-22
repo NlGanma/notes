@@ -1,29 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Editor } from '@tiptap/core';
 import { posToDOMRect } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { NodeSelection } from '@tiptap/pm/state';
 import {
+  Baseline,
   Bold,
+  BookOpenText,
+  Check,
   ChevronDown,
   Code,
-  Highlighter,
+  Heading1,
+  Heading2,
+  Heading3,
   Italic,
+  Languages,
   Lightbulb,
   Link2,
+  List,
+  ListChecks,
+  ListOrdered,
   MessageCircleQuestion,
+  PenLine,
+  Pilcrow,
+  Quote,
   Radical,
+  SquareCode,
   Strikethrough,
   Underline,
-  PenLine,
-  Languages,
-  BookOpenText,
-  Baseline,
 } from 'lucide-react';
-import { TEXT_COLORS, TEXT_HIGHLIGHTS } from '../../lib/ink/brushes';
 import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
+import { BG_COLORS, BLOCK_LABEL, TEXT_COLORS, currentBlockKind, turnInto, type BlockKind } from './palette';
 
 export interface AskTextRequest {
   text: string;
@@ -42,11 +51,29 @@ const AI_ACTIONS: { id: AskTextRequest['action']; label: string; icon: typeof Me
   { id: 'translate', label: 'Translate', icon: Languages },
 ];
 
-/** Floating formatting bar for a text selection, with "Ask AI" built in. */
+const BLOCK_ICONS: Record<BlockKind, ReactNode> = {
+  paragraph: <Pilcrow size={20} />,
+  h1: <Heading1 size={20} />,
+  h2: <Heading2 size={20} />,
+  h3: <Heading3 size={20} />,
+  bulletList: <List size={20} />,
+  orderedList: <ListOrdered size={20} />,
+  taskList: <ListChecks size={20} />,
+  blockquote: <Quote size={20} />,
+  codeBlock: <SquareCode size={20} />,
+};
+
+type Panel = null | 'ai' | 'turn' | 'color' | 'link';
+
+/**
+ * Floating bar for a text selection, in Notion's order: Ask | Text ▾ | Link | B I U S code math | A ▾.
+ * Ask looks like every other button.
+ */
 export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTextRequest): void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const [panel, setPanel] = useState<null | 'ai' | 'color' | 'link'>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [panelLeft, setPanelLeft] = useState(0);
   const [link, setLink] = useState('');
   const [mouseDown, setMouseDown] = useState(false);
   /** Focus is inside the bubble (e.g. its question field) — keep it open. */
@@ -69,6 +96,9 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
         code: e.isActive('code'),
         link: e.isActive('link'),
         highlight: e.isActive('highlight'),
+        color: (e.getAttributes('textStyle').color as string | undefined) ?? '',
+        bg: (e.getAttributes('highlight').color as string | undefined) ?? '',
+        kind: currentBlockKind(e),
       };
     },
   });
@@ -98,16 +128,27 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
     if (!show) return;
     const r = posToDOMRect(editor.view, st.from, st.to);
     const el = ref.current;
-    const w = el?.offsetWidth ?? 420;
+    const w = el?.querySelector('.bubble-row')?.getBoundingClientRect().width ?? 460;
     const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
-    let top = r.top - 48;
-    if (top < 60) top = r.bottom + 10;
-    setPos({ left, top });
-  }, [show, st.from, st.to, editor, panel]);
+    // 8px above the selection; below it when there is no room under the toolbar.
+    let top = r.top - 36 - 8;
+    const below = top < 120;
+    if (below) top = r.bottom + 8;
+    setPos({ left, top, below });
+  }, [show, st.from, st.to, editor]);
 
   if (!show || mouseDown) return null;
 
   const selectedText = () => editor.state.doc.textBetween(st.from, st.to, '\n', '￼');
+  const toggle = (p: Panel, e: React.MouseEvent<HTMLElement>) => {
+    setPanelLeft(e.currentTarget.offsetLeft);
+    setPanel(panel === p ? null : p);
+  };
+  const mark = (on: boolean, label: string, icon: ReactNode, run: () => void) => (
+    <button className={cx('bub-btn is-icon', on && 'is-on')} onClick={run} title={label} aria-label={label} aria-pressed={on}>
+      {icon}
+    </button>
+  );
 
   return createPortal(
     <div
@@ -117,6 +158,12 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
       onMouseDown={(e) => {
         if (!(e.target as HTMLElement).closest('input')) e.preventDefault();
       }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          if (panel) setPanel(null);
+          else editor.commands.focus();
+        }
+      }}
       onFocusCapture={() => setInside(true)}
       onBlurCapture={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setInside(false);
@@ -124,60 +171,53 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
       data-ui
     >
       <div className="bubble-row">
-        <button className={cx('bub-btn is-ai', panel === 'ai' && 'is-on')} onClick={() => setPanel(panel === 'ai' ? null : 'ai')}>
-          <MessageCircleQuestion size={14} /> Ask <ChevronDown size={12} />
+        <button className={cx('bub-btn is-ai', panel === 'ai' && 'is-open')} onClick={(e) => toggle('ai', e)} aria-haspopup="menu">
+          <MessageCircleQuestion size={16} />
+          Ask
+          <ChevronDown size={12} />
         </button>
         <span className="bub-sep" />
-        <button className={cx('bub-btn', st.bold && 'is-on')} onClick={() => editor.chain().focus().toggleBold().run()} title={`Bold ${MOD}B`}>
-          <Bold size={15} />
+        <button className={cx('bub-btn', panel === 'turn' && 'is-open')} onClick={(e) => toggle('turn', e)} aria-haspopup="menu" title="Turn into">
+          {BLOCK_LABEL[st.kind]}
+          <ChevronDown size={12} />
         </button>
-        <button className={cx('bub-btn', st.italic && 'is-on')} onClick={() => editor.chain().focus().toggleItalic().run()} title={`Italic ${MOD}I`}>
-          <Italic size={15} />
-        </button>
-        <button className={cx('bub-btn', st.underline && 'is-on')} onClick={() => editor.chain().focus().toggleUnderline().run()} title={`Underline ${MOD}U`}>
-          <Underline size={15} />
-        </button>
-        <button className={cx('bub-btn', st.strike && 'is-on')} onClick={() => editor.chain().focus().toggleStrike().run()} title="Strikethrough">
-          <Strikethrough size={15} />
-        </button>
-        <button className={cx('bub-btn', st.code && 'is-on')} onClick={() => editor.chain().focus().toggleCode().run()} title={`Code ${MOD}E`}>
-          <Code size={15} />
-        </button>
+        <span className="bub-sep" />
         <button
-          className="bub-btn"
-          title="Turn into math"
-          onClick={() => {
-            const text = selectedText();
-            editor
-              .chain()
-              .focus()
-              .insertContentAt({ from: st.from, to: st.to }, { type: 'mathInline', attrs: { latex: text } })
-              .run();
-          }}
-        >
-          <Radical size={15} />
-        </button>
-        <button
-          className={cx('bub-btn', (st.highlight || panel === 'color') && 'is-on')}
-          onClick={() => setPanel(panel === 'color' ? null : 'color')}
-          title="Colour & highlight"
-        >
-          <Highlighter size={15} />
-        </button>
-        <button
-          className={cx('bub-btn', (st.link || panel === 'link') && 'is-on')}
-          onClick={() => {
+          className={cx('bub-btn', (st.link || panel === 'link') && 'is-open', st.link && 'is-on')}
+          onClick={(e) => {
             setLink((editor.getAttributes('link').href as string) ?? '');
-            setPanel(panel === 'link' ? null : 'link');
+            toggle('link', e);
           }}
-          title="Link"
+          title={`Link  ${MOD}K`}
         >
-          <Link2 size={15} />
+          <Link2 size={16} />
+          Link
+        </button>
+        <span className="bub-sep" />
+        {mark(st.bold, `Bold  ${MOD}B`, <Bold size={16} />, () => editor.chain().focus().toggleBold().run())}
+        {mark(st.italic, `Italic  ${MOD}I`, <Italic size={16} />, () => editor.chain().focus().toggleItalic().run())}
+        {mark(st.underline, `Underline  ${MOD}U`, <Underline size={16} />, () => editor.chain().focus().toggleUnderline().run())}
+        {mark(st.strike, `Strikethrough  ⇧${MOD}X`, <Strikethrough size={16} />, () => editor.chain().focus().toggleStrike().run())}
+        {mark(st.code, `Code  ${MOD}E`, <Code size={16} />, () => editor.chain().focus().toggleCode().run())}
+        {mark(false, `Math  ⇧${MOD}M`, <Radical size={16} />, () => {
+          const text = selectedText();
+          editor
+            .chain()
+            .focus()
+            .insertContentAt({ from: st.from, to: st.to }, { type: 'mathInline', attrs: { latex: text } })
+            .run();
+        })}
+        <span className="bub-sep" />
+        <button className={cx('bub-btn bub-color', panel === 'color' && 'is-open')} onClick={(e) => toggle('color', e)} title="Colour" aria-haspopup="menu">
+          <span className="bub-a" style={{ color: st.color || undefined, background: st.bg || undefined }}>
+            A
+          </span>
+          <ChevronDown size={12} />
         </button>
       </div>
 
       {panel === 'ai' && (
-        <div className="bubble-panel">
+        <div className="bubble-panel is-ask" style={{ left: panelLeft }}>
           {AI_ACTIONS.map((a) => (
             <button
               key={a.id}
@@ -187,7 +227,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
                 onAsk({ text: selectedText(), action: a.id, label: a.label });
               }}
             >
-              <a.icon size={15} />
+              <a.icon size={20} />
               <span className="menu-label">{a.label}</span>
             </button>
           ))}
@@ -202,43 +242,71 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
               }
             }}
           >
-            <input name="q" placeholder="Ask anything about the selection…" autoFocus onKeyDown={(e) => e.stopPropagation()} />
+            <input name="q" placeholder="Ask anything about the selection…" autoFocus onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()} />
           </form>
         </div>
       )}
 
+      {panel === 'turn' && (
+        <div className="bubble-panel is-turn" style={{ left: panelLeft }}>
+          <div className="bubble-label">Turn into</div>
+          {(Object.keys(BLOCK_LABEL) as BlockKind[]).map((k) => (
+            <button
+              key={k}
+              className="menu-item"
+              onClick={() => {
+                setPanel(null);
+                turnInto(editor, k);
+              }}
+            >
+              {BLOCK_ICONS[k]}
+              <span className="menu-label">{BLOCK_LABEL[k]}</span>
+              {st.kind === k && <Check size={18} className="bubble-check" />}
+            </button>
+          ))}
+        </div>
+      )}
+
       {panel === 'color' && (
-        <div className="bubble-panel is-colors">
-          <div className="pop-label">Text colour</div>
-          <div className="swatch-row">
-            {TEXT_COLORS.map((c) => (
+        <div className="bubble-panel is-colors" style={{ left: panelLeft }}>
+          <div className="bubble-label">Text colour</div>
+          {TEXT_COLORS.map((c) => (
+            <button
+              key={c.name}
+              className="menu-item"
+              onClick={() => (c.value ? editor.chain().focus().setColor(c.value).run() : editor.chain().focus().unsetColor().run())}
+            >
+              <span className="color-tile" style={{ color: c.value || 'var(--text)' }}>
+                A
+              </span>
+              <span className="menu-label">{c.name === 'Default' ? 'Default text' : c.name}</span>
+              {st.color === c.value && <Check size={18} className="bubble-check" />}
+            </button>
+          ))}
+          <div className="bubble-label">Background colour</div>
+          {BG_COLORS.map((c) => {
+            const on = c.value ? st.bg === c.value : !st.highlight;
+            return (
               <button
                 key={c.name}
-                className="swatch is-text"
-                title={c.name}
-                onClick={() => (c.value ? editor.chain().focus().setColor(c.value).run() : editor.chain().focus().unsetColor().run())}
+                className="menu-item"
+                onClick={() => (c.value ? editor.chain().focus().setHighlight({ color: c.value }).run() : editor.chain().focus().unsetHighlight().run())}
               >
-                <span style={{ color: c.value || 'var(--text)' }}>A</span>
+                <span className={cx('color-tile', !c.value && 'is-default')} style={{ background: c.value || undefined }}>
+                  A
+                </span>
+                <span className="menu-label">{c.name === 'Default' ? 'Default background' : c.name === 'Highlight' ? 'Highlighter' : `${c.name} background`}</span>
+                {on && <Check size={18} className="bubble-check" />}
               </button>
-            ))}
-          </div>
-          <div className="pop-label">Highlight</div>
-          <div className="swatch-row">
-            {TEXT_HIGHLIGHTS.map((c) => (
-              <button key={c.value} className="swatch" title={c.name} onClick={() => editor.chain().focus().toggleHighlight({ color: c.value }).run()}>
-                <span style={{ background: c.value }} />
-              </button>
-            ))}
-            <button className="swatch is-none" title="Remove highlight" onClick={() => editor.chain().focus().unsetHighlight().run()}>
-              <span />
-            </button>
-          </div>
+            );
+          })}
         </div>
       )}
 
       {panel === 'link' && (
         <form
           className="bubble-panel bubble-link"
+          style={{ left: panelLeft }}
           onSubmit={(e) => {
             e.preventDefault();
             if (link.trim()) editor.chain().focus().extendMarkRange('link').setLink({ href: link.trim() }).run();
@@ -246,9 +314,9 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
             setPanel(null);
           }}
         >
-          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a link…" autoFocus onKeyDown={(e) => e.stopPropagation()} />
-          <button type="submit" className="btn is-small">
-            Save
+          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a link…" autoFocus onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()} />
+          <button type="submit" className="btn is-small is-ghost">
+            {link.trim() || !st.link ? 'Apply' : 'Remove'}
           </button>
         </form>
       )}

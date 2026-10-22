@@ -1,8 +1,27 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, FileDown, FileText, FileUp, PanelLeft, Plus, MessageCircleQuestion, ListChecks, X, Code2, FileJson, FileType2 } from 'lucide-react';
+import {
+  ClipboardList,
+  Code2,
+  Download,
+  FileDown,
+  FileJson,
+  FilePlus,
+  FileText,
+  FileType2,
+  FileUp,
+  FolderPlus,
+  GraduationCap,
+  ListChecks,
+  Menu,
+  MessageCircleQuestion,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
-import { newNote, toggleAssistant } from '../lib/commands';
+import { useAI } from '../state/ai';
+import { newClass, newFolder, newHomework, newNote, toggleAssistant } from '../lib/commands';
 import { exportNote } from '../lib/export';
 import { importFiles } from '../lib/import';
 import { Popover } from './common/Popover';
@@ -10,104 +29,140 @@ import { PolishPanel, usePolishCount } from './PolishPanel';
 import { noteMenu, noteTitle } from './FileTree';
 import { openContextMenu } from './common/ContextMenu';
 import { cx } from '../lib/util';
-import { isMac, MOD } from '../lib/platform';
+import { isElectron, isMac, MOD, SHIFT } from '../lib/platform';
 
+/** The Nib mark: a nib on the app's blue, like a product logo in a Google app bar. */
+export function NibMark({ size = 28 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden>
+      <rect x="2" y="2" width="28" height="28" rx="7" fill="#0b57d0" />
+      <path d="M11 22.5c2.4-5.6 4.2-9.6 5.2-12.2.4-1 1.7-1 2 .1l.3 1.2c.3 1.2 1.1 2.4 2.3 3.1" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="22.4" cy="9.6" r="1.9" fill="#fbbc04" />
+    </svg>
+  );
+}
+
+/**
+ * The app bar (Google Classroom's top bar): menu button, product name, the open
+ * notes as tabs, then the note's actions and the app's own on the right.
+ */
 export function TopBar() {
-  const { tabs, view, sidebar, assistant } = useUI();
+  const { tabs, view, assistant } = useUI();
+  const rail = useUI((s) => !s.sidebar);
   const notes = useVault((s) => s.notes);
+  const ai = useAI();
   const activeId = view.kind === 'note' ? view.id : null;
-  const [menu, setMenu] = useState<null | 'export' | 'polish'>(null);
+  const [menu, setMenu] = useState<null | 'export' | 'polish' | 'create'>(null);
   const exportBtn = useRef<HTMLButtonElement>(null);
   const polishBtn = useRef<HTMLButtonElement>(null);
+  const createBtn = useRef<HTMLButtonElement>(null);
   const polishCount = usePolishCount(activeId);
+  const openTabs = tabs.filter((id) => notes[id] && !notes[id].meta.trashed);
+  const statusLabel =
+    ai.status === 'online' ? ai.chatModel || 'Choose a model' : ai.status === 'checking' ? 'Connecting…' : ai.status === 'offline' ? 'Local AI offline' : 'Set up local AI';
 
   return (
-    <div className={cx('topbar drag', !sidebar && isMac && 'has-traffic')}>
-      {!sidebar && (
-        <button className="icon-btn no-drag" onClick={() => useUI.getState().toggleSidebar()} aria-label="Show sidebar" title={`Show sidebar  ${MOD}\\`}>
-          <PanelLeft size={16} />
+    <header className={cx('topbar appbar drag', isElectron && isMac && 'has-traffic', rail && 'is-rail')}>
+      <div className="appbar-start">
+        <button className="icon-btn no-drag appbar-menu" onClick={() => useUI.getState().toggleSidebar()} aria-label="Main menu" title={`Main menu  ${MOD}\\`}>
+          <Menu size={22} />
         </button>
-      )}
-      <div className="tabs no-drag" role="tablist">
-        {tabs
-          .filter((id) => notes[id] && !notes[id].meta.trashed)
-          .map((id) => {
-            const n = notes[id];
-            return (
-              <div
-                key={id}
-                role="tab"
-                aria-selected={id === activeId}
-                className={cx('tab', id === activeId && 'is-active')}
-                onClick={() => useUI.getState().openNote(id)}
-                onAuxClick={(e) => e.button === 1 && useUI.getState().closeTab(id)}
-                onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
-                title={noteTitle(n)}
-              >
-                <FileText size={13} className="tab-icon" style={n.meta.color ? { color: n.meta.color } : undefined} />
-                <span className="tab-title">{noteTitle(n)}</span>
-                <button
-                  className="tab-close"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    useUI.getState().closeTab(id);
-                  }}
-                  aria-label="Close tab"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            );
-          })}
-        <button className="tab-new" onClick={() => newNote()} aria-label="New note" title={`New note  ${MOD}N`}>
-          <Plus size={14} />
+        <button className="appbar-brand no-drag" onClick={() => useUI.getState().setView({ kind: 'classes' })} title="Home">
+          <NibMark />
+          <span className="appbar-name">Nib</span>
         </button>
       </div>
+
+      <div className="tabs no-drag" role="tablist" aria-label="Open notes">
+        {openTabs.map((id) => {
+          const n = notes[id];
+          return (
+            <div
+              key={id}
+              role="tab"
+              aria-selected={id === activeId}
+              className={cx('tab', id === activeId && 'is-active')}
+              onClick={() => useUI.getState().openNote(id)}
+              onAuxClick={(e) => e.button === 1 && useUI.getState().closeTab(id)}
+              onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
+              title={noteTitle(n)}
+            >
+              <FileText size={16} className="tab-icon" />
+              <span className="tab-title">{noteTitle(n)}</span>
+              <button
+                className="tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useUI.getState().closeTab(id);
+                }}
+                aria-label="Close tab"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
       <span className="grow" />
+
       <div className="topbar-actions no-drag">
         {activeId && (
           <>
             <button
               ref={polishBtn}
-              className={cx('top-btn', menu === 'polish' && 'is-on')}
+              className={cx('icon-btn top-btn', menu === 'polish' && 'is-on')}
               onClick={() => setMenu(menu === 'polish' ? null : 'polish')}
-              title="Suggestions to tidy this note"
+              aria-label="Polish"
+              title="Polish — suggestions to tidy this note"
             >
-              <ListChecks size={15} />
-              <span>Polish</span>
+              <ListChecks size={20} />
               {polishCount > 0 && <span className="badge">{polishCount}</span>}
             </button>
-            <button ref={exportBtn} className={cx('top-btn', menu === 'export' && 'is-on')} onClick={() => setMenu(menu === 'export' ? null : 'export')}>
-              <FileDown size={15} />
-              <span>Export</span>
-              <ChevronDown size={12} />
+            <button
+              ref={exportBtn}
+              className={cx('icon-btn top-btn', menu === 'export' && 'is-on')}
+              onClick={() => setMenu(menu === 'export' ? null : 'export')}
+              aria-label="Export"
+              title="Export or print"
+            >
+              <Download size={20} />
             </button>
             {/* Like the panel itself, only with a note open. */}
-            <button className={cx('top-btn is-ai', assistant && 'is-on')} onClick={() => toggleAssistant()} title={`Assistant  ${MOD}J`}>
-              <MessageCircleQuestion size={15} />
+            <button className={cx('btn top-btn is-assistant', assistant ? 'is-tonal' : 'is-secondary')} onClick={() => toggleAssistant()} title={`Assistant  ${MOD}J`}>
+              <MessageCircleQuestion size={18} />
               <span>Assistant</span>
             </button>
+            <span className="appbar-sep" />
           </>
         )}
+        <button className="icon-btn" onClick={() => useUI.getState().setPalette(true)} aria-label="Search" title={`Search notes and commands  ${MOD}K`}>
+          <Search size={20} />
+        </button>
+        <button ref={createBtn} className={cx('icon-btn', menu === 'create' && 'is-on')} onClick={() => setMenu(menu === 'create' ? null : 'create')} aria-label="Create" title="Create">
+          <Plus size={22} />
+        </button>
+        <button className={cx('ai-status', `is-${ai.status}`)} onClick={() => useUI.getState().openSettings('ai')} title={ai.lastError ?? `Local AI · ${statusLabel}`}>
+          <span className="ai-dot" />
+          <span className="ai-status-text">{statusLabel}</span>
+        </button>
       </div>
 
-      <Popover anchor={exportBtn.current} open={menu === 'export'} onClose={() => setMenu(null)} align="end" className="menu-pop">
+      <Popover anchor={createBtn.current} open={menu === 'create'} onClose={() => setMenu(null)} align="end" className="menu-pop">
         <div className="menu">
-          <div className="menu-title">Export “{activeId ? noteTitle(notes[activeId]) : ''}”</div>
           {(
             [
-              ['pdf', 'PDF document', <FileDown size={15} key="i" />, `${MOD}P`],
-              ['md', 'Markdown', <FileType2 size={15} key="i" />, ''],
-              ['html', 'Web page (HTML)', <Code2 size={15} key="i" />, ''],
-              ['nib', 'Nib note (.nib)', <FileJson size={15} key="i" />, ''],
+              ['Note', <FilePlus size={20} key="i" />, `${MOD}N`, () => newNote()],
+              ['Homework', <ClipboardList size={20} key="i" />, `${SHIFT}${MOD}Y`, () => newHomework()],
+              ['Class', <GraduationCap size={20} key="i" />, '', () => newClass()],
+              ['Folder', <FolderPlus size={20} key="i" />, '', () => void newFolder('')],
             ] as const
-          ).map(([kind, label, icon, hint]) => (
+          ).map(([label, icon, hint, run]) => (
             <button
-              key={kind}
+              key={label}
               className="menu-item"
               onClick={() => {
                 setMenu(null);
-                if (activeId) void exportNote(activeId, kind);
+                run();
               }}
             >
               {icon}
@@ -123,9 +178,36 @@ export function TopBar() {
               void importFiles();
             }}
           >
-            <FileUp size={15} />
-            <span className="menu-label">Import PDF, Markdown, images…</span>
+            <FileUp size={20} />
+            <span className="menu-label">Import PDF, Markdown or images…</span>
           </button>
+        </div>
+      </Popover>
+
+      <Popover anchor={exportBtn.current} open={menu === 'export'} onClose={() => setMenu(null)} align="end" className="menu-pop">
+        <div className="menu">
+          <div className="menu-title">Export “{activeId ? noteTitle(notes[activeId]) : ''}”</div>
+          {(
+            [
+              ['pdf', 'PDF document', <FileDown size={20} key="i" />, `${MOD}P`],
+              ['md', 'Markdown', <FileType2 size={20} key="i" />, ''],
+              ['html', 'Web page (HTML)', <Code2 size={20} key="i" />, ''],
+              ['nib', 'Nib note (.nib)', <FileJson size={20} key="i" />, ''],
+            ] as const
+          ).map(([kind, label, icon, hint]) => (
+            <button
+              key={kind}
+              className="menu-item"
+              onClick={() => {
+                setMenu(null);
+                if (activeId) void exportNote(activeId, kind);
+              }}
+            >
+              {icon}
+              <span className="menu-label">{label}</span>
+              {hint && <span className="menu-hint">{hint}</span>}
+            </button>
+          ))}
         </div>
       </Popover>
       {activeId && (
@@ -133,6 +215,6 @@ export function TopBar() {
           <PolishPanel noteId={activeId} onDone={() => setMenu(null)} />
         </Popover>
       )}
-    </div>
+    </header>
   );
 }

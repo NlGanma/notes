@@ -3,7 +3,7 @@
 // and boxed as the AI's own knowledge ("proceed with caution").
 //   node scripts/mock-llm.mjs &   (port 11434)
 //   node tests/e2e/grounding.mjs
-import { launch, shot, BASE } from './lib.mjs';
+import { launch, shot, BASE, openClassNote } from './lib.mjs';
 
 const MOCK = process.env.MOCK_URL || 'http://127.0.0.1:11434';
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
@@ -34,8 +34,7 @@ await page.goto(BASE);
 await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
 
 // ---------------------------------------------------------------- per-note: covered
-await page.click('.tree-row:has-text("Calculus I")');
-await page.click('.note-card:has-text("Lecture 4")');
+await openClassNote(page, 'Calculus I', 'Lecture 4');
 await page.waitForSelector(`${V} .ProseMirror`);
 await page.keyboard.press('Meta+j').catch(() => undefined);
 if (!(await page.locator('.assistant').count())) await page.click('.top-btn:has-text("Assistant"), .top-btn[title^="Assistant"]').catch(() => undefined);
@@ -128,10 +127,7 @@ check(after.chat === before.chat, '…and makes no model call at all');
 await page.click('.library .strict-toggle');
 
 // ---------------------------------------------------------------- partly covered
-await page.click('.tree-row:has-text("Spanish II")');
-await page.waitForTimeout(300);
-await page.click('.tree-row:has-text("Unidad 3")').catch(() => undefined);
-await page.click('.note-card:has-text("Pretérito"), .tree-row:has-text("Pretérito")');
+await openClassNote(page, 'Spanish II', 'Pretérito');
 await page.waitForSelector(`${V} .ProseMirror`);
 before = await stats();
 await ask('How do you conjugate tener in the preterite?');
@@ -160,8 +156,7 @@ check(/paella/i.test(await bot().locator('.md').textContent()) && (await bot().l
 await shot(page, 'grounding-04-example');
 
 // No example in the notes: decided in code, no notes prompt; a labelled example from general knowledge.
-await page.click('.tree-row:has-text("Biology")');
-await page.click('.note-card:has-text("Cell Structure"), .tree-row:has-text("Cell Structure")');
+await openClassNote(page, 'Biology', 'Cell Structure');
 await page.waitForSelector(`${V} .ProseMirror`);
 const li = page.locator(`${V} .ProseMirror li:has-text("Golgi apparatus")`);
 await li.scrollIntoViewIfNeeded();

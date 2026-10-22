@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { OUT } from './lib.mjs';
+import { OUT, openClassNote, createClassDialog } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const electronPath = require('electron');
@@ -59,7 +59,8 @@ await win.waitForSelector('.ai-status.is-online', { timeout: 15000 }).catch(() =
 check(await win.locator('.ai-status.is-online').count(), 'connected to the local model through the main process');
 
 // Edit a note and see it saved to disk.
-await win.click('.tree-row:has-text("Welcome to Nib")');
+await win.click('.nav-item:has-text("All notes")');
+await win.click('.note-card:has-text("Welcome to Nib")');
 await win.waitForTimeout(500);
 await win.locator('.note-view:not(.is-hidden) .page-title').fill('Welcome to Nib (edited)');
 await win.locator('.note-view:not(.is-hidden) .page-title').press('Enter');
@@ -96,28 +97,27 @@ const b64 = await win.evaluate(() => window.nib.captureRect({ x: 300, y: 200, wi
 check(typeof b64 === 'string' && b64.length > 1000, `screen capture returns a PNG (${b64?.length ?? 0} bytes b64)`);
 
 // A new class is a folder on disk; renaming it renames the folder.
-await win.click('.side-section-head button[title="New class"]');
-await win.fill('.class-name-input', 'Statistics');
+await createClassDialog(win);
+await win.fill('.class-name-input input', 'Statistics');
 await win.click('.class-form button[type="submit"]');
-await win.waitForSelector('.class-hero h1:has-text("Statistics")');
-await win.click('.class-hero .btn.is-primary');
+await win.waitForSelector('.banner-name:has-text("Statistics")');
+await win.click('.stream-actions .btn:has-text("New note")');
 await win.locator('.note-view:not(.is-hidden) .page-title').fill('Week 1');
 await win.locator('.note-view:not(.is-hidden) .page-title').press('Enter');
 await win.keyboard.type('Mean, median and mode.');
 await win.waitForTimeout(1200);
 check(fs.existsSync(path.join(vault, 'Statistics', 'Week 1.nib')), 'a note made in a class is saved inside the class folder');
 await win.click('.tree-row.is-class:has-text("Statistics")');
-await win.click('.class-edit');
-await win.fill('.class-name-input', 'Stats 101');
+await win.click('.class-view button[aria-label="Class settings"]');
+await win.fill('.class-name-input input', 'Stats 101');
 await win.click('.class-form button[type="submit"]');
 await win.waitForTimeout(1200);
 check(fs.existsSync(path.join(vault, 'Stats 101', 'Week 1.nib')) && !fs.existsSync(path.join(vault, 'Statistics')), 'renaming a class renames its folder');
 
 // PDF export of the calculus note.
-await win.click('.tree-row:has-text("Calculus I")');
-await win.click('.note-card:has-text("Lecture 4")');
+await openClassNote(win, 'Calculus I', 'Lecture 4');
 await win.waitForTimeout(1200);
-await win.click('.top-btn:has-text("Export")');
+await win.click('.top-btn[aria-label="Export"]');
 await win.click('.menu-item:has-text("PDF document")');
 await win.waitForTimeout(3000);
 const pdfs = fs.readdirSync(exportDir).filter((f) => f.endsWith('.pdf'));

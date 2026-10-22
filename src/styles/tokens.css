@@ -1,30 +1,41 @@
 :root {
+  /*
+   * One design language for the whole app: Google's Material 3 as used in Classroom, NotebookLM and
+   * Docs (2025). A light grey-blue shell, white content surfaces, one blue for actions, two type
+   * weights, hairline dividers, and nothing that looks like a separate premium add-on.
+   */
+
   /* Surfaces */
   --bg: #ffffff;
-  --bg-canvas: #f6f6f4;
-  --bg-sidebar: #f7f7f5;
-  --bg-subtle: #f5f5f3;
+  --bg-shell: #f8fafd; /* window, nav drawer and top app bar */
+  --bg-canvas: #f8fafd;
+  --bg-sidebar: #f8fafd;
+  --bg-subtle: #f0f4f9; /* surface container: tinted cards, inputs */
+  --bg-field: #f0f4f9;
   --bg-elevated: #ffffff;
-  --bg-hover: rgba(20, 20, 30, 0.045);
-  --bg-active: rgba(20, 20, 30, 0.075);
-  --bg-selected: rgba(33, 96, 232, 0.09);
+  --bg-hover: rgba(31, 31, 31, 0.08);
+  --bg-active: rgba(31, 31, 31, 0.12);
+  --bg-selected: #c2e7ff; /* secondary container: selected nav item, selected rows */
+  --on-selected: #001d35;
 
   /* Lines */
-  --border: #ebebe8;
-  --border-strong: #dcdcd8;
-  --hairline: rgba(20, 20, 30, 0.08);
+  --border: #dadce0; /* dividers, card borders */
+  --border-strong: #747775; /* outlined controls */
+  --hairline: rgba(31, 31, 31, 0.12);
+  --outline-variant: #c4c7c5;
 
   /* Text */
-  --text: #1c1c1e;
-  --text-2: #55575e;
-  --text-3: #8b8d94;
-  --text-4: #b5b7bc;
+  --text: #1f1f1f;
+  --text-2: #444746;
+  --text-3: #5f6368;
+  --text-4: #8e918f;
 
-  /* Accent: ink blue */
-  --accent: #2160e8;
-  --accent-hover: #1a52cf;
-  --accent-soft: #eaf1fe;
-  --accent-text: #1a4fc2;
+  /* Accent: Google blue (GM3 primary) */
+  --accent: #0b57d0;
+  --accent-hover: #0842a0;
+  --accent-soft: #d3e3fd; /* primary container */
+  --accent-text: #0b57d0;
+  --accent-tint: rgba(11, 87, 208, 0.08);
 
   /* AI features use the same accent as everything else: nothing looks like a separate, premium add-on. */
   --ai: var(--accent);
@@ -32,12 +43,13 @@
   --ai-soft: var(--accent-soft);
   --ai-grad: var(--accent);
 
-  --danger: #d93030;
-  --danger-soft: #fdeeee;
-  --success: #1f9d4c;
-  --success-soft: #e8f7ee;
-  --warning: #c98a04;
-  --warning-soft: #fdf5e1;
+  --danger: #b3261e;
+  --danger-soft: #f9dedc;
+  --success: #146c2e;
+  --success-soft: #c4eed0;
+  --warning: #8a5a00;
+  --warning-soft: #fef7e0; /* Google's caution callout */
+  --warning-line: #fbbc04;
 
   /* Paper */
   --rule: #dfe7f1;
@@ -45,32 +57,35 @@
   --grid-line: #ebeff4;
   --dot: #cdd4de;
 
-  /* Shape */
+  /* Shape (GM3: extra-small 4, small 8, medium 12, large 16, extra-large 28; pills are fully round) */
   --radius-xs: 4px;
-  --radius-s: 6px;
+  --radius-s: 8px;
   --radius: 8px;
   --radius-l: 12px;
   --radius-xl: 16px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
 
-  --shadow-xs: 0 1px 1px rgba(16, 16, 24, 0.04);
-  --shadow-s: 0 1px 2px rgba(16, 16, 24, 0.06), 0 0 0 0.5px rgba(16, 16, 24, 0.04);
-  --shadow: 0 6px 20px rgba(16, 16, 24, 0.07), 0 1px 3px rgba(16, 16, 24, 0.06), 0 0 0 0.5px rgba(16, 16, 24, 0.05);
-  --shadow-l: 0 24px 64px rgba(16, 16, 24, 0.16), 0 6px 16px rgba(16, 16, 24, 0.06), 0 0 0 0.5px rgba(16, 16, 24, 0.06);
-  --shadow-page: 0 0 0 0.5px rgba(16, 16, 24, 0.07), 0 1px 2px rgba(16, 16, 24, 0.04), 0 10px 32px rgba(16, 16, 24, 0.045);
+  /* Elevation (GM3, Workspace) */
+  --shadow-xs: 0 1px 2px rgba(60, 64, 67, 0.3);
+  --shadow-s: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  --shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  --shadow-l: 0 4px 8px 3px rgba(60, 64, 67, 0.15), 0 1px 3px rgba(60, 64, 67, 0.3);
+  --shadow-page: 0 1px 3px rgba(60, 64, 67, 0.18), 0 4px 8px 3px rgba(60, 64, 67, 0.06);
 
-  /* Type */
-  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter Variable', 'Inter', system-ui, 'Segoe UI', sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter Variable', 'Inter', system-ui, sans-serif;
+  /* Type: Google Sans (OFL), optical sizes make small text read like Google Sans Text. */
+  --font-ui: 'Google Sans Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Google Sans Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   --font-serif: 'Iowan Old Style', 'Charter', 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-mono: 'Google Sans Code', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 
   /* Layout */
-  --sidebar-w: 262px;
+  --sidebar-w: 280px;
   /* Narrower on small windows, so the page isn't squeezed to half size. */
-  --assistant-w: clamp(320px, 30vw, 392px);
-  --topbar-h: 46px;
+  --assistant-w: clamp(320px, 30vw, 400px);
+  --topbar-h: 64px;
   --page-pad-x: 80px;
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease: cubic-bezier(0.2, 0, 0, 1); /* GM3 standard easing */
 
   color-scheme: light;
 }
@@ -90,8 +105,10 @@ body,
 
 body {
   font-family: var(--font-ui);
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.43;
+  font-optical-sizing: auto;
+  letter-spacing: 0.1px;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -99,7 +116,7 @@ body {
   text-rendering: optimizeLegibility;
   overflow: hidden;
   user-select: none;
-  font-feature-settings: 'cv11', 'ss01';
+  
 }
 
 /* Mac app: the window is transparent so the sidebar can use native vibrancy. */
@@ -134,12 +151,12 @@ kbd {
 }
 
 ::selection {
-  background: rgba(33, 96, 232, 0.2);
+  background: rgba(11, 87, 208, 0.2);
 }
 
 :focus-visible {
-  outline: 2px solid rgba(33, 96, 232, 0.55);
-  outline-offset: 1px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar {

@@ -1705,7 +1705,7 @@ function SelectionMenu(props: {
       style={{ left, top, transform: `translate(-50%, ${below ? '0' : '-100%'}) scale(${inv})`, transformOrigin: below ? '50% 0' : '50% 100%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button className="sel-btn is-ai" onClick={() => props.onAsk('explain')} title="Ask your local AI about this">
+      <button className="sel-btn" onClick={() => props.onAsk('explain')} title="Ask about this">
         <MessageCircleQuestion size={14} /> Ask
       </button>
       <button className="sel-btn" onClick={() => props.onAsk('tutor')} title="Guide me through this problem">
