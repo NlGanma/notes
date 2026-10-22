@@ -227,7 +227,14 @@ export async function chatRobust(req: RobustRequest): Promise<RobustResult> {
       }
       if (!gotToken && attempt < maxAttempts && isTransient(e)) {
         req.onStatus?.('retrying');
-        await sleep(700 * 3 ** (attempt - 1), req.signal);
+        try {
+          await sleep(700 * 3 ** (attempt - 1), req.signal);
+        } catch (stopped) {
+          // Stopped while waiting to retry.
+          req.onStatus?.(null);
+          useActivity.getState().patch(entry.id, { status: 'stopped' });
+          throw stopped;
+        }
         continue;
       }
       useActivity.getState().patch(entry.id, { status: 'error', error: String((e as Error).message ?? e) });

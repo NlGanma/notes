@@ -122,6 +122,15 @@ test('stopping aborts the request', async () => {
   assert.equal(useActivity.getState().entries[0].status, 'stopped');
 });
 
+test('stopping while waiting to retry ends the request cleanly', async () => {
+  await mock({ fail: 3, status: 503 });
+  const ctrl = new AbortController();
+  const p = ask({ signal: ctrl.signal, onStatus: (st) => st === 'retrying' && setTimeout(() => ctrl.abort(), 30) });
+  await assert.rejects(p, (e: unknown) => (e as Error).name === 'AbortError');
+  assert.equal(useActivity.getState().entries[0].status, 'stopped');
+  await mock({ fail: 0 });
+});
+
 test('the OpenAI-compatible API works the same way', async () => {
   const res = await chat({ provider: 'openai', baseUrl: BASE }, { model: 'qwen3:8b', messages: [{ role: 'user', content: 'Summarise this.' }] });
   assert.match(res.text, /Limits/);

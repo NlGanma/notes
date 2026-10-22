@@ -110,6 +110,14 @@ export function buildSeedNotes(): NoteDoc[] {
         [false, 'Draw a circle or a box and ', i('hold'), ' at the end — it snaps into a clean shape'],
         [false, 'Pick ', b('✦ Ask'), ' in the toolbar and drag over anything on the page to ask about it'],
         [false, 'Open ', b('Ask your notes'), ' (⇧⌘L) and ask a question across every notebook'],
+        [
+          false,
+          'Open ',
+          b('Homework'),
+          ' → Problem Set 4 and ask for help — answers come only from Lecture 4, and anything else is marked ',
+          i('Not from your notes'),
+        ],
+        [false, 'Add your own class with ', b('+'), ' next to ', b('Classes'), ' — new notes and homework made there stay with it'],
       ),
       h(2, 'Make it pretty, fast'),
       ul(
