@@ -136,11 +136,12 @@ test('a note trashed mid-session drops out of it', async () => {
 test('“I was right” recounts the answer as right: no re-ask, no miss, and out of the working set once mastered', async () => {
   const pret = byTitle('Pretérito');
   const c = conceptsOf(pret).find((x) => x.name === 'El pretérito')!;
-  // One more right answer masters it.
-  const st = { ...freshState(clock.now), p: 0.99, attempts: 6, correct: 5, best: 2, level: 2 as const, codeCorrect: 2, correctKeys: ['a', 'b'], last: clock.now - 1000, due: clock.now };
+  // One more right answer masters it; it's asked as a fill-in, which code grades.
+  const st = { ...freshState(clock.now), p: 0.99, attempts: 6, correct: 5, best: 2, level: 0 as const, codeCorrect: 2, correctKeys: ['a', 'b'], last: clock.now - 1000, due: clock.now };
   useReview.setState({ file: { ...review().file, states: { [c.id]: st } } });
   review().start([pret.meta.id]);
   assert.equal(review().current!.concept.id, c.id);
+  assert.equal(review().current!.item.graded, 'typed');
   await answer(false, 'sure');
   assert.equal(review().misconceptions.length, 1);
   review().override();
@@ -151,6 +152,47 @@ test('“I was right” recounts the answer as right: no re-ask, no miss, and ou
   assert.equal(sess.misses[c.id] ?? 0, 0);
   assert.equal(sess.history.at(-1)!.s, 0.8);
   assert.equal(review().misconceptions.length, 0, 'it was no misconception');
+});
+
+test('“I was right” is only for an answer the student wrote and someone else graded', async () => {
+  const counted = () => review().session!.history.at(-1)!.s;
+  // "I don't know", pressed or typed: the answer is shown as the answer, and nothing can be overridden.
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  review().dontKnow();
+  assert.ok(review().current!.dontKnow);
+  review().override();
+  assert.ok(!review().current!.overridden && counted() === 0 && review().overrides === 0, 'after “I don’t know”');
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('no sé', 'unsure');
+  assert.ok(review().current!.dontKnow);
+  review().override();
+  assert.ok(!review().current!.overridden, 'after typing “no sé”');
+  // The student said how it went themselves.
+  ask('Lecture 4', 'Limit laws', 0, (it) => it.format === 'rate');
+  await review().submit('', 'sure');
+  review().selfGrade(0);
+  assert.ok(review().current!.selfGraded);
+  review().override();
+  assert.ok(!review().current!.overridden, 'after a self-check');
+  // A typed answer code marked wrong can be.
+  ask('Pretérito', 'El pretérito', 0, preterite);
+  await review().submit('imperfect', 'unsure');
+  assert.ok(!review().current!.dontKnow && !review().current!.selfGraded);
+  review().override();
+  assert.ok(review().current!.overridden);
+  assert.equal(review().current!.feedback!.verdict, 'right');
+});
+
+test('a reported question can be taken back', async () => {
+  const vocab = byTitle('Vocabulario');
+  review().start([vocab.meta.id]);
+  const key = review().current!.item.key;
+  await answer(false);
+  review().report();
+  assert.ok(review().file.bad.includes(key));
+  assert.notEqual(review().current?.item.key, key, 'the session moved on');
+  review().unreport(key);
+  assert.ok(!review().file.bad.includes(key), 'it can be asked again');
 });
 
 test('Report undoes the answer and the question is never asked again, in any phrasing', async () => {

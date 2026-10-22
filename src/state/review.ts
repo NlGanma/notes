@@ -80,6 +80,10 @@ export interface Current {
   /** A second try after a miss (not counted): its score — none when only the student can tell — or being checked. */
   retry?: { answer: string; s?: number; checking?: boolean };
   revealed: boolean;
+  /** Answered "I don't know" (or typed it). */
+  dontKnow?: boolean;
+  /** The student said how it went themselves (a self-check, or a free answer no one else could grade). */
+  selfGraded?: boolean;
   firstInSession: boolean;
   wasDue: boolean;
   stateBefore: ConceptState;
@@ -125,6 +129,8 @@ interface ReviewState {
   next(): void;
   override(): void;
   report(): void;
+  /** Takes a report back: the question can be asked again. */
+  unreport(key: string): void;
   end(): void;
   closeSummary(): void;
 }
@@ -304,6 +310,13 @@ export function dueCount(now = Date.now()): number {
 const where = (c: Concept, title: string) => [title, c.section].filter(Boolean).join(' › ');
 /** The line of the notes an item asks about. */
 export const factOf = (item: Item, c: Concept): Fact | undefined => c.facts.find((x) => x.id === item.factId) ?? c.facts[0];
+
+/**
+ * Whether "I was right" can apply: to an answer the student wrote and code or the model graded —
+ * not to "I don't know", a self-check, or a choice (which is compared exactly).
+ */
+export const canOverride = (cur: Pick<Current, 'answer' | 'dontKnow' | 'selfGraded' | 'item'>) =>
+  !!cur.answer?.trim() && !cur.dontKnow && !cur.selfGraded && cur.item.format !== 'mcq';
 
 export const useReview = create<ReviewState>((set, get) => {
   const save = (file: ReviewFile) => {
@@ -893,12 +906,13 @@ export const useReview = create<ReviewState>((set, get) => {
         set({ current: { ...cur, answer: undefined, conf, phase: 'self', revealed: true } });
         return;
       }
-      set({ current: { ...cur, answer, conf } });
       if (isDontKnow(answer)) {
+        set({ current: { ...cur, answer, conf, dontKnow: true } });
         apply({ s: 0 }, item.graded);
         get().reveal();
         return;
       }
+      set({ current: { ...cur, answer, conf } });
       const r = await gradeAnswer(item, cur.concept, answer, withGrading);
       // Moved on (or the session ended) while the model was checking.
       const now = get().current;
@@ -918,7 +932,7 @@ export const useReview = create<ReviewState>((set, get) => {
     dontKnow() {
       const cur = get().current;
       if (!cur || cur.phase !== 'ask') return;
-      set({ current: { ...cur, answer: '', conf: null } });
+      set({ current: { ...cur, answer: '', conf: null, dontKnow: true } });
       apply({ s: 0 }, cur.item.graded);
       // Nothing to retry from: show the notes' answer straight away (a re-teach).
       get().reveal();
@@ -927,6 +941,7 @@ export const useReview = create<ReviewState>((set, get) => {
     selfGrade(s) {
       const cur = get().current;
       if (!cur || cur.phase !== 'self') return;
+      set({ current: { ...cur, selfGraded: true } });
       apply({ s }, 'self');
     },
 
@@ -979,6 +994,8 @@ export const useReview = create<ReviewState>((set, get) => {
       const cur = get().current;
       const sess = get().session;
       if (!cur || !sess || cur.phase !== 'feedback' || cur.overridden || get().overrides >= 3 || cur.feedback?.verdict === 'right') return;
+      // Only an answer that was written, and graded by someone else, can have been right.
+      if (!canOverride(cur)) return;
       const meta = get().pool.find((p) => p.id === cur.concept.id);
       if (!meta || !cur.sessBefore) return;
       const now = Date.now();
@@ -1008,6 +1025,11 @@ export const useReview = create<ReviewState>((set, get) => {
       save({ ...file, bad: [...new Set([...file.bad, cur.item.key])], questions, states: cur.stateBefore.attempts ? { ...states, [cur.concept.id]: cur.stateBefore } : states });
       if (cur.sessBefore) set({ session: cur.sessBefore, misconceptions: withoutMisconception(cur), overrides: get().overrides - (cur.overridden ? 1 : 0) });
       get().next();
+    },
+
+    unreport(key) {
+      const file = get().file;
+      if (file.bad.includes(key)) save({ ...file, bad: file.bad.filter((k) => k !== key) });
     },
 
     end() {

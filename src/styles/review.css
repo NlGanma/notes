@@ -366,6 +366,18 @@
   background: var(--bg-subtle);
   box-shadow: inset 0 0 0 1px var(--border);
 }
+/* The key that presses a button ("How did you do?" 1–3). */
+.btn .rv-choice-n {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.btn.is-primary .rv-choice-n {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
 .rv-input {
   width: 100%;
   height: 40px;
@@ -516,6 +528,10 @@
 }
 .rv-verdict.is-wrong {
   color: var(--danger);
+}
+/* "I don't know" isn't a mistake. */
+.rv-verdict.is-idk {
+  color: var(--text-2);
 }
 .rv-wrote,
 .rv-grade-note {
