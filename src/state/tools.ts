@@ -36,6 +36,12 @@ export interface ToolState {
   set(p: Partial<Pick<ToolState, 'stylusDraws' | 'holdToSnap'>>): void;
 }
 
+/** A line for the toolbar while ink is being dragged: what letting go will do. */
+export const useInkHint = create<{ hint: string | null; setHint(hint: string | null): void }>((set) => ({
+  hint: null,
+  setHint: (hint) => set({ hint }),
+}));
+
 export const useTools = create<ToolState>()(
   persist(
     (set, get) => ({

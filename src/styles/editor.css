@@ -353,6 +353,23 @@
 .page.tool-ask .surface * {
   cursor: crosshair !important;
 }
+/* Picking ink up: a hand over handwriting you can drag, arrows on the resize handles */
+.page.is-inking .surface[data-ink-cursor='grab'],
+.page.is-inking .surface[data-ink-cursor='grab'] * {
+  cursor: grab !important;
+}
+.page.is-inking .surface[data-ink-cursor='grabbing'],
+.page.is-inking .surface[data-ink-cursor='grabbing'] * {
+  cursor: grabbing !important;
+}
+.page.is-inking .surface[data-ink-cursor='nwse-resize'],
+.page.is-inking .surface[data-ink-cursor='nwse-resize'] * {
+  cursor: nwse-resize !important;
+}
+.page.is-inking .surface[data-ink-cursor='nesw-resize'],
+.page.is-inking .surface[data-ink-cursor='nesw-resize'] * {
+  cursor: nesw-resize !important;
+}
 .page.is-inking .surface [data-ui],
 .page.is-inking .surface [data-ui] * {
   cursor: default !important;
@@ -400,6 +417,30 @@
 .sel-handle {
   fill: #fff;
   stroke: var(--accent);
+}
+/* While dragging ink: its frame, the ruled line it will sit on, the edge it lines up with,
+   and the caret where it would go into the text */
+.drag-box {
+  fill: none;
+  stroke: var(--accent);
+  opacity: 0.6;
+}
+.snap-rule {
+  stroke: var(--accent);
+  opacity: 0.3;
+}
+.snap-base {
+  stroke: var(--accent);
+  stroke-linecap: round;
+}
+.snap-edge {
+  stroke: var(--accent);
+  opacity: 0.75;
+}
+.drop-caret {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
 }
 .snip-rect rect {
   fill: rgba(107, 79, 224, 0.05);
@@ -570,6 +611,19 @@
 .ink-inline.is-selected,
 .ink-inline:hover {
   background: rgba(33, 96, 232, 0.08);
+}
+/* A sketch that was just dropped into the text glows for a moment */
+.is-landed .ink-inline {
+  animation: landed 0.9s var(--ease);
+}
+@keyframes landed {
+  0%,
+  35% {
+    background: rgba(33, 96, 232, 0.16);
+  }
+  100% {
+    background: rgba(33, 96, 232, 0);
+  }
 }
 
 /* --------------------------------------------------------------- math */
@@ -879,6 +933,9 @@
 }
 .tb-hint.is-ai {
   color: var(--ai);
+}
+.tb-hint.is-drop {
+  color: var(--accent);
 }
 
 /* tooltips */

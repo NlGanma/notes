@@ -88,26 +88,59 @@ export function appendInkBlock(editor: Editor, strokes: Stroke[], line: number):
 }
 
 /**
- * Replaces ink on several blocks at once and optionally appends new ink
- * blocks — one undo step (used by the eraser and lasso moves).
+ * Replaces ink on several blocks at once and optionally appends a new
+ * handwriting area — one undo step (used by the eraser and lasso moves).
+ * Returns the new area's id.
+ *
+ * `nudge` is for arrow-key moves: a burst of them should undo as one step.
+ * Attribute steps never count as "adjacent" for ProseMirror's history, so
+ * nudges rewrite the node markup instead (a replace step it can group), and
+ * only the first nudge of a burst starts a new undo step.
  */
-export function applyInkEdits(editor: Editor, edits: Map<string, Stroke[]>, line: number, newBlockStrokes?: Stroke[]) {
+export function applyInkEdits(
+  editor: Editor,
+  edits: Map<string, Stroke[]>,
+  line: number,
+  newBlockStrokes?: Stroke[],
+  opts: { nudge?: 'first' | 'more' } = {},
+): string | null {
   const { state } = editor;
   const tr = state.tr;
   state.doc.forEach((node, pos) => {
     const id = node.attrs.id as string;
     if (!id || !edits.has(id)) return;
     const ink = edits.get(id)!;
-    tr.setNodeAttribute(pos, 'ink', ink.length ? ink : null);
+    const attrs: Record<string, unknown> = { ...node.attrs, ink: ink.length ? ink : null };
     if (node.type.name === 'inkBlock') {
       // Edits (erase, move, recolour) only grow an area if ink now overflows it.
-      const h = Math.max(node.attrs.height as number, gridCeil(inkBottom(ink) - DESCENDER_ALLOWANCE, line));
-      if (h !== node.attrs.height) tr.setNodeAttribute(pos, 'height', h);
-      if (node.attrs.transcript) tr.setNodeAttribute(pos, 'transcript', { ...node.attrs.transcript, stale: true });
+      attrs.height = Math.max(node.attrs.height as number, gridCeil(inkBottom(ink) - DESCENDER_ALLOWANCE, line));
+      if (node.attrs.transcript) attrs.transcript = { ...node.attrs.transcript, stale: true };
     }
+    if (opts.nudge) {
+      tr.setNodeMarkup(pos, undefined, attrs);
+      return;
+    }
+    for (const key of ['ink', 'height', 'transcript']) if (key in attrs && attrs[key] !== node.attrs[key]) tr.setNodeAttribute(pos, key, attrs[key]);
   });
-  if (newBlockStrokes?.length) tr.insert(tr.doc.content.size, createInkBlockNode(editor, newBlockStrokes, line));
-  if (tr.docChanged) dispatch(editor, tr);
+  let created: string | null = null;
+  if (newBlockStrokes?.length) {
+    const node = createInkBlockNode(editor, newBlockStrokes, line);
+    created = node.attrs.id as string;
+    tr.insert(tr.doc.content.size, node);
+  }
+  if (tr.docChanged) dispatch(editor, tr, opts.nudge !== 'more');
+  return created;
+}
+
+/** Takes strokes out of their blocks within a transaction (attribute steps, so positions don't move). */
+export function removeStrokes(tr: Transaction, remove: Map<string, Set<string>>) {
+  for (const [id, ids] of remove) {
+    const found = findBlock(tr.doc, id);
+    if (!found) continue;
+    const keep = inkOf(found.node).filter((s) => !ids.has(s.id));
+    tr.setNodeAttribute(found.pos, 'ink', keep.length ? keep : null);
+    if (found.node.attrs.transcript) tr.setNodeAttribute(found.pos, 'transcript', { ...found.node.attrs.transcript, stale: true });
+  }
 }
 
 /**

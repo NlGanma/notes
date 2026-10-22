@@ -31,7 +31,7 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
-import { useTools } from '../../state/tools';
+import { useInkHint, useTools } from '../../state/tools';
 import { BRUSHES, HIGHLIGHT_COLORS, INK_COLORS, PEN_BRUSHES, TEXT_HIGHLIGHTS } from '../../lib/ink/brushes';
 import type { Brush, ShapeKind, Stroke, Tool } from '../../lib/ink/types';
 import { strokePath, strokeSvgAttrs } from '../../lib/ink/render';
@@ -91,6 +91,7 @@ function Tip({ label, kbd }: { label: string; kbd?: string }) {
 
 export function InkToolbar({ editor }: { editor: Editor }) {
   const t = useTools();
+  const dropHint = useInkHint((s) => s.hint);
   const [pop, setPop] = useState<null | 'pen' | 'highlighter' | 'eraser' | 'slot' | 'textStyle' | 'textHl'>(null);
   const [slot, setSlot] = useState<{ tool: 'pen' | 'highlighter'; index: number } | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -271,7 +272,7 @@ export function InkToolbar({ editor }: { editor: Editor }) {
           </button>
         </div>
       )}
-      {t.tool === 'lasso' && <div className="tb-hint">Circle ink to select · drag to move · corners to resize</div>}
+      {t.tool === 'lasso' && <div className={cx('tb-hint', dropHint && 'is-drop')}>{dropHint ?? 'Drag ink to move · circle to select · ⌥ skips snapping'}</div>}
       {t.tool === 'ask' && <div className="tb-hint is-ai">Drag over handwriting, text or math to ask your local AI</div>}
       {t.tool === 'text' && (
         <div className="tb-group">
