@@ -214,8 +214,10 @@ test('“I was right” is only for an answer the student wrote and someone else
   review().override();
   assert.ok(!review().current!.overridden && counted() === 0 && review().overrides === 0, 'after “I don’t know”');
   ask('Pretérito', 'El pretérito', 0, preterite);
-  await review().submit('no sé', 'unsure');
+  await review().submit('no sé', 'sure');
   assert.ok(review().current!.dontKnow);
+  assert.ok(!review().current!.feedback!.hypercorrect, 'not knowing, with “Sure” on, is no mix-up');
+  assert.deepEqual(review().misconceptions, []);
   review().override();
   assert.ok(!review().current!.overridden, 'after typing “no sé”');
   // The student said how it went themselves.

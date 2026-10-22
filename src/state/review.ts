@@ -763,8 +763,9 @@ export const useReview = create<ReviewState>((set, get) => {
     const meta = get().pool.find((p) => p.id === c.id);
     if (!meta) return;
     const conf = cur.conf ?? null;
-    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception.
-    const named = !!cur.answer && namesPoint(cur.answer, cur.item.points ?? []);
+    // Naming the idea an example shows is incomplete, not a mix-up: it isn't kept as a misconception. Nor is
+    // "I don't know", typed while "Sure" was on.
+    const named = !!cur.dontKnow || (!!cur.answer && namesPoint(cur.answer, cur.item.points ?? []));
     const answer = { s: g.s, graded, level: cur.item.level, key: cur.item.key, conf, hint: cur.hintUsed, answer: named ? undefined : cur.answer, firstInSession: cur.firstInSession };
     const after = recordAnswer(cur.stateBefore, answer, meta.cap, now, meta.needs);
     const mastered = isMastered(after, meta.cap, meta.needs);

@@ -175,11 +175,13 @@
   flex-direction: column;
   gap: 6px;
 }
+/* The lengths fill their row (and take two when the panel is narrow). */
 .rv-field .seg {
   display: flex;
+  flex-wrap: wrap;
 }
 .rv-field .seg button {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 0 6px;
   white-space: nowrap;
 }
