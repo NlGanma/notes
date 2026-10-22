@@ -68,4 +68,6 @@ export interface InlineInkAttrs {
   /** How far the box bottom sits below the text baseline, in capture pixels. */
   drop: number;
   transcript?: string | null;
+  /** How much it was shrunk to fit its line of text (1: not at all), so pulling it out restores its size. */
+  fit?: number;
 }

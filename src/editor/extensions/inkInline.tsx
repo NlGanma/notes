@@ -52,6 +52,8 @@ export const InkInline = Node.create({
       em: json('em', 16),
       drop: json('drop', 0),
       transcript: json('transcript', null),
+      // how much it was shrunk to fit its line (pulling it back out restores the size)
+      fit: json('fit', 1),
     };
   },
 

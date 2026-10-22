@@ -48,6 +48,7 @@ export function inlineSketchAttrs(strokes: Stroke[], baseline: number, fontPx: n
     em: round2(fontPx / fit),
     drop: round2(bb.maxY - baseline),
     transcript: null,
+    fit: round2(fit),
   };
 }
 
@@ -102,11 +103,16 @@ export function inlineSketchStrokes(editor: Editor, wrap: HTMLElement, scale: nu
   const pad = 2; // inlineInkBox's padding
   const r = svg.getBoundingClientRect();
   const wr = wrap.getBoundingClientRect();
-  const k = r.width / ((Number(a.w) || 0) + pad * 2) / scale; // layer px per sketch px
-  const x0 = (r.left - wr.left) / scale + pad * k;
-  const y0 = (r.top - wr.top) / scale + pad * k;
+  const shown = r.width / ((Number(a.w) || 0) + pad * 2) / scale; // layer px per sketch px, as drawn in the text
+  // Back to the size it was written at (it may have been shrunk to fit the line), standing where it stood.
+  const k = shown / Math.min(1, Math.max(0.1, Number(a.fit) || 1));
+  const h = Number(a.h) || 0;
+  const drop = Number(a.drop) || 0;
+  const x0 = (r.left - wr.left) / scale + pad * shown;
+  const baseline = (r.top - wr.top) / scale + (pad + h - drop) * shown;
+  const y0 = baseline - (h - drop) * k;
   const strokes = (a.strokes as Stroke[]).map((s) => ({ ...translateStroke(scaleStroke(s, 0, 0, k), x0, y0), id: uid('s') }));
-  return { strokes, baseline: y0 + ((Number(a.h) || 0) - (Number(a.drop) || 0)) * k };
+  return { strokes, baseline };
 }
 
 /** Returns true if recent strokes were folded into the text as an inline sketch. */
@@ -250,6 +256,41 @@ export function findTextDropTarget(editor: Editor, wrap: HTMLElement, scale: num
     roomAbove: baseline - lineTop - 0.5,
     roomBelow: lineTop + lineHeight - baseline - 0.5,
   };
+}
+
+/**
+ * Top-level blocks whose typed letters a box (layer coordinates) would cover.
+ * Only the letters count, so ink beside a short line, on an empty line, on a
+ * handwriting area or on an image or equation is fine.
+ */
+export function textBlocksUnder(editor: Editor, wrap: HTMLElement, scale: number, box: { minX: number; minY: number; maxX: number; maxY: number }): number[] {
+  const view = editor.view;
+  const wr = wrap.getBoundingClientRect();
+  const out: number[] = [];
+  view.state.doc.forEach((node, offset, index) => {
+    if (node.type.name === 'inkBlock' || !node.textContent.trim()) return;
+    const el = view.nodeDOM(offset);
+    if (!(el instanceof HTMLElement)) return;
+    const r = el.getBoundingClientRect();
+    if ((r.bottom - wr.top) / scale < box.minY || (r.top - wr.top) / scale > box.maxY) return;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+      if (!t.textContent?.trim()) continue;
+      range.selectNodeContents(t);
+      for (const q of range.getClientRects()) {
+        const minX = (q.left - wr.left) / scale;
+        const maxX = (q.right - wr.left) / scale;
+        const minY = (q.top - wr.top) / scale;
+        const maxY = (q.bottom - wr.top) / scale;
+        if (minX < box.maxX - 1 && maxX > box.minX + 1 && minY < box.maxY - 1 && maxY > box.minY + 1) {
+          out.push(index);
+          return;
+        }
+      }
+    }
+  });
+  return out;
 }
 
 /**

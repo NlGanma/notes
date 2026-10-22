@@ -170,6 +170,33 @@ const quantile = (v: number[], q: number) => {
 export function clusterBlob(items: PlacedStroke[], seed: number, line: number): number[] {
   const n = items.length;
   if (seed < 0 || seed >= n) return [];
+  const g = linkStrokes(items, line);
+  // A tall loop picked up by its outline (a cell with its parts drawn inside,
+  // a box around a diagram) brings what is inside it.
+  if (g.kind[seed] === TALL && g.loop(seed)) {
+    for (let o = 0; o < n; o++) if (o !== seed && g.hl[o] === g.hl[seed] && inside(g.raw[seed], g.raw[o])) g.union(seed, o);
+  }
+  const r = g.find(seed);
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) if (g.find(i) === r) out.push(i);
+  return out;
+}
+
+/** Every blob on the page, as lists of indices into `items`. */
+export function blobGroups(items: PlacedStroke[], line: number): number[][] {
+  const g = linkStrokes(items, line);
+  const groups = new Map<number, number[]>();
+  for (let i = 0; i < items.length; i++) {
+    const r = g.find(i);
+    const list = groups.get(r);
+    if (list) list.push(i);
+    else groups.set(r, [i]);
+  }
+  return [...groups.values()];
+}
+
+function linkStrokes(items: PlacedStroke[], line: number) {
+  const n = items.length;
   const gap = line * 0.2;
   const maxGap = line * 0.3;
   const allow = descenderAllowance(line);
@@ -180,12 +207,27 @@ export function clusterBlob(items: PlacedStroke[], seed: number, line: number): 
   for (let i = 0; i < n; i++) {
     const { stroke, top } = items[i];
     const r = shift(rawBounds(stroke), top);
-    const h = r.maxY - r.minY;
-    const w = r.maxX - r.minX;
     raw.push(r);
-    kind.push(h > line * 1.25 ? TALL : h >= line * 0.25 || w > line * 1.5 ? ANCHOR : SMALL);
+    kind.push(r.maxY - r.minY > line * 1.25 ? TALL : ANCHOR);
     row.push(Math.floor((r.maxY - allow) / line));
     hl.push(stroke.brush === 'highlighter');
+  }
+  // Small marks (dots, bars, accents) are small next to the letters around
+  // them, not next to the ruled line: in small writing, or writing done
+  // zoomed in, every letter is shorter than a quarter of a line.
+  const heights = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const h = raw[i].maxY - raw[i].minY;
+    if (kind[i] === TALL || h < line * 0.1) continue;
+    const list = heights.get(row[i]);
+    if (list) list.push(h);
+    else heights.set(row[i], [h]);
+  }
+  for (let i = 0; i < n; i++) {
+    if (kind[i] === TALL) continue;
+    const list = heights.get(row[i]) ?? [];
+    const cut = list.length >= 3 ? Math.min(line * 0.25, quantile(list, 0.5) * 0.6) : line * 0.25;
+    if (raw[i].maxY - raw[i].minY < cut && raw[i].maxX - raw[i].minX <= line * 1.5) kind[i] = SMALL;
   }
 
   // Each written line: how far apart its letters may be, and where their bodies are.
@@ -375,10 +417,7 @@ export function clusterBlob(items: PlacedStroke[], seed: number, line: number): 
     if (best >= 0) union(root, best);
   }
 
-  const r = find(seed);
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) if (find(i) === r) out.push(i);
-  return out;
+  return { find, union, kind, raw, hl, loop: isLoopAt };
 }
 
 // ------------------------------------------------------------------ baseline
@@ -473,7 +512,11 @@ export function estimateBaseline(items: PlacedStroke[], line: number): number | 
 
 export interface SnapTarget {
   x: number;
-  kind: 'margin' | 'text';
+  /** The text column's edge, the end of a line of text, or handwriting on the line above or below. */
+  kind: 'margin' | 'text' | 'ink';
+  /** For handwriting: how far up and down it reaches (so the guide can join the two). */
+  top?: number;
+  bottom?: number;
 }
 
 export interface SnapInput {
@@ -484,8 +527,10 @@ export interface SnapInput {
   dx: number;
   dy: number;
   line: number;
-  /** How close (layer px) the blob must come to a line or edge to snap. */
+  /** How close (layer px) the blob's baseline must come to a ruled line to snap (half a line: always). */
   tol: number;
+  /** How close its left edge must come to an edge to snap (defaults to `tol`). */
+  xTol?: number;
   /** Where the blob's left edge may snap to. */
   xTargets?: SnapTarget[];
 }
@@ -519,7 +564,7 @@ export function snapMove(s: SnapInput): SnapResult {
   }
   let x: SnapTarget | null = null;
   const left = s.box.minX + dx;
-  let bestD = s.tol;
+  let bestD = s.xTol ?? s.tol;
   for (const t of s.xTargets ?? []) {
     const d = Math.abs(t.x - left);
     if (d <= bestD) {

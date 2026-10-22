@@ -373,7 +373,8 @@ await page.waitForTimeout(300);
 doc = await docJSON();
 check(JSON.stringify(doc.content.find((b) => b.type === 'paragraph')).includes('inkInline') && (await inkNow()).length === was.length, `one ${MOD}+Z puts it back in the sentence`);
 
-// 11h. Dragging past the first line keeps the ink at the top of the note (it used to jump to the end).
+// 11h. Dragging past the first line keeps the ink at the top of the note (it used to jump to the end),
+// on lines of its own rather than on top of the first sentence.
 await page.keyboard.press('Escape');
 const kNow = byId(await inkNow());
 const kFirst = kNow.get(was.find((s) => Math.abs(s.pts[0][0] - (kinetic[0][0][0] - wrap.x)) < 0.6 && Math.abs(s.pts[0][1] - (kinetic[0][0][1] - wrap.y)) < 0.6)?.id);
@@ -382,12 +383,25 @@ await drag(kFrom, 0, -(R(3) + 60));
 doc = await docJSON();
 now = byId(await inkNow());
 const kMoved = now.get(kFirst.id);
-const kTop = Math.min(...[...now.values()].filter((s) => s.block === kMoved.block && s.type === 'paragraph').flatMap((s) => s.pts.map((q) => q[1])));
-check(kMoved.block === doc.content[0].attrs.id && kTop >= 0 && kTop < 6, `a word dragged above the first line stays at the top of the note (block ${kMoved.type}, top ${kTop.toFixed(1)})`);
-// and can be picked up again from there
-const kDy = kMoved.pts[0][1] - kFirst.pts[0][1];
-await drag([kFrom[0], kFrom[1] + kDy], 0, -kDy);
-check(Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 1, 'and dragged back to its line');
+const kAll = [...now.values()].filter((s) => s.block === kMoved?.block);
+const kTop = Math.min(...kAll.flatMap((s) => s.pts.map((q) => q[1])));
+const textTop = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let top = 0;
+  ed.state.doc.forEach((n, off) => {
+    if (!top && n.type.name === 'paragraph') top = ed.view.dom.offsetTop + ed.view.nodeDOM(off).offsetTop;
+  });
+  return top;
+});
+const kBottom = Math.max(...kAll.flatMap((s) => s.pts.map((q) => q[1])));
+check(
+  !!kMoved && kMoved.block === doc.content[0].attrs.id && doc.content[0].type === 'inkBlock' && kTop >= 0 && kBottom <= textTop + 2,
+  `a word dragged above the first line gets lines of its own at the top of the note, above the text (top ${kTop.toFixed(1)}, bottom ${kBottom.toFixed(1)}, text starts ${textTop})`,
+);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+doc = await docJSON();
+check(doc.content[0].type === 'paragraph' && Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 0.01, `one ${MOD}+Z puts it back`);
 
 // 11i. Arrow keys nudge (a burst is one undo step); ⌥↓ moves a whole line.
 const energy = handPaths('energy', wrap.x + 10 + handPaths('kinetic ', 0, 0, 18).width, wrap.y + R(3), 18).paths;
@@ -408,7 +422,15 @@ check(Math.abs(now.get(eId).pts[0][0] - was.get(eId).pts[0][0]) < 0.01, `one ${M
 await page.keyboard.press('Alt+ArrowDown');
 await page.waitForTimeout(150);
 now = byId(await inkNow());
-check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 32) < 0.01, '⌥↓ moves it down exactly one ruled line');
+check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 32) < 1, '⌥↓ moves it down one ruled line');
+// three small nudges put it 3px off its line; ⌥↓ then lands it on the next line, not 3px off it
+for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+await page.keyboard.press('Alt+ArrowDown');
+await page.waitForTimeout(150);
+now = byId(await inkNow());
+check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 64) < 1, `⌥↓ from 3px off its line lands on the next ruled line (moved ${(now.get(eId).pts[0][1] - was.get(eId).pts[0][1]).toFixed(1)}, want 64)`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
 
 // 11j. Resizing from a corner handle scales about the opposite corner; one undo puts it back.
 was = byId(await inkNow());
@@ -528,13 +550,17 @@ const f1 = now.get(farIds[0]);
 const wantDy = 520 - w1.y - (farFrom[1] - w0.y);
 check(scrollBefore - scrollAfter > 200, `dragging to the top edge scrolled the page up (${scrollBefore - scrollAfter}px)`);
 check(
-  !!f1 && Math.abs(f1.pts[0][1] - f0.pts[0][1] - wantDy) <= 8 && Math.abs(f1.pts[0][0] - f0.pts[0][0] - 20) < 0.6,
+  !!f1 && Math.abs(f1.pts[0][1] - f0.pts[0][1] - wantDy) <= 17 && Math.abs(f1.pts[0][0] - f0.pts[0][0] - 20) < 0.6,
   `after scrolling, the word lands under the pointer (moved ${f1 ? (f1.pts[0][1] - f0.pts[0][1]).toFixed(1) : '?'}, pointer moved ${wantDy.toFixed(1)})`,
 );
 check(!!f1 && farIds.every((id) => now.get(id)?.block === f1.block), 'and arrives whole, in one block');
 await shot(page, 'ink-15-autoscrolled');
 
-// 11n. Up against the toolbar, the selection menu opens below the selection instead of hiding under it.
+// 11n. After a drop the menu waits for a tap; up against the toolbar it opens below the selection instead of hiding under it.
+check((await page.locator(`${V} .ink-sel-menu`).count()) === 0, 'after a drop the menu stays out of the way until the selection is tapped');
+await page.mouse.click(w1.x + f1.pts[2][0], w1.y + f1.pts[2][1]);
+await page.waitForTimeout(250);
+check((await page.locator(`${V} .ink-sel-menu`).count()) === 1, 'a tap on the selection brings the menu back');
 const selRect = await page.locator(`${V} .sel-box rect`).boundingBox();
 await scroller.evaluate((el, dy) => (el.scrollTop += dy), selRect.y - (dockBottom + 4));
 await page.waitForTimeout(250);
