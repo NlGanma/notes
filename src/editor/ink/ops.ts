@@ -133,6 +133,25 @@ export function applyInkEdits(
   return created;
 }
 
+/**
+ * Makes room for handwriting between blocks: a new handwriting area of
+ * `height` before block `index` (or at the end), holding `strokes` (already
+ * relative to its top), as one undo step. `before` runs first in the same
+ * step (taking the strokes from where they were). Returns the area's id.
+ */
+export function insertInkArea(editor: Editor, index: number, strokes: Stroke[], height: number, before?: (tr: Transaction) => void): string {
+  const tr = editor.state.tr;
+  before?.(tr);
+  let at = tr.doc.content.size;
+  tr.doc.forEach((_node, pos, i) => {
+    if (i === index) at = pos;
+  });
+  const node = editor.schema.nodes.inkBlock.create({ id: uid('b'), ink: strokes, height });
+  tr.insert(at, node);
+  dispatch(editor, tr);
+  return node.attrs.id as string;
+}
+
 /** Takes an inline sketch out of the text, with the extra space it would leave behind. */
 export function removeInlineNode(tr: Transaction, pos: number) {
   const node = tr.doc.nodeAt(pos);

@@ -442,6 +442,14 @@
   stroke: var(--accent);
   stroke-linecap: round;
 }
+/* the lines that open between two blocks when ink can't land on the text */
+.room-band {
+  fill: rgba(33, 96, 232, 0.045);
+}
+.room-line {
+  stroke: var(--accent);
+  stroke-linecap: round;
+}
 .snip-rect rect {
   fill: rgba(107, 79, 224, 0.05);
   stroke: var(--ai);
@@ -569,16 +577,22 @@
   color: var(--text-3);
   margin-top: 6px;
 }
+/* Only the grip resizes the area: a full-width strip swallowed the first pen
+   stroke on the next line. Pens and erasers write straight through it. */
 .ink-resize {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
+  width: 48px;
+  margin-left: -24px;
   bottom: -5px;
   height: 10px;
   cursor: ns-resize !important;
   display: grid;
   place-items: center;
   z-index: 4;
+}
+.page:is(.tool-pen, .tool-highlighter, .tool-eraser, .tool-shapes, .tool-ask) .ink-resize {
+  pointer-events: none;
 }
 .ink-resize span {
   width: 36px;
@@ -930,6 +944,10 @@
   color: var(--text-3);
   padding: 0 10px 0 4px;
   white-space: nowrap;
+  /* in a narrow window it shortens rather than disappears */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tb-hint.is-ai {
   color: var(--ai);
@@ -1494,7 +1512,6 @@
 
 /* The palette tucks secondary controls away as the page area narrows. */
 @container notescroll (max-width: 900px) {
-  .tb-hint,
   .tb-ask-label {
     display: none;
   }

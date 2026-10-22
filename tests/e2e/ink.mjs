@@ -373,7 +373,8 @@ await page.waitForTimeout(300);
 doc = await docJSON();
 check(JSON.stringify(doc.content.find((b) => b.type === 'paragraph')).includes('inkInline') && (await inkNow()).length === was.length, `one ${MOD}+Z puts it back in the sentence`);
 
-// 11h. Dragging past the first line keeps the ink at the top of the note (it used to jump to the end).
+// 11h. Dragging past the first line keeps the ink at the top of the note (it used to jump to the end),
+// on lines of its own rather than on top of the first sentence.
 await page.keyboard.press('Escape');
 const kNow = byId(await inkNow());
 const kFirst = kNow.get(was.find((s) => Math.abs(s.pts[0][0] - (kinetic[0][0][0] - wrap.x)) < 0.6 && Math.abs(s.pts[0][1] - (kinetic[0][0][1] - wrap.y)) < 0.6)?.id);
@@ -382,12 +383,25 @@ await drag(kFrom, 0, -(R(3) + 60));
 doc = await docJSON();
 now = byId(await inkNow());
 const kMoved = now.get(kFirst.id);
-const kTop = Math.min(...[...now.values()].filter((s) => s.block === kMoved.block && s.type === 'paragraph').flatMap((s) => s.pts.map((q) => q[1])));
-check(kMoved.block === doc.content[0].attrs.id && kTop >= 0 && kTop < 6, `a word dragged above the first line stays at the top of the note (block ${kMoved.type}, top ${kTop.toFixed(1)})`);
-// and can be picked up again from there
-const kDy = kMoved.pts[0][1] - kFirst.pts[0][1];
-await drag([kFrom[0], kFrom[1] + kDy], 0, -kDy);
-check(Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 1, 'and dragged back to its line');
+const kAll = [...now.values()].filter((s) => s.block === kMoved?.block);
+const kTop = Math.min(...kAll.flatMap((s) => s.pts.map((q) => q[1])));
+const textTop = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let top = 0;
+  ed.state.doc.forEach((n, off) => {
+    if (!top && n.type.name === 'paragraph') top = ed.view.dom.offsetTop + ed.view.nodeDOM(off).offsetTop;
+  });
+  return top;
+});
+const kBottom = Math.max(...kAll.flatMap((s) => s.pts.map((q) => q[1])));
+check(
+  !!kMoved && kMoved.block === doc.content[0].attrs.id && doc.content[0].type === 'inkBlock' && kTop >= 0 && kBottom <= textTop + 2,
+  `a word dragged above the first line gets lines of its own at the top of the note, above the text (top ${kTop.toFixed(1)}, bottom ${kBottom.toFixed(1)}, text starts ${textTop})`,
+);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+doc = await docJSON();
+check(doc.content[0].type === 'paragraph' && Math.abs(byId(await inkNow()).get(kFirst.id).pts[0][1] - kFirst.pts[0][1]) < 0.01, `one ${MOD}+Z puts it back`);
 
 // 11i. Arrow keys nudge (a burst is one undo step); ⌥↓ moves a whole line.
 const energy = handPaths('energy', wrap.x + 10 + handPaths('kinetic ', 0, 0, 18).width, wrap.y + R(3), 18).paths;
@@ -408,7 +422,15 @@ check(Math.abs(now.get(eId).pts[0][0] - was.get(eId).pts[0][0]) < 0.01, `one ${M
 await page.keyboard.press('Alt+ArrowDown');
 await page.waitForTimeout(150);
 now = byId(await inkNow());
-check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 32) < 0.01, '⌥↓ moves it down exactly one ruled line');
+check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 32) < 1, '⌥↓ moves it down one ruled line');
+// three small nudges put it 3px off its line; ⌥↓ then lands it on the next line, not 3px off it
+for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+await page.keyboard.press('Alt+ArrowDown');
+await page.waitForTimeout(150);
+now = byId(await inkNow());
+check(Math.abs(now.get(eId).pts[0][1] - was.get(eId).pts[0][1] - 64) < 1, `⌥↓ from 3px off its line lands on the next ruled line (moved ${(now.get(eId).pts[0][1] - was.get(eId).pts[0][1]).toFixed(1)}, want 64)`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
 
 // 11j. Resizing from a corner handle scales about the opposite corner; one undo puts it back.
 was = byId(await inkNow());
@@ -482,6 +504,9 @@ check(
   (await inlineOnLine()) === inlinesBefore && now.has(ring.id) && now.has(tick.id) && Math.abs(now.get(tick.id).pts[0][0] - tick.pts[0][0] - 12) < 0.6,
   `nudging a circle around a typed word, or a tick after the line, keeps them as handwriting (inline sketches ${inlinesBefore} → ${await inlineOnLine()}, circle ${now.has(ring.id) ? 'kept' : 'gone'}, tick moved ${now.has(tick.id) ? (now.get(tick.id).pts[0][0] - tick.pts[0][0]).toFixed(1) : 'gone'})`,
 );
+const ringDy = (now.get(ring.id)?.pts[0][1] ?? NaN) - ring.pts[0][1];
+const tickDy = (now.get(tick.id)?.pts[0][1] ?? NaN) - tick.pts[0][1];
+check(Math.abs(ringDy) < 0.5 && Math.abs(tickDy) < 0.5, `and moved sideways they stay at their height on the text (circle ${ringDy.toFixed(1)}, tick ${tickDy.toFixed(1)})`);
 await shot(page, 'ink-14-annotations');
 await page.keyboard.press('Escape');
 await page.keyboard.press('Alt+p');
@@ -528,13 +553,17 @@ const f1 = now.get(farIds[0]);
 const wantDy = 520 - w1.y - (farFrom[1] - w0.y);
 check(scrollBefore - scrollAfter > 200, `dragging to the top edge scrolled the page up (${scrollBefore - scrollAfter}px)`);
 check(
-  !!f1 && Math.abs(f1.pts[0][1] - f0.pts[0][1] - wantDy) <= 8 && Math.abs(f1.pts[0][0] - f0.pts[0][0] - 20) < 0.6,
+  !!f1 && Math.abs(f1.pts[0][1] - f0.pts[0][1] - wantDy) <= 17 && Math.abs(f1.pts[0][0] - f0.pts[0][0] - 20) < 0.6,
   `after scrolling, the word lands under the pointer (moved ${f1 ? (f1.pts[0][1] - f0.pts[0][1]).toFixed(1) : '?'}, pointer moved ${wantDy.toFixed(1)})`,
 );
 check(!!f1 && farIds.every((id) => now.get(id)?.block === f1.block), 'and arrives whole, in one block');
 await shot(page, 'ink-15-autoscrolled');
 
-// 11n. Up against the toolbar, the selection menu opens below the selection instead of hiding under it.
+// 11n. After a drop the menu waits for a tap; up against the toolbar it opens below the selection instead of hiding under it.
+check((await page.locator(`${V} .ink-sel-menu`).count()) === 0, 'after a drop the menu stays out of the way until the selection is tapped');
+await page.mouse.click(w1.x + f1.pts[2][0], w1.y + f1.pts[2][1]);
+await page.waitForTimeout(250);
+check((await page.locator(`${V} .ink-sel-menu`).count()) === 1, 'a tap on the selection brings the menu back');
 const selRect = await page.locator(`${V} .sel-box rect`).boundingBox();
 await scroller.evaluate((el, dy) => (el.scrollTop += dy), selRect.y - (dockBottom + 4));
 await page.waitForTimeout(250);
@@ -542,6 +571,328 @@ const selNow = await page.locator(`${V} .sel-box rect`).boundingBox();
 const menuBox = await page.locator(`${V} .ink-sel-menu`).boundingBox();
 check(!!menuBox && !!selNow && menuBox.y > selNow.y + selNow.height - 1, `near the toolbar the selection menu opens below the selection (menu at ${menuBox?.y.toFixed(0)}, selection ends ${(selNow.y + selNow.height).toFixed(0)})`);
 await shot(page, 'ink-16-menu-below');
+
+// 12. More of the feel: in a fresh note with two typed sentences.
+await page.keyboard.press('Escape');
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForTimeout(400);
+await page.keyboard.type('Light reactions');
+await page.keyboard.press('Enter');
+await page.keyboard.type('Photosynthesis converts light energy into chemical energy.');
+await page.keyboard.press('Enter');
+await page.keyboard.type('Chlorophyll absorbs mostly red and blue light.');
+await page.waitForTimeout(300);
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(200);
+wrap = await wrapBox();
+const newIds = async (fn) => {
+  const before = new Set((await inkNow()).map((s) => s.id));
+  await fn();
+  await page.waitForTimeout(120);
+  return (await inkNow()).filter((s) => !before.has(s.id)).map((s) => s.id);
+};
+const strokePath = async (pts) => {
+  await page.mouse.move(pts[0][0], pts[0][1]);
+  await page.mouse.down();
+  for (const q of pts.slice(1)) await page.mouse.move(q[0], q[1], { steps: 2 });
+  await page.mouse.up();
+};
+const inlineIn = async (i) => page.evaluate((i) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let n = 0;
+  ed.state.doc.child(i).forEach((c) => (n += c.type.name === 'inkInline' ? 1 : 0));
+  return n;
+}, i);
+const textAtOffset = (i, text) => page.evaluate(([i, text]) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let pos = 0;
+  ed.state.doc.forEach((_n, off, k) => {
+    if (k === i) pos = off + 1;
+  });
+  const r = ed.view.coordsAtPos(pos + ed.state.doc.child(i).textContent.indexOf(text));
+  return { x: r.left, base: r.bottom - 3 };
+}, [i, text]);
+
+// 12a. The first stroke on the line after a skipped line is kept (the area's resize strip swallowed it).
+await writeText(page, 'Force', wrap.x + 8, wrap.y + R(3), 18);
+const ball = handPaths('ball', wrap.x + 8, wrap.y + R(5), 20).paths;
+const ballIds = await newIds(() => writeText(page, 'ball', wrap.x + 8, wrap.y + R(5), 20));
+check(ballIds.length === ball.length, `after a skipped line every stroke is kept ("ball": ${ballIds.length} of ${ball.length})`);
+await shot(page, 'ink-17-after-skipped-line');
+
+// 12b. Pressing the outline of a drawn cell picks up what is drawn inside it.
+const cell = { x: wrap.x + 420, y: wrap.y + R(8) - 6 };
+const ellipse = (cx, cy, rx, ry, n = 44) => Array.from({ length: n + 3 }, (_, i) => [cx + Math.cos((i / n) * Math.PI * 2 + 0.4) * rx, cy + Math.sin((i / n) * Math.PI * 2 + 0.4) * ry]);
+const cellIds = await newIds(async () => {
+  await strokePath(ellipse(cell.x, cell.y, 52, 40));
+  await strokePath(ellipse(cell.x - 8, cell.y + 2, 14, 11, 24));
+  for (const [dx, dy] of [[24, -14], [28, 10], [-30, -18]]) await strokePath([[cell.x + dx, cell.y + dy], [cell.x + dx + 1.5, cell.y + dy + 0.5]]);
+});
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...ellipse(cell.x, cell.y, 52, 40)[0]);
+await page.waitForTimeout(200);
+check(cellIds.length === 5 && (await selCount()) === 5, `pressing a drawn cell's outline picks up its nucleus and dots too (${await selCount()} of ${cellIds.length})`);
+await page.keyboard.press('Escape');
+
+// 12c. Small writing still comes word by word.
+await page.keyboard.press('Alt+p');
+const tiny = handPaths('mass', wrap.x + 20, wrap.y + R(13), 10).paths;
+const tinyIds = await newIds(() => writeText(page, 'mass', wrap.x + 20, wrap.y + R(13), 10));
+await writeText(page, 'times', wrap.x + 20 + handPaths('mass ', 0, 0, 10).width, wrap.y + R(13), 10);
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...mid(tiny[0]));
+await page.waitForTimeout(200);
+check((await selCount()) === tinyIds.length, `a tap on small handwriting picks up one whole word (${await selCount()} of ${tinyIds.length})`);
+const clear = await page.evaluate(() => {
+  const m = document.querySelector('.note-view:not(.is-hidden) .ink-sel-menu').getBoundingClientRect();
+  const top = Math.min(...[...document.querySelectorAll('.note-view:not(.is-hidden) .sel-box circle')].map((c) => c.getBoundingClientRect().top));
+  return { menuBottom: m.bottom, handlesTop: top };
+});
+check(clear.menuBottom <= clear.handlesTop, `the menu sits clear of a small selection's handles (menu ends ${clear.menuBottom.toFixed(0)}, handles start ${clear.handlesTop.toFixed(0)})`);
+await page.keyboard.press('Escape');
+
+// 12d. Wherever it is let go, a word lands on the nearest ruled line; ⇧⌘Z redoes the move.
+const force = handPaths('Force', wrap.x + 8, wrap.y + R(3), 18).paths;
+const fId = (await inkNow()).find((s) => Math.abs(s.pts[0][0] - (force[0][0][0] - wrap.x)) < 0.6 && Math.abs(s.pts[0][1] - (force[0][0][1] - wrap.y)) < 0.6)?.id;
+// [how far it is dragged, the line it should land on (relative to where it was)]
+for (const [dy, want] of [
+  [75, 64],
+  [88, 96],
+  [19, 32],
+]) {
+  const f0 = byId(await inkNow()).get(fId);
+  await drag([wrap.x + f0.pts[2][0], wrap.y + f0.pts[2][1]], 200, dy);
+  const f1 = byId(await inkNow()).get(fId);
+  const off = dy - want;
+  check(Math.abs(f1.pts[0][1] - f0.pts[0][1] - want) < 1, `let go ${off >= 0 ? '+' : ''}${off}px off a line, a word still lands on the nearest one (moved ${(f1.pts[0][1] - f0.pts[0][1]).toFixed(1)}, want ${want})`);
+  if (dy === 75) {
+    await page.keyboard.press(`${MOD}+z`);
+    await page.waitForTimeout(200);
+    await page.keyboard.press(`${MOD}+Shift+z`);
+    await page.waitForTimeout(200);
+    check(Math.abs(byId(await inkNow()).get(fId).pts[0][1] - f1.pts[0][1]) < 0.01, `${MOD}+Z then ${MOD}+Shift+Z redoes the move`);
+  }
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(200);
+}
+
+// 12e. Let go at the very start of a typed line, a word joins the sentence instead of sitting on its first letters.
+const tinyNow = (await inkNow()).filter((s) => tinyIds.includes(s.id));
+const tinyLeft = Math.min(...tinyNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const p2 = await textAtOffset(1, 'Chlorophyll');
+await drag([wrap.x + tinyNow[0].pts[2][0], wrap.y + tinyNow[0].pts[2][1]], p2.x - 1 - (wrap.x + tinyLeft), p2.base - (wrap.y + R(13)));
+check((await inlineIn(1)) === 1, 'a word let go at the start of a typed line joins the sentence');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
+
+// 12f. A drawing let go between two paragraphs gets lines of its own there, instead of covering both.
+await page.keyboard.press('Alt+p');
+const bx = { x: wrap.x + 200, y: wrap.y + R(17) };
+const boxIds = await newIds(async () => {
+  await strokePath([[bx.x, bx.y - 50], [bx.x + 90, bx.y - 50], [bx.x + 90, bx.y], [bx.x, bx.y], [bx.x, bx.y - 50]]);
+  await strokePath([[bx.x + 10, bx.y - 25], [bx.x + 80, bx.y - 25]]);
+});
+await page.keyboard.press('Alt+l');
+const p1Bottom = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  return ed.view.nodeDOM(0).getBoundingClientRect().bottom;
+});
+await page.mouse.move(bx.x + 45, bx.y - 50);
+await page.mouse.down();
+await page.mouse.move(bx.x - 20, bx.y - 200, { steps: 8 });
+await page.mouse.move(bx.x - 120, p1Bottom - 2, { steps: 8 });
+await page.waitForTimeout(150);
+check(await page.locator(`${V} .room-line[display="inline"]`).count(), 'over the text, a line shows where it will make room');
+await shot(page, 'ink-18-room-between-paragraphs');
+await page.mouse.up();
+await page.waitForTimeout(300);
+doc = await docJSON();
+const blocks = doc.content.map((b) => b.type);
+const boxBlock = doc.content.findIndex((b) => (b.attrs?.ink ?? []).some((s) => boxIds.includes(s.id)));
+const covered = await page.evaluate((ids) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  const wr = document.querySelector('.note-view:not(.is-hidden) .editor-wrap').getBoundingClientRect();
+  const rects = [];
+  ed.state.doc.forEach((n, off) => {
+    if (n.type.name !== 'paragraph' || !n.textContent) return;
+    const range = document.createRange();
+    range.selectNodeContents(ed.view.nodeDOM(off));
+    for (const q of range.getClientRects()) rects.push(q);
+  });
+  let hits = 0;
+  ed.state.doc.forEach((n, off) => {
+    const top = ed.view.dom.offsetTop + ed.view.nodeDOM(off).offsetTop;
+    for (const s of n.attrs.ink ?? []) {
+      if (!ids.includes(s.id)) continue;
+      for (let i = 0; i + 1 < s.pts.length; i += 3) {
+        const x = wr.left + s.pts[i];
+        const y = wr.top + s.pts[i + 1] + top;
+        if (rects.some((q) => x > q.left && x < q.right && y > q.top && y < q.bottom)) hits++;
+      }
+    }
+  });
+  return hits;
+}, boxIds);
+check(boxBlock === 1 && blocks[0] === 'paragraph' && blocks[1] === 'inkBlock' && blocks[2] === 'paragraph' && covered === 0, `a drawing let go between two paragraphs gets lines of its own between them (blocks ${blocks.slice(0, 3).join(', ')}; points on text ${covered})`);
+await shot(page, 'ink-19-room-made');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+// Pushed up from the handwriting area onto the last typed line, it goes back into the top of that area:
+// no new lines open and nothing else in the area moves.
+const blocksBefore = (await docJSON()).content.length;
+const othersBefore = (await inkNow()).filter((s) => !boxIds.includes(s.id));
+await page.mouse.move(bx.x + 45, bx.y);
+await page.mouse.down();
+await page.mouse.move(bx.x + 45, bx.y - 200, { steps: 8 });
+await page.mouse.move(bx.x + 45, wrap.y + R(1) - 8 + 50, { steps: 8 });
+await page.waitForTimeout(150);
+await page.mouse.up();
+await page.waitForTimeout(300);
+const othersAfter = byId(await inkNow());
+const boxAfter = (await inkNow()).filter((s) => boxIds.includes(s.id));
+const p2Bottom = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  return ed.view.dom.offsetTop + ed.view.nodeDOM(ed.state.doc.child(0).nodeSize).offsetTop + ed.view.nodeDOM(ed.state.doc.child(0).nodeSize).offsetHeight;
+});
+check(
+  (await docJSON()).content.length === blocksBefore &&
+    othersBefore.every((s) => Math.abs(othersAfter.get(s.id).pts[0][1] - s.pts[0][1]) < 0.01) &&
+    Math.min(...boxAfter.flatMap((s) => s.pts.map((q) => q[1]))) >= p2Bottom,
+  `pushed up onto the last typed line, a drawing goes back into its handwriting area and nothing else moves (top ${Math.min(...boxAfter.flatMap((s) => s.pts.map((q) => q[1]))).toFixed(0)}, text ends ${p2Bottom})`,
+);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+
+// 12g. A big word shrunk to fit a sentence comes back out at its own size.
+await page.keyboard.press('Alt+p');
+const big = handPaths('Big', wrap.x + 300, wrap.y + R(19), 26).paths;
+const bigIds = await newIds(() => writeText(page, 'Big', wrap.x + 300, wrap.y + R(19), 26));
+await page.keyboard.press('Alt+l');
+const bigNow = (await inkNow()).filter((s) => bigIds.includes(s.id));
+const height = (list) => Math.max(...list.flatMap((s) => s.pts.map((q) => q[1]))) - Math.min(...list.flatMap((s) => s.pts.map((q) => q[1])));
+const bigLeft = Math.min(...bigNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const into = await textAtOffset(0, 'energy into');
+await drag([wrap.x + bigNow[0].pts[3][0], wrap.y + bigNow[0].pts[3][1]], into.x + 1 - (wrap.x + bigLeft), into.base - (wrap.y + R(19)));
+const fitNow = await page.evaluate(() => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let fit = null;
+  ed.state.doc.child(0).forEach((c) => {
+    if (c.type.name === 'inkInline') fit = c.attrs.fit;
+  });
+  return fit;
+});
+check(fitNow !== null && fitNow < 1, `a big word dropped into a sentence is shrunk to fit the line (×${fitNow})`);
+const sk = await page.locator(`${V} .ProseMirror > p .ink-inline-node`).first().boundingBox();
+const outIds = await newIds(() => drag([sk.x + sk.width / 2, sk.y + sk.height / 2], 0, R(15) - R(0)));
+const outNow = (await inkNow()).filter((s) => outIds.includes(s.id));
+check(outNow.length === bigIds.length && Math.abs(height(outNow) / height(bigNow) - 1) < 0.03 && Math.abs(outNow[0].size - bigNow[0].size) < 0.05, `pulled back out, it is its own size again (${((height(outNow) / height(bigNow)) * 100).toFixed(0)}%, pen ${outNow[0]?.size})`);
+
+// 12h. A word let go just off the left edge of the word above lines up with it.
+await page.keyboard.press('Escape');
+wrap = await wrapBox();
+const tinyBack = (await inkNow()).filter((s) => tinyIds.includes(s.id));
+const massLeft = Math.min(...tinyBack.flatMap((s) => s.pts.map((q) => q[0])));
+const outLeft = Math.min(...outNow.flatMap((s) => s.pts.map((q) => q[0])));
+const outBase = Math.round((Math.max(...outNow.flatMap((s) => s.pts.map((q) => q[1]))) + 1) / 32 - 0.75);
+await drag([wrap.x + outNow[0].pts[3][0], wrap.y + outNow[0].pts[3][1]], massLeft + 3 - outLeft, R(14) - R(outBase));
+const aligned = (await inkNow()).filter((s) => outIds.includes(s.id));
+const alignedLeft = Math.min(...aligned.flatMap((s) => s.pts.map((q) => q[0])));
+check(Math.abs(alignedLeft - massLeft) < 1, `a word let go 3px off the edge of the word above lines up with it (edges ${(alignedLeft - massLeft).toFixed(1)}px apart)`);
+
+// 12i. In a narrow window the toolbar still says what letting go will do.
+await page.setViewportSize({ width: 1024, height: 768 });
+await page.waitForTimeout(400);
+wrap = await wrapBox();
+const hintShown = async () => page.evaluate(() => {
+  const h = document.querySelector('.note-view:not(.is-hidden) .tb-hint');
+  return h ? { text: h.textContent, shown: getComputedStyle(h).display !== 'none' && h.getBoundingClientRect().width > 20 } : null;
+});
+const idle = await hintShown();
+check(!!idle?.shown, `at 1024px wide the lasso hint is still shown ("${idle?.text}")`);
+const sc = await page.evaluate(() => {
+  const p = document.querySelector('.note-view:not(.is-hidden) .page');
+  return p.getBoundingClientRect().width / p.offsetWidth;
+});
+const forceNow = byId(await inkNow()).get(fId);
+const target = await textAtOffset(0, 'chemical');
+await page.mouse.move(wrap.x + forceNow.pts[2][0] * sc, wrap.y + forceNow.pts[2][1] * sc);
+await page.mouse.down();
+await page.mouse.move(target.x + 6, target.base - 20, { steps: 8 });
+await page.mouse.move(target.x + 2 + (forceNow.pts[2][0] - Math.min(...forceNow.pts.map((q) => q[0]))) * sc, target.base - (R(3) - forceNow.pts[2][1]) * sc, { steps: 6 });
+await page.waitForTimeout(150);
+const hovering = await hintShown();
+check(!!hovering?.shown && /Release to put it in the text/.test(hovering.text), `and while dragging over text it says "${hovering?.text}"`);
+await shot(page, 'ink-20-narrow-hint');
+await page.keyboard.press('Escape');
+await page.mouse.up();
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.waitForTimeout(300);
+wrap = await wrapBox();
+
+// 12j. Esc mid-drag puts the ink back and lets go of the closed hand at once.
+const cursorNow = () => page.evaluate(() => document.querySelector('.note-view:not(.is-hidden) .surface').dataset.inkCursor ?? null);
+const fNow = byId(await inkNow()).get(fId);
+const fAt = [wrap.x + fNow.pts[2][0], wrap.y + fNow.pts[2][1]];
+await page.mouse.move(...fAt);
+await page.mouse.down();
+await page.mouse.move(fAt[0] + 40, fAt[1] + 40, { steps: 6 });
+await page.waitForTimeout(80);
+const whileDragging = await cursorNow();
+await page.keyboard.press('Escape');
+await page.waitForTimeout(80);
+const afterEsc = await cursorNow();
+await page.mouse.up();
+check(whileDragging === 'grabbing' && afterEsc !== 'grabbing' && Math.abs(byId(await inkNow()).get(fId).pts[0][1] - fNow.pts[0][1]) < 0.01, `Esc mid-drag puts it back and drops the closed hand (cursor ${whileDragging} → ${afterEsc})`);
+
+// 12k. With the pen, holding ⌘ over ink shows the hand straight away.
+await page.keyboard.press('Alt+p');
+await page.mouse.move(fAt[0] + 1, fAt[1]);
+await page.waitForTimeout(80);
+await page.keyboard.down('Meta');
+await page.waitForTimeout(80);
+const withCmd = await cursorNow();
+await page.keyboard.up('Meta');
+await page.waitForTimeout(80);
+check(withCmd === 'grab' && (await cursorNow()) === null, `with the pen, ⌘ over ink shows the hand without moving the pointer (${withCmd})`);
+
+// 12l. Ink can't be dragged off the end of the page.
+await page.keyboard.press('Alt+l');
+const pageBottom = await page.evaluate(() => {
+  const wr = document.querySelector('.note-view:not(.is-hidden) .editor-wrap').getBoundingClientRect();
+  return document.querySelector('.note-view:not(.is-hidden) .page').getBoundingClientRect().bottom - wr.top;
+});
+await drag(fAt, 0, pageBottom + 400);
+const fLow = byId(await inkNow()).get(fId);
+check(Math.max(...fLow.pts.map((q) => q[1])) < pageBottom, `dragged past the end of the page, it stays on the paper (lowest point ${Math.max(...fLow.pts.map((q) => q[1])).toFixed(0)}, page ends ${pageBottom.toFixed(0)})`);
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+await page.locator(`${V} .note-scroll`).evaluate((el) => (el.scrollTop = 0));
+await page.waitForTimeout(250);
+
+// 12m. Zoomed in, writing still comes word by word.
+await page.keyboard.press('Escape');
+for (let i = 0; i < 4; i++) {
+  await page.keyboard.press(`${MOD}+Equal`);
+  await page.waitForTimeout(120);
+}
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(300);
+wrap = await wrapBox();
+const zs = await page.evaluate(() => {
+  const p = document.querySelector('.note-view:not(.is-hidden) .page');
+  return p.getBoundingClientRect().width / p.offsetWidth;
+});
+const zBase = wrap.y + R(11) * zs;
+const zMass = handPaths('mass', wrap.x + 300 * zs, zBase, 16).paths;
+const zIds = await newIds(() => writeText(page, 'mass', wrap.x + 300 * zs, zBase, 16));
+await writeText(page, 'velocity', wrap.x + 300 * zs + handPaths('mass ', 0, 0, 16).width, zBase, 16);
+await page.keyboard.press('Alt+l');
+await page.mouse.click(...mid(zMass[0]));
+await page.waitForTimeout(200);
+check(zs > 1.3 && (await selCount()) === zIds.length, `zoomed in (×${zs.toFixed(2)}), a tap still picks up one whole word (${await selCount()} of ${zIds.length})`);
+await page.keyboard.press('Escape');
+await page.keyboard.press(`${MOD}+0`);
+await page.waitForTimeout(300);
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');

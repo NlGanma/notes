@@ -5,6 +5,7 @@ import { recognizeShape } from '../../src/lib/ink/shapes';
 import type { Stroke } from '../../src/lib/ink/types';
 import {
   autoscrollSpeed,
+  blobGroups,
   clusterBlob,
   estimateBaseline,
   fitInline,
@@ -172,7 +173,56 @@ test('blobs ignore block boundaries, highlights, and boxes drawn around them', (
   const blob = clusterBlob(items, 3, line);
   assert.equal(blob.length, w.strokes.length);
   assert.ok(!blob.includes(items.length - 1) && !blob.includes(items.length - 2));
-  assert.deepEqual(clusterBlob(items, items.length - 1, line), [items.length - 1]);
+  // picked up by its outline, the box brings the word inside it (but not the highlight)
+  const boxed = clusterBlob(items, items.length - 1, line);
+  assert.equal(boxed.length, w.strokes.length + 1);
+  assert.ok(!boxed.includes(items.length - 2));
+});
+
+for (const cap of [9, 10, 12, 14]) {
+  test(`small writing still comes word by word (cap ${cap} on 32px lines)`, () => {
+    const line = 32;
+    const base = ruleY(4, line);
+    const words = ['tint', 'lit', 'tilt'];
+    let x = 0;
+    const ws = words.map((t) => {
+      const w = word(t, x, base, cap);
+      x = w.next;
+      return w;
+    });
+    const items = place(ws.flatMap((w) => w.strokes));
+    let at = 0;
+    for (const w of ws) {
+      const want = w.strokes.map((s) => s.id).sort();
+      // from its first stroke, and from its last (an i-dot or a t-bar)
+      assert.deepEqual(ids(items, clusterBlob(items, at, line)), want);
+      assert.deepEqual(ids(items, clusterBlob(items, at + w.strokes.length - 1, line)), want);
+      at += w.strokes.length;
+    }
+  });
+}
+
+test('a cell drawn with its parts inside comes whole from its outline, a part alone from the part', () => {
+  const line = 32;
+  const ellipse = (cx: number, cy: number, rx: number, ry: number, n = 44) =>
+    pen(Array.from({ length: n + 3 }, (_, i) => [cx + Math.cos((i / n) * Math.PI * 2 + 0.4) * rx, cy + Math.sin((i / n) * Math.PI * 2 + 0.4) * ry] as [number, number]));
+  const membrane = ellipse(120, 120, 52, 40);
+  const nucleus = ellipse(112, 122, 14, 11, 24);
+  const dots = [pen(seg(144, 106, 145.5, 106.5, 1)), pen(seg(148, 130, 149.5, 130.5, 1)), pen(seg(90, 102, 91.5, 102.5, 1))];
+  const items = place([membrane, nucleus, ...dots]);
+  assert.equal(clusterBlob(items, 0, line).length, items.length);
+  assert.ok(!clusterBlob(items, 1, line).includes(0));
+});
+
+test('every blob on the page, once', () => {
+  const line = 32;
+  const a = word('tint', 0, ruleY(3, line), 18);
+  const b = word('lit', a.next, ruleY(3, line), 18);
+  const c = word('nil', 0, ruleY(5, line), 18);
+  const items = place([...a.strokes, ...b.strokes, ...c.strokes]);
+  const groups = blobGroups(items, line);
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups.flat().sort((x, y) => x - y), items.map((_, i) => i));
 });
 
 test('pressing on ink prefers pen strokes and does not grab a highlight from a line away', () => {
@@ -217,6 +267,20 @@ test('a dragged blob snaps its baseline to the nearest ruled line, and its edge 
   // highlights move by whole lines
   const hl = snapMove({ box, baseline: null, dx: 0, dy: 35, line, tol: 7 });
   assert.equal(hl.dy, 32);
+});
+
+test('with half a line of tolerance a drop always lands on the nearest ruled line; edges keep a short reach', () => {
+  const line = 32;
+  const box = { minX: 30, minY: 60, maxX: 90, maxY: 84 };
+  for (let off = -16; off <= 15; off++) {
+    const s = snapMove({ box, baseline: ruleY(2, line), dx: 25, dy: 2 * line + off, line, tol: line / 2, xTol: 7, xTargets: [{ x: 0, kind: 'margin' }] });
+    assert.equal(ruleY(2, line) + s.dy, ruleY(4, line), `offset ${off}`);
+    assert.equal(s.dx, 25);
+  }
+  const near = snapMove({ box, baseline: ruleY(2, line), dx: -26, dy: 0, line, tol: line / 2, xTol: 7, xTargets: [{ x: 0, kind: 'margin' }] });
+  assert.equal(near.dx, -30);
+  const far = snapMove({ box, baseline: ruleY(2, line), dx: -14, dy: 0, line, tol: line / 2, xTol: 7, xTargets: [{ x: 0, kind: 'margin' }] });
+  assert.equal(far.dx, -14);
 });
 
 test('a dropped blob lands in exactly one block', () => {

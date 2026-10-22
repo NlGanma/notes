@@ -23,19 +23,22 @@ import {
 import { recognizeShape, shapeFromDrag, straightenIfLinear } from '../../lib/ink/shapes';
 import { HIGHLIGHT_COLORS, INK_COLORS } from '../../lib/ink/brushes';
 import { useInkHint, useTools } from '../../state/tools';
+import { isElectron } from '../../lib/platform';
 import { rhythmKey } from '../extensions/rhythm';
 import type { Transaction } from '@tiptap/pm/state';
-import { appendInkBlock, appendStrokes, applyInkEdits, inkOf, removeInlineNode } from './ops';
+import { appendInkBlock, appendStrokes, applyInkEdits, gridCeil, inkOf, insertInkArea, removeInlineNode, removeStrokes } from './ops';
 import {
   autoscrollSpeed,
-  clusterBlob,
+  descenderAllowance,
   estimateBaseline,
   fitInline,
   frameCorners,
   hitSelection,
   isLoop,
+  pageBlobs,
   rawBounds,
   resolveDropTarget,
+  ruleY,
   selectionFrame,
   snapMove,
   strokeAt,
@@ -43,7 +46,15 @@ import {
   type SnapResult,
   type SnapTarget,
 } from './snap';
-import { findTextDropTarget, inlineSketchAttrs, inlineSketchStrokes, insertInlineSketch, textLineEnd, type TextDropTarget } from './typeFlow';
+import {
+  findTextDropTarget,
+  inlineSketchAttrs,
+  inlineSketchStrokes,
+  insertInlineSketch,
+  textBlocksUnder,
+  textLineEnd,
+  type TextDropTarget,
+} from './typeFlow';
 import { cx, uid } from '../../lib/util';
 import { SnipAsk, type AskMode } from './SnipAsk';
 
@@ -51,9 +62,13 @@ const EMPTY: Stroke[] = [];
 
 /** How far (screen px) a press on ink must travel before it becomes a drag; less is a tap. */
 const DRAG_START = 3;
-/** How close (screen px) a dragged blob must come to a ruled line or edge to snap to it. */
+/** How close (screen px) a dragged blob's edge must come to the margin or other writing to line up with it. */
 const SNAP = 7;
-const DROP_HINT = 'Release to put it in the text · hold ⌥ to keep it as ink';
+const DROP_HINT = 'Release to put it in the text · ⌥ keeps it as ink';
+const ROOM_HINT = 'Release to make room for it here · ⌥ places it on top';
+
+const isUi = (t: EventTarget | null) =>
+  t instanceof Element && !!t.closest('[data-ui], .math-editor, .ink-sel-menu, .snip-ask, button, input, textarea, a');
 
 /** Copied handwriting, shared by all notes so you can copy in one and paste in another. */
 let clipboard: Stroke[] | null = null;
@@ -133,6 +148,24 @@ interface Carried {
   inline: boolean;
   /** The line of text it started on (its top), if any: nudging a note written on the text keeps it a note. */
   home: number | null;
+  /** May sit on typed text: a highlight, a circle or box around words, an underline, or a note already on the text. */
+  overlay: boolean;
+  /** Left edges of the other handwriting it can line up with, and the ruled line each sits on. */
+  aligns: { x: number; k: number; top: number; bottom: number }[];
+  /** The page's edges (layer coordinates): dragged ink stays on the paper. */
+  limits: { left: number; right: number; bottom: number };
+}
+
+/**
+ * Where a drag would put the ink: snapped onto the page, into a line of text,
+ * into the handwriting area next to the text it would have covered (`into`),
+ * or into new lines it makes between two blocks of text (`room`).
+ */
+interface DropPlan {
+  snap: SnapResult;
+  text: TextDropTarget | null;
+  room: { index: number; y: number; dy: number; height: number } | null;
+  into: string | null;
 }
 
 type Gesture =
@@ -218,6 +251,14 @@ function placedAll(lay: InkLayout) {
   return p;
 }
 
+/** The page's blobs (words, symbols, drawings), worked out once per layout. */
+const blobsCache = new WeakMap<InkLayout, ReturnType<typeof pageBlobs>>();
+function blobsOf(lay: InkLayout, line: number) {
+  let b = blobsCache.get(lay);
+  if (!b) blobsCache.set(lay, (b = pageBlobs(placedAll(lay).items, line)));
+  return b;
+}
+
 /** Strokes of one block (memoised so typing elsewhere does not re-render ink). */
 const BlockInk = memo(function BlockInk({
   top,
@@ -268,6 +309,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   const [held, setHeld] = useState<'press' | 'drag' | null>(null);
   /** Strokes of a sketch being dragged out of the text. */
   const [popped, setPopped] = useState<Stroke[] | null>(null);
+  /** Just dropped: the menu waits for a tap, so it doesn't cover the next thing you reach for. */
+  const [quiet, setQuiet] = useState(false);
   const [overlay, setOverlay] = useState<{ lasso?: number[]; shape?: Stroke; snip?: Bounds } | null>(null);
   const [snip, setSnip] = useState<{ bounds: Bounds; capturing: boolean } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -286,9 +329,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   const baseRef = useRef<SVGLineElement>(null);
   const edgeRef = useRef<SVGLineElement>(null);
   const caretRef = useRef<SVGPathElement>(null);
+  const roomRef = useRef<SVGRectElement>(null);
+  const roomLineRef = useRef<SVGLineElement>(null);
   const paintRaf = useRef(0);
   const autoRaf = useRef(0);
   const lastNudge = useRef<{ at: number; doc: unknown } | null>(null);
+  /** The pointer's look over the page ('grab', 'grabbing', resize arrows) and what it was last over. */
+  const cursorKind = useRef<string | null>(null);
+  const hover = useRef<{ p: Pt; touch: boolean; target: EventTarget | null; mouse: boolean } | null>(null);
 
   // ---------------------------------------------------------------- layout
   useEffect(() => {
@@ -392,12 +440,86 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const inv = 1 / (propsRef.current.scale || 1);
     const i = strokeAt(items, p.x, p.y, (touch ? 9 : 4) * inv);
     if (i < 0) return null;
-    return clusterBlob(items, i, propsRef.current.line).map((k) => keys[k]);
+    return blobsOf(layoutRef.current, propsRef.current.line)
+      .pick(i)
+      .map((k) => keys[k]);
   }
 
   function inkUnder(p: Pt, touch: boolean): boolean {
     const { items } = placedAll(layoutRef.current);
     return strokeAt(items, p.x, p.y, (touch ? 9 : 4) / (propsRef.current.scale || 1)) >= 0;
+  }
+
+  // ---------------------------------------------------------------- pointer look
+  function setCursor(c: string | null) {
+    if (c === cursorKind.current) return;
+    cursorKind.current = c;
+    const el = (wrapRef.current?.closest('.surface') as HTMLElement | null) ?? wrapRef.current;
+    if (!el) return;
+    if (c) el.dataset.inkCursor = c;
+    else delete el.dataset.inkCursor;
+  }
+
+  /** A hand over ink you can pick up (with the lasso, or ⌘ and the pen), arrows over the resize handles. */
+  function hoverCursor(meta: boolean): string | null {
+    const h = hover.current;
+    if (!h || isUi(h.target)) return null;
+    const t = useTools.getState().tool;
+    const penGrab = (t === 'pen' || t === 'highlighter') && meta;
+    if (t !== 'lasso' && !penGrab) return null;
+    if (t === 'lasso' && h.target instanceof Element && h.target.closest('.ink-inline-node')) return 'grab';
+    const sel = selectionRef.current;
+    const hit = sel ? hitSelection(sel.bounds, h.p, 1 / (propsRef.current.scale || 1)) : null;
+    if (hit?.kind === 'handle' && t === 'lasso') return hit.corner === 0 || hit.corner === 3 ? 'nwse-resize' : 'nesw-resize';
+    if (hit || inkUnder(h.p, h.touch)) return 'grab';
+    return null;
+  }
+
+  /** The pen's dot follows the pointer, except while the hand shows. */
+  function showPenDot() {
+    const c = cursorRef.current;
+    if (!c) return;
+    const h = hover.current;
+    const t = useTools.getState().tool;
+    const show = (t === 'pen' || t === 'highlighter' || t === 'eraser') && !!h?.mouse && !cursorKind.current;
+    c.style.display = show ? '' : 'none';
+    if (show && h) c.setAttribute('transform', `translate(${h.p.x} ${h.p.y})`);
+  }
+
+  /** What a drag carries along (see Carried). `exclude`: the strokes being carried. */
+  function carry(placed: PlacedStroke[], box: Bounds, baseline: number | null, exclude: Set<string>, popped: boolean): Carried {
+    const { editor: ed, line: l } = propsRef.current;
+    const s = propsRef.current.scale || 1;
+    const wrap = wrapRef.current!;
+    const h = box.maxY - box.minY;
+    const w = box.maxX - box.minX;
+    const highlight = placed.some(({ stroke }) => stroke.brush === 'highlighter');
+    const loop = placed.some(({ stroke }) => isLoop(stroke) && rawBounds(stroke).maxY - rawBounds(stroke).minY >= l * 0.6);
+    const flat = h < l * 0.3 && w > l * 1.5;
+    // Highlights stay highlights, an underline isn't a word, and a circle or box drawn around words stays a drawing.
+    const inline = baseline !== null && !highlight && !loop && !flat && h <= l * 2.4 && w <= 420;
+    const probeX = (box.minX + box.maxX) / 2 >= 0 ? Math.max(1, box.minX) : box.minX;
+    const start = inline && !popped && baseline !== null ? findTextDropTarget(ed, wrap, s, { x: probeX, y: baseline - l * 0.25 }) : null;
+    const onText = !popped && textBlocksUnder(ed, wrap, s, box).length > 0;
+    // The left edges of the other handwriting on the page, to line up with.
+    const { items } = placedAll(layoutRef.current);
+    const aligns: Carried['aligns'] = [];
+    if (!highlight) {
+      for (const group of blobsOf(layoutRef.current, l).groups) {
+        const parts = group.map((i) => items[i]).filter(({ stroke }) => !exclude.has(stroke.id) && stroke.brush !== 'highlighter');
+        if (!parts.length) continue;
+        const bb = unionBounds(parts.map(({ stroke, top }) => offsetBounds(strokeBounds(stroke), 0, top)))!;
+        const b = estimateBaseline(parts, l) ?? bb.maxY;
+        aligns.push({ x: bb.minX, k: Math.round((b + 1) / l - 0.75), top: bb.minY, bottom: bb.maxY });
+      }
+    }
+    const page = wrap.closest('.page')?.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    const limits = page
+      ? { left: (page.left - wr.left) / s + 4, right: (page.right - wr.left) / s - 4, bottom: (page.bottom - wr.top) / s - 8 }
+      : { left: -Infinity, right: Infinity, bottom: Infinity };
+    // (a box or circle counts as drawn around words only if it is around words now)
+    return { box, baseline, inline, home: start?.top ?? null, overlay: highlight || flat || onText, aligns, limits };
   }
 
   function scheduleLive() {
@@ -521,14 +643,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
    * then selects them. Reads the page fresh rather than from the last layout,
    * so a layout a frame behind can't write back old ink.
    */
-  function place(strokes: Stroke[], remove: Set<string>, nudge?: 'first' | 'more', before?: (tr: Transaction) => void) {
+  function place(strokes: Stroke[], remove: Set<string>, nudge?: 'first' | 'more', before?: (tr: Transaction) => void, into?: string | null) {
     const { editor: ed, line: l } = propsRef.current;
     if (!strokes.length) return;
     const lay = measureLayout(ed);
     const edits = new Map<string, Stroke[]>();
     if (remove.size) for (const b of lay.blocks) if (b.ink.some((s) => remove.has(s.id))) edits.set(b.id, b.ink.filter((s) => !remove.has(s.id)));
     const bb = unionBounds(strokes.map(strokeBounds))!;
-    const target = resolveDropTarget(lay.blocks, (bb.minY + bb.maxY) / 2, l);
+    const target = (into && lay.blocks.find((b) => b.id === into)) || resolveDropTarget(lay.blocks, (bb.minY + bb.maxY) / 2, l);
     let tail: Stroke[] | undefined;
     if (target) {
       const list = edits.get(target.id) ?? [...inkOf(ed.state.doc.child(target.index))];
@@ -544,15 +666,15 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     setSelection(blockId ? selectionFromItems(strokes.map((s) => ({ blockId, strokeId: s.id })), next) : null);
   }
 
-  /** Moves the selection (`fn` maps each stroke, in layer coordinates) to wherever it now belongs. */
-  function moveSelection(fn: (s: Stroke) => Stroke, nudge?: 'first' | 'more') {
+  /** Moves the selection (`fn` maps each stroke, in layer coordinates) to wherever it now belongs (or into block `into`). */
+  function moveSelection(fn: (s: Stroke) => Stroke, nudge?: 'first' | 'more', into?: string | null) {
     const sel = selectionRef.current;
     if (!sel) return;
     const ids = new Set(sel.items.map((i) => i.strokeId));
     const lay = measureLayout(propsRef.current.editor);
     const moved: Stroke[] = [];
     for (const b of lay.blocks) for (const s of b.ink) if (ids.has(s.id)) moved.push(fn(translateStroke(s, 0, b.top)));
-    place(moved, ids, nudge);
+    place(moved, ids, nudge, undefined, into);
   }
 
   /** Drops the dragged ink (the selection, or a sketch pulled out of the text) into a line of text. */
@@ -584,6 +706,35 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       dom.classList.add('is-landed');
       setTimeout(() => dom.classList.remove('is-landed'), 900);
     }
+  }
+
+  /** Drops the dragged ink into new lines of its own between two blocks (pushing the text below down). */
+  function makeRoom(room: NonNullable<DropPlan['room']>, g: MoveGesture, dx: number) {
+    const ed = propsRef.current.editor;
+    const strokes: Stroke[] = [];
+    const remove = new Map<string, Set<string>>();
+    if (g.popped) strokes.push(...g.popped.strokes.map((s) => translateStroke(s, dx, room.dy)));
+    else {
+      const ids = new Set(selectionRef.current?.items.map((i) => i.strokeId));
+      for (const b of measureLayout(ed).blocks)
+        for (const s of b.ink) {
+          if (!ids.has(s.id)) continue;
+          strokes.push(translateStroke(s, dx, b.top + room.dy));
+          if (!remove.has(b.id)) remove.set(b.id, new Set());
+          remove.get(b.id)!.add(s.id);
+        }
+    }
+    if (!strokes.length) return;
+    const local = strokes.map((s) => translateStroke(s, 0, -room.y));
+    const popped = g.popped?.pos;
+    const id = insertInkArea(ed, room.index, local, room.height, (tr) => {
+      removeStrokes(tr, remove);
+      if (popped !== undefined) removeInlineNode(tr, popped);
+    });
+    const next = measureLayout(ed);
+    layoutRef.current = next;
+    setLayout(next);
+    setSelection(selectionFromItems(local.map((s) => ({ blockId: id, strokeId: s.id })), next));
   }
 
   function editSelected(fn: (s: Stroke) => Stroke | null, reselect = true) {
@@ -621,30 +772,91 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   function pasteStrokes(absStrokes: Stroke[], dx: number, dy: number) {
     const fresh = absStrokes.map((st) => ({ ...translateStroke(st, dx, dy), id: uid('s') }));
     useTools.getState().setTool('lasso');
+    setQuiet(false);
     place(fresh, new Set());
   }
 
   // ---------------------------------------------------------------- dragging
   /** Where the dragged selection would land right now: snapped to the page, or into a line of text. */
-  function resolveDrag(g: MoveGesture): { snap: SnapResult; text: TextDropTarget | null } {
+  function resolveDrag(g: MoveGesture): DropPlan & { free: SnapResult } {
     const { editor: ed, line: l } = propsRef.current;
     const s = propsRef.current.scale || 1;
-    const { box, baseline, inline } = g.carried;
-    // Ink stays on the page: above the first line it would sit over the title, out of reach.
-    const onPage = (r: SnapResult): SnapResult => (box.minY + r.dy < 0 ? { ...r, dy: -box.minY, rule: null } : r);
+    const { box, baseline, inline, home, limits } = g.carried;
+    // Ink stays on the paper: not off its edges, and not above the first line,
+    // where it would sit over the title out of reach. (Ink already past an
+    // edge isn't pushed back, only kept from going further.)
+    const right = Math.max(limits.right, box.maxX);
+    const left = Math.min(limits.left, box.minX);
+    const bottom = Math.max(limits.bottom, box.maxY);
+    const top = Math.min(0, box.minY);
+    const onPage = (r: SnapResult): SnapResult => {
+      let { dx, dy, rule, x } = r;
+      if (box.maxX + dx > right) [dx, x] = [right - box.maxX, null];
+      if (box.minX + dx < left) [dx, x] = [left - box.minX, null];
+      if (box.maxY + dy > bottom) [dy, rule] = [bottom - box.maxY, null];
+      if (box.minY + dy < top) [dy, rule] = [top - box.minY, null];
+      return { dx, dy, rule, x };
+    };
     const free = onPage({ dx: g.dx, dy: g.dy, rule: null, x: null });
-    if (g.alt || !wrapRef.current) return { snap: free, text: null };
+    const plan = (snap: SnapResult, text: TextDropTarget | null = null, room: DropPlan['room'] = null, into: string | null = null) => ({ snap, text, room, into, free });
+    if (g.alt || !wrapRef.current) return plan(free);
+    const wrap = wrapRef.current;
     if (inline && baseline !== null) {
-      const text = findTextDropTarget(ed, wrapRef.current, s, { x: box.minX + g.dx, y: baseline + g.dy - l * 0.25 });
-      if (text && (g.carried.home === null || Math.abs(text.top - g.carried.home) > 2)) return { snap: free, text };
+      // Probe just inside the text when the ink is over the column, so a word dropped at the very start of a line joins it.
+      const left = box.minX + g.dx;
+      const probeX = (box.minX + box.maxX) / 2 + g.dx >= 0 ? Math.max(1, left) : left;
+      const text = findTextDropTarget(ed, wrap, s, { x: probeX, y: baseline + g.dy - l * 0.25 });
+      // (too big to sit in a line without shrinking to a speck: it stays ink)
+      const fits = text && fitInline(baseline - box.minY, box.maxY - baseline, text.roomAbove, text.roomBelow) >= 0.5;
+      if (text && fits && (home === null || Math.abs(text.top - home) > 2)) return plan(free, text);
     }
-    const tol = Math.min(SNAP / s, l * 0.3);
-    // Snap to the lines first, then look for the end of a line of text at that height.
-    const { dy } = snapMove({ box, baseline, dx: g.dx, dy: g.dy, line: l, tol });
-    const xTargets: SnapTarget[] = [{ x: 0, kind: 'margin' }];
-    const end = textLineEnd(ed, wrapRef.current, s, (baseline ?? box.maxY) + dy - l * 0.25);
-    if (end !== null) xTargets.push({ x: end, kind: 'text' });
-    return { snap: onPage(snapMove({ box, baseline, dx: g.dx, dy: g.dy, line: l, tol, xTargets })), text: null };
+    // Always onto the nearest ruled line. The left edge lines up with the
+    // margin, the end of a line of text, or handwriting on the line above or
+    // below. Notes on the text (a circle round a word, a tick after a line)
+    // keep their height on it, moving by whole lines.
+    const xTol = Math.min(SNAP / s, l * 0.3);
+    const lineBase = g.carried.overlay || home !== null ? null : baseline;
+    const { dy } = snapMove({ box, baseline: lineBase, dx: g.dx, dy: g.dy, line: l, tol: l / 2 });
+    const base = (baseline ?? box.maxY) + dy;
+    const k = Math.round((base + 1) / l - 0.75);
+    const end = textLineEnd(ed, wrap, s, base - l * 0.25);
+    // (on a line of text the margin would put it on the first letters)
+    const xTargets: SnapTarget[] = [end === null ? { x: 0, kind: 'margin' } : { x: end, kind: 'text' }];
+    for (const a of g.carried.aligns) if (a.k === k - 1 || a.k === k + 1) xTargets.push({ x: a.x, kind: 'ink', top: a.top, bottom: a.bottom });
+    const snap = onPage(snapMove({ box, baseline: lineBase, dx: g.dx, dy: g.dy, line: l, tol: l / 2, xTol, xTargets }));
+    if (g.carried.overlay || baseline === null) return plan(snap);
+    // About to land on typed words: make room for it between the blocks
+    // instead, at the gap nearest to where it is being let go.
+    const at = offsetBounds(box, snap.dx, snap.dy);
+    const under = textBlocksUnder(ed, wrap, s, at);
+    if (!under.length) return plan(snap);
+    const mid = g.sy + g.dy;
+    let gap = { index: 0, y: 0, d: Infinity };
+    for (const b of layoutRef.current.blocks) {
+      if (!under.includes(b.index)) continue;
+      for (const [index, y] of [
+        [b.index, b.zoneStart],
+        [b.index + 1, b.zoneEnd],
+      ])
+        if (Math.abs(y - mid) < gap.d) gap = { index, y, d: Math.abs(y - mid) };
+    }
+    // Below the gap, its baseline goes on the first ruled line its top fits under.
+    const first = ruleY(Math.round(gap.y / l), l);
+    const newBase = first + Math.max(0, Math.ceil((gap.y + (baseline - box.minY) + 2 - first) / l)) * l;
+    const roomDy = newBase - baseline;
+    const height = Math.max(l, gridCeil(box.maxY + roomDy - gap.y - descenderAllowance(l), l));
+    const x = onPage(snapMove({ box, baseline, dx: g.dx, dy: roomDy, line: l, tol: 0, xTol, xTargets: [{ x: 0, kind: 'margin' }] }));
+    const landed: SnapResult = { dx: x.dx, dy: roomDy, rule: newBase, x: x.x };
+    // Next to a handwriting area it goes into that area (nothing moves when
+    // the area is below the gap; one above it grows). Only between two blocks
+    // of text do new lines open.
+    const blocks = layoutRef.current.blocks;
+    const below = blocks.find((b) => b.index === gap.index);
+    const above = blocks.find((b) => b.index === gap.index - 1);
+    if (below?.type === 'inkBlock') return plan(landed, null, null, below.id);
+    const room = { index: gap.index, y: gap.y, dy: roomDy, height };
+    if (above?.type === 'inkBlock') return plan(landed, null, room, above.id);
+    return plan(landed, null, room);
   }
 
   function requestPaint() {
@@ -666,10 +878,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     let box: Bounds;
     let text: TextDropTarget | null = null;
     let snap: SnapResult | null = null;
+    let room: DropPlan['room'] = null;
     if (g.kind === 'move') {
-      ({ snap, text } = resolveDrag(g));
-      transform = `translate(${snap.dx} ${snap.dy})`;
-      box = offsetBounds(g.carried.box, snap.dx, snap.dy);
+      const plan = resolveDrag(g);
+      ({ snap, text, room } = plan);
+      // Over text, or about to make room, the ink stays under the pointer; otherwise it shows where it will land.
+      const at = text || room ? plan.free : snap;
+      transform = `translate(${at.dx} ${at.dy})`;
+      box = offsetBounds(g.carried.box, at.dx, at.dy);
     } else {
       transform = `translate(${g.ax} ${g.ay}) scale(${g.s}) translate(${-g.ax} ${-g.ay})`;
       const b = sel!.bounds;
@@ -679,22 +895,23 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     }
     for (const el of [dragPenRef.current, dragHlRef.current]) {
       el?.setAttribute('transform', transform);
-      // Over text the ink fades: it is about to become part of the sentence.
-      if (text) el?.setAttribute('opacity', '0.45');
+      // Over text the ink fades: it is about to become part of the sentence, or move to its own lines.
+      if (text || room) el?.setAttribute('opacity', '0.45');
       else el?.removeAttribute('opacity');
     }
     const frame = selectionFrame(box, inv).frame;
     const rect = dragBoxRef.current;
     if (rect) {
-      show(rect, !text);
+      show(rect, !text && !room);
       rect.setAttribute('x', String(frame.minX));
       rect.setAttribute('y', String(frame.minY));
       rect.setAttribute('width', String(frame.maxX - frame.minX));
       rect.setAttribute('height', String(frame.maxY - frame.minY));
     }
-    // Guides: the ruled line the blob will sit on, the edge it lines up with, or the caret where it goes into the text.
+    // Guides: the ruled line it will sit on and the edge it lines up with; the
+    // caret where it goes into the text; or the gap that opens between blocks.
     const width = wrapRef.current?.offsetWidth ?? 0;
-    const rule = snap && !text ? snap.rule : null;
+    const rule = snap && !text && !room ? snap.rule : null;
     show(ruleRef.current, rule !== null);
     show(baseRef.current, rule !== null);
     if (rule !== null) {
@@ -708,21 +925,33 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       baseRef.current?.setAttribute('x1', String(box.minX - 4 * inv));
       baseRef.current?.setAttribute('x2', String(box.maxX + 4 * inv));
     }
-    const edge = snap && !text ? snap.x : null;
+    const edge = snap && !text && !room ? snap.x : null;
     show(edgeRef.current, !!edge);
     if (edge) {
       edgeRef.current?.setAttribute('x1', String(edge.x));
       edgeRef.current?.setAttribute('x2', String(edge.x));
-      edgeRef.current?.setAttribute('y1', String(box.minY - 14 * inv));
-      edgeRef.current?.setAttribute('y2', String(box.maxY + 14 * inv));
+      edgeRef.current?.setAttribute('y1', String(Math.min(box.minY, edge.top ?? Infinity) - 10 * inv));
+      edgeRef.current?.setAttribute('y2', String(Math.max(box.maxY, edge.bottom ?? -Infinity) + 10 * inv));
     }
     show(caretRef.current, !!text);
     if (text) {
       const t = 3 * inv;
       caretRef.current?.setAttribute('d', `M${text.x} ${text.top - t}V${text.bottom + t}M${text.x - t} ${text.top - t}H${text.x + t}M${text.x - t} ${text.bottom + t}H${text.x + t}`);
     }
+    show(roomRef.current, !!room);
+    show(roomLineRef.current, !!room);
+    if (room) {
+      roomRef.current?.setAttribute('x', String(-12 * inv));
+      roomRef.current?.setAttribute('width', String(width + 24 * inv));
+      roomRef.current?.setAttribute('y', String(room.y));
+      roomRef.current?.setAttribute('height', String(room.height));
+      roomLineRef.current?.setAttribute('x1', String(-12 * inv));
+      roomLineRef.current?.setAttribute('x2', String(width + 12 * inv));
+      roomLineRef.current?.setAttribute('y1', String(room.y));
+      roomLineRef.current?.setAttribute('y2', String(room.y));
+    }
     const hint = useInkHint.getState();
-    const want = text ? DROP_HINT : null;
+    const want = text ? DROP_HINT : room ? ROOM_HINT : null;
     if (hint.hint !== want) hint.setHint(want);
   }
 
@@ -749,6 +978,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     autoRaf.current = 0;
     endDragVisuals(g);
     setHeld(null);
+    setCursor(hoverCursor(false));
   }
 
   // Keyboard shortcuts for a lasso selection.
@@ -766,12 +996,23 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         }
         return;
       }
+      if (!wrapRef.current?.isConnected || wrapRef.current.offsetParent === null) return;
+      // ⌘ held over ink with the pen shows the hand straight away.
+      if (e.key === 'Meta' && !g) {
+        setCursor(hoverCursor(true));
+        showPenDot();
+      }
       const target = e.target as HTMLElement;
       if (target.closest('input, textarea, [contenteditable="true"]') && !target.classList.contains('ProseMirror')) return;
       if (editor.isFocused) return;
-      if (!wrapRef.current?.isConnected || wrapRef.current.offsetParent === null) return;
       const sel = selectionRef.current;
       const mod = e.metaKey || e.ctrlKey;
+      // Redo after moving ink. (⌘Z already reaches the editor; in the Mac app the menu handles both.)
+      if (!isElectron && mod && !e.altKey && ((e.shiftKey && e.key.toLowerCase() === 'z') || (!e.shiftKey && e.key.toLowerCase() === 'y'))) {
+        e.preventDefault();
+        editor.commands.redo();
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'v' && clipboard?.length) {
         e.preventDefault();
         const b = unionBounds(clipboard.map(strokeBounds))!;
@@ -796,11 +1037,17 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         duplicateSelection();
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
-        // ⌥↑ / ⌥↓ move a whole ruled line; a burst of presses is one undo step.
+        // ⌥↑ / ⌥↓ put it on the next ruled line up or down; a burst of presses is one undo step.
         const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
-        const step = e.altKey && vertical ? propsRef.current.line : e.shiftKey ? 10 : 1;
+        const l = propsRef.current.line;
+        const step = e.shiftKey ? 10 : 1;
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        let dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        if (e.altKey && vertical) {
+          const base = estimateBaseline(placedOf(sel), l);
+          const dir = e.key === 'ArrowDown' ? 1 : -1;
+          dy = base === null ? dir * l : ruleY(Math.round((base + 1) / l - 0.75) + dir, l) - base;
+        }
         const now = performance.now();
         const last = lastNudge.current;
         const burst = !!last && now - last.at < 600 && last.doc === editor.state.doc;
@@ -813,6 +1060,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       if (e.key === 'Alt' && g?.kind === 'move') {
         g.alt = false;
         requestPaint();
+      }
+      if (e.key === 'Meta' && !g) {
+        setCursor(hoverCursor(false));
+        showPenDot();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -831,9 +1082,6 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const el = (wrapRef.current?.closest('.surface') as HTMLElement | null) ?? wrapRef.current;
     if (!el) return;
 
-    const isUi = (t: EventTarget | null) =>
-      t instanceof Element && !!t.closest('[data-ui], .math-editor, .ink-sel-menu, .snip-ask, button, input, textarea, a');
-
     const effectiveTool = (e: PointerEvent) => {
       const st = useTools.getState();
       if (st.tool !== 'text') return st.tool;
@@ -841,44 +1089,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       return null;
     };
 
-    // The pointer's look: a hand over ink you can pick up, arrows over the resize handles.
-    let cursorKind: string | null = null;
-    const setCursor = (c: string | null) => {
-      if (c === cursorKind) return;
-      cursorKind = c;
-      if (c) el.dataset.inkCursor = c;
-      else delete el.dataset.inkCursor;
-    };
-    const hoverCursor = (e: PointerEvent, p: Pt): string | null => {
-      if (isUi(e.target)) return null;
-      const t = useTools.getState().tool;
-      const penGrab = (t === 'pen' || t === 'highlighter') && e.metaKey;
-      if (t !== 'lasso' && !penGrab) return null;
-      if (t === 'lasso' && (e.target as Element | null)?.closest?.('.ink-inline-node')) return 'grab';
-      const sel = selectionRef.current;
-      const hit = sel ? hitSelection(sel.bounds, p, 1 / (propsRef.current.scale || 1)) : null;
-      if (hit?.kind === 'handle' && t === 'lasso') return hit.corner === 0 || hit.corner === 3 ? 'nwse-resize' : 'nesw-resize';
-      if (hit || inkUnder(p, e.pointerType === 'touch')) return 'grab';
-      return null;
-    };
-
     const startMove = (e: PointerEvent, p: Pt) => {
       const sel = selectionRef.current!;
-      const l = propsRef.current.line;
       const placed = placedOf(sel);
-      const b = sel.bounds;
-      const h = b.maxY - b.minY;
-      const w = b.maxX - b.minX;
-      const baseline = estimateBaseline(placed, l);
-      // Highlights stay highlights, an underline isn't a word, and a circle or box drawn around words stays a drawing.
-      const inline =
-        baseline !== null &&
-        placed.every(({ stroke }) => stroke.brush !== 'highlighter') &&
-        h <= l * 2.4 &&
-        w <= 420 &&
-        !(h < l * 0.3 && w > l * 1.5) &&
-        !placed.some(({ stroke }) => isLoop(stroke) && rawBounds(stroke).maxY - rawBounds(stroke).minY >= l * 0.6);
-      const start = inline && wrapRef.current ? findTextDropTarget(propsRef.current.editor, wrapRef.current, propsRef.current.scale || 1, { x: b.minX, y: baseline - l * 0.25 }) : null;
+      const baseline = estimateBaseline(placed, propsRef.current.line);
       gesture.current = {
         kind: 'move',
         id: e.pointerId,
@@ -889,7 +1103,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         moved: false,
         client: { x: e.clientX, y: e.clientY },
         alt: e.altKey,
-        carried: { box: b, baseline, inline, home: start?.top ?? null },
+        carried: carry(placed, sel.bounds, baseline, new Set(sel.items.map((i) => i.strokeId)), false),
       };
       setHeld('press');
     };
@@ -915,7 +1129,13 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         moved: false,
         client: { x: e.clientX, y: e.clientY },
         alt: e.altKey,
-        carried: { box: unionBounds(out.strokes.map(strokeBounds))!, baseline: out.baseline, inline: true, home: null },
+        carried: carry(
+          out.strokes.map((stroke) => ({ stroke, top: 0 })),
+          unionBounds(out.strokes.map(strokeBounds))!,
+          out.baseline,
+          new Set(),
+          true,
+        ),
         popped: { pos, dom, strokes: out.strokes },
       };
       setHeld('press');
@@ -1026,6 +1246,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const pointerAt = (g: Gesture, client: Pt) => {
       const p = toLocal({ clientX: client.x, clientY: client.y });
       lastPointer.current = p;
+      if (hover.current) hover.current = { ...hover.current, p, target: null };
       if (g.kind === 'lasso') {
         g.client = client;
         g.poly.push(p.x, p.y);
@@ -1095,8 +1316,9 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       const g = gesture.current;
       const p = toLocal(e);
       lastPointer.current = p;
-      if (!g) setCursor(hoverCursor(e, p));
-      updateCursor(e, p);
+      hover.current = { p, touch: e.pointerType === 'touch', target: e.target, mouse: e.pointerType !== 'touch' };
+      if (!g) setCursor(hoverCursor(e.metaKey));
+      showPenDot();
       if (!g || g.id !== e.pointerId) return;
       e.preventDefault();
       if (g.kind === 'draw') {
@@ -1177,8 +1399,9 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         if (g.kind === 'move' && g.moved && !cancelled) {
           g.alt = e.altKey;
           // The same answer the preview showed.
-          const { snap, text } = resolveDrag(g);
+          const { snap, text, room, into } = resolveDrag(g);
           if (text) dropIntoText(text, g, snap.dx, snap.dy);
+          else if (room && !into) makeRoom(room, g, snap.dx);
           else if (g.popped) {
             // Out of the text and onto the page, in one undo step.
             const { pos, strokes } = g.popped;
@@ -1187,14 +1410,18 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
               new Set(),
               undefined,
               (tr) => removeInlineNode(tr, pos),
+              into,
             );
-          } else if (Math.abs(snap.dx) > 0.5 || Math.abs(snap.dy) > 0.5) moveSelection((s) => translateStroke(s, snap.dx, snap.dy));
+          } else if (into || Math.abs(snap.dx) > 0.5 || Math.abs(snap.dy) > 0.5) moveSelection((s) => translateStroke(s, snap.dx, snap.dy), undefined, into);
         } else if (g.kind === 'scale' && g.moved && !cancelled && Math.abs(g.s - 1) > 0.01) {
           moveSelection((s) => scaleStroke(s, g.ax, g.ay, g.s));
         }
         endDragVisuals(g);
         setHeld(null);
-        setCursor(hoverCursor(e, toLocal(e)));
+        // After a drop the menu waits for a tap on the selection; a tap shows it.
+        setQuiet(g.moved && !cancelled);
+        hover.current = { p: toLocal(e), touch: e.pointerType === 'touch', target: e.target, mouse: e.pointerType !== 'touch' };
+        setCursor(hoverCursor(e.metaKey));
       } else if (g.kind === 'shape') {
         setOverlay(null);
         if (cancelled || Math.hypot(g.x1 - g.x0, g.y1 - g.y0) < 4) return;
@@ -1208,17 +1435,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       }
     };
 
-    const updateCursor = (e: PointerEvent, p: { x: number; y: number }) => {
-      const c = cursorRef.current;
-      if (!c) return;
-      const st = useTools.getState();
-      const t = st.tool;
-      const show = (t === 'pen' || t === 'highlighter' || t === 'eraser') && e.pointerType !== 'touch' && !cursorKind;
-      c.style.display = show ? '' : 'none';
-      if (show) c.setAttribute('transform', `translate(${p.x} ${p.y})`);
-    };
-
     const onLeave = () => {
+      hover.current = null;
       if (cursorRef.current) cursorRef.current.style.display = 'none';
       if (!gesture.current) setCursor(null);
     };
@@ -1241,6 +1459,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   }, [editor, wrapRef]);
 
   function finishLasso(poly: number[]) {
+    setQuiet(false);
     const lay = layoutRef.current;
     const pb = polygonBounds(poly);
     const tiny = pb.maxX - pb.minX < 6 && pb.maxY - pb.minY < 6;
@@ -1354,6 +1573,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
             <line ref={baseRef} className="snap-base" display="none" style={{ strokeWidth: 2 * inv }} />
             <line ref={edgeRef} className="snap-edge" display="none" style={{ strokeWidth: inv, strokeDasharray: `${3 * inv} ${3 * inv}` }} />
             <path ref={caretRef} className="drop-caret" display="none" style={{ strokeWidth: 2 * inv }} />
+            <rect ref={roomRef} className="room-band" display="none" rx={6 * inv} />
+            <line ref={roomLineRef} className="room-line" display="none" style={{ strokeWidth: 3 * inv }} />
             <rect ref={dragBoxRef} className="drag-box" display="none" rx={6 * inv} style={{ strokeWidth: inv, strokeDasharray: `${4 * inv} ${4 * inv}` }} />
           </g>
         )}
@@ -1366,9 +1587,9 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         </g>
       </svg>
 
-      {selection && !held && (
+      {selection && frame && !held && !quiet && (
         <SelectionMenu
-          bounds={selection.bounds}
+          frame={frame}
           inv={inv}
           scale={scale || 1}
           count={selection.items.length}
@@ -1439,7 +1660,8 @@ function SnipRect({ b, inv, hidden }: { b: Bounds; inv: number; hidden: boolean 
 }
 
 function SelectionMenu(props: {
-  bounds: Bounds;
+  /** The selection's frame (with its handles at the corners). */
+  frame: Bounds;
   inv: number;
   scale: number;
   count: number;
@@ -1451,10 +1673,11 @@ function SelectionMenu(props: {
   onCopy(): void;
   onDelete(): void;
 }) {
-  const { bounds, inv, scale } = props;
+  const { frame, inv, scale } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [below, setBelow] = useState(false);
-  // Sits above the selection unless that would put it under the toolbar.
+  // Clear of the frame and its handles: above it, unless that would put it under the toolbar.
+  const gap = 8 * inv;
   useLayoutEffect(() => {
     const el = ref.current;
     const scroller = el?.closest('.note-scroll');
@@ -1463,15 +1686,16 @@ function SelectionMenu(props: {
       const wrapTop = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect().top ?? 0;
       const dock = scroller.querySelector('.toolbar-dock')?.getBoundingClientRect();
       const limit = Math.max(scroller.getBoundingClientRect().top, dock?.bottom ?? 0) + 6;
-      setBelow(wrapTop + (bounds.minY - 14 * inv) * scale - el.offsetHeight < limit);
+      setBelow(wrapTop + (frame.minY - 5 * inv - gap) * scale - el.offsetHeight < limit);
     };
     check();
     scroller.addEventListener('scroll', check, { passive: true });
     return () => scroller.removeEventListener('scroll', check);
-  }, [bounds, inv, scale]);
+  }, [frame, inv, scale, gap]);
   const colors = props.highlighterOnly ? HIGHLIGHT_COLORS.slice(0, 5) : INK_COLORS.filter((_, i) => [0, 2, 5, 7, 8, 10].includes(i));
-  const top = below ? bounds.maxY + 14 * inv : bounds.minY - 14 * inv;
-  const left = (bounds.minX + bounds.maxX) / 2;
+  // (5: the handles' radius)
+  const top = below ? frame.maxY + 5 * inv + gap : frame.minY - 5 * inv - gap;
+  const left = (frame.minX + frame.maxX) / 2;
   return (
     <div
       ref={ref}
