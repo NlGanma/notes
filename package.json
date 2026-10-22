@@ -18,33 +18,26 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "test": "tsx --test tests/unit/*.test.ts",
     "mock-llm": "node scripts/mock-llm.mjs",
-    "seed": "node scripts/build-seed.mjs"
+    "seed": "node scripts/build-seed.mjs",
+    "icon": "node scripts/build-icon.mjs",
+    "test:e2e": "node tests/run-e2e.mjs",
+    "test:all": "npm run typecheck && npm test && npm run build && node tests/run-e2e.mjs --electron"
   },
-  "dependencies": {
+  "devDependencies": {
     "@fontsource-variable/inter": "5.2.8",
     "@fontsource-variable/source-serif-4": "5.2.9",
+    "@playwright/test": "1.56.1",
     "@tiptap/core": "3.31.4",
+    "@tiptap/extension-highlight": "3.31.4",
+    "@tiptap/extension-image": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extension-text-style": "3.31.4",
+    "@tiptap/extension-typography": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
     "@tiptap/pm": "3.31.4",
     "@tiptap/react": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
-    "@tiptap/extension-list": "3.31.4",
-    "@tiptap/extensions": "3.31.4",
-    "@tiptap/extension-highlight": "3.31.4",
-    "@tiptap/extension-text-style": "3.31.4",
-    "@tiptap/extension-image": "3.31.4",
-    "@tiptap/extension-typography": "3.31.4",
     "@tiptap/suggestion": "3.31.4",
-    "katex": "0.18.11",
-    "lucide-react": "1.52.0",
-    "markdown-it": "14.3.3",
-    "pdfjs-dist": "4.10.38",
-    "perfect-freehand": "1.2.2",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "zustand": "5.0.15"
-  },
-  "devDependencies": {
-    "@playwright/test": "1.56.1",
     "@types/katex": "0.16.7",
     "@types/markdown-it": "14.1.2",
     "@types/node": "22.18.0",
@@ -56,9 +49,59 @@
     "electron": "43.7.7",
     "electron-builder": "26.17.0",
     "hersheytext": "2.0.0",
+    "katex": "0.18.11",
+    "lucide-react": "1.52.0",
+    "markdown-it": "14.3.3",
+    "pdfjs-dist": "4.10.38",
+    "perfect-freehand": "1.2.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vite": "7.3.7",
     "wait-on": "9.0.1",
-    "tsx": "4.20.6"
+    "zustand": "5.0.15"
+  },
+  "build": {
+    "appId": "app.nib.notes",
+    "productName": "Nib",
+    "copyright": "Nib",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "darkModeSupport": false,
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "Nib keeps your notes as files in a folder you choose."
+      }
+    },
+    "dmg": {
+      "title": "Nib ${version}"
+    },
+    "fileAssociations": [
+      {
+        "ext": "nib",
+        "name": "Nib Note",
+        "role": "Editor"
+      }
+    ]
   }
 }

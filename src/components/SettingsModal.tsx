@@ -11,7 +11,8 @@ import { PAPERS, PaperSwatch } from '../editor/ui/PageHeader';
 import { Toggle } from '../editor/ui/InkToolbar';
 import { bridge, isElectron, MOD, SHIFT, ALT } from '../lib/platform';
 import { openVaultFolder } from '../lib/commands';
-import { cx } from '../lib/util';
+import { cx, formatRelativeTime } from '../lib/util';
+import { chatRobust, useActivity } from '../lib/ai/engine';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
   { id: 'ai', label: 'Local AI', icon: <Cpu size={16} /> },
@@ -127,6 +128,7 @@ function AISection() {
   }, []);
 
   const chatModels = ai.models.filter((m) => !m.embedding);
+  const chatInfo = ai.models.find((m) => m.name === ai.chatModel);
   const statusText =
     ai.status === 'online'
       ? `Connected${ai.serverLabel ? ` to ${ai.serverLabel}` : ''} · ${ai.models.length} model${ai.models.length === 1 ? '' : 's'} available`
@@ -226,7 +228,14 @@ function AISection() {
           none="None — keyword search"
         />
       </Field>
-      <Field label="Context size" hint="How much of a long note the model can read at once. Larger uses more memory.">
+      <Field
+        label="Context size"
+        hint={
+          chatInfo?.contextLength && chatInfo.contextLength < ai.numCtx
+            ? `${ai.chatModel} supports up to ${Math.round(chatInfo.contextLength / 1024)}K — Nib will use that.`
+            : 'How much of a long note the model can read at once. Larger uses more memory.'
+        }
+      >
         <select className="select" value={ai.numCtx} onChange={(e) => ai.set({ numCtx: Number(e.target.value) })}>
           {[4096, 8192, 16384, 32768, 65536].map((n) => (
             <option key={n} value={n}>
@@ -275,6 +284,69 @@ function AISection() {
         <CopyCmd cmd="ollama pull nomic-embed-text" note="Semantic search · 0.3 GB" />
         <CopyCmd cmd="ollama pull llama3.2-vision" note="Alternative vision model · 8 GB" />
       </div>
+
+      <ActivityLog />
+    </div>
+  );
+}
+
+/** What the model has been asked to do: timing, retries and failures — handy when a model is slow or flaky. */
+function ActivityLog() {
+  const entries = useActivity((s) => s.entries);
+  const [testing, setTesting] = useState<string | null>(null);
+  const runTest = async () => {
+    const ai = useAI.getState();
+    if (!ai.chatModel) return;
+    setTesting('Testing…');
+    try {
+      const r = await chatRobust({
+        label: 'Connection test',
+        model: ai.chatModel,
+        messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+        maxTokens: 16,
+      });
+      setTesting(`Answered in ${(r.metrics.totalMs / 1000).toFixed(1)}s${r.metrics.tokensPerSec ? ` · ${Math.round(r.metrics.tokensPerSec)} tokens/s` : ''}`);
+    } catch (e) {
+      setTesting(`Failed: ${String((e as Error).message ?? e)}`);
+    }
+  };
+  return (
+    <div className="activity">
+      <div className="activity-head">
+        <div>
+          <div className="recommend-title">Activity</div>
+          <div className="recommend-sub">Every request to your model, newest first. Questions you ask jump ahead of background work.</div>
+        </div>
+        <span className="grow" />
+        {testing && <span className="activity-test">{testing}</span>}
+        <button className="btn is-secondary is-small" onClick={() => void runTest()}>
+          Test model
+        </button>
+      </div>
+      {entries.length === 0 ? (
+        <div className="activity-empty">Nothing yet.</div>
+      ) : (
+        <div className="activity-list">
+          {entries.slice(0, 14).map((e) => (
+            <div key={e.id} className="activity-row" title={e.error}>
+              <span className={cx('activity-dot', `is-${e.status}`)} />
+              <span className="activity-label">{e.label}</span>
+              <span className="activity-model">{e.model}</span>
+              <span className="activity-meta">
+                {e.status === 'ok' && e.metrics
+                  ? `${(e.metrics.totalMs / 1000).toFixed(1)}s${e.metrics.tokensPerSec ? ` · ${Math.round(e.metrics.tokensPerSec)} tok/s` : ''}`
+                  : e.status === 'paused'
+                    ? 'paused for your question'
+                    : e.status === 'error'
+                      ? 'failed'
+                      : e.status}
+                {e.attempts > 1 ? ` · ${e.attempts - 1} ${e.attempts === 2 ? 'retry' : 'retries'}` : ''}
+              </span>
+              <span className="activity-time">{formatRelativeTime(e.at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

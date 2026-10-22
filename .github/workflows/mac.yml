@@ -1,0 +1,39 @@
+name: Mac app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  dmg:
+    name: Build Nib.dmg
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck && npm test
+
+      # Unsigned build. To sign and notarise, add CSC_LINK / CSC_KEY_PASSWORD and
+      # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID secrets and drop the
+      # CSC_IDENTITY_AUTO_DISCOVERY line.
+      - name: Package
+        run: npm run dist:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nib-mac
+          path: |
+            release/*.dmg
+            release/*.blockmap
+          if-no-files-found: error
