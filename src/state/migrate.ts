@@ -1,4 +1,4 @@
-import { BRUSHES } from '../lib/ink/brushes';
+import { BRUSHES, HIGHLIGHTER_SIZES, MARKER_SIZES } from '../lib/ink/brushes';
 import type { Brush } from '../lib/ink/types';
 import { normalizePaper } from '../lib/paper';
 
@@ -43,7 +43,7 @@ export function migrateUI(persisted: unknown, version: number): Obj {
   return s;
 }
 
-const PEN_SLOTS = [1.1, 1.6, 2.5];
+const PEN_SLOTS = MARKER_SIZES;
 
 /** The marker size whose stroke looks closest to what an old pen drew (compares rendered widths). */
 export function markerSizeFor(size: number, brush: string): number {
@@ -62,14 +62,22 @@ export function migrateTools(persisted: unknown, version: number): Obj {
       s.pen = { ...pen, brush: 'marker', size: markerSizeFor(Number(pen.size), String(pen.brush ?? 'marker')) };
     }
     s.penSizes = [...PEN_SLOTS];
+    // The highlighter had one free size; it becomes the slot nearest to it, so it still shows as picked.
+    if (isObj(s.highlighter) && Number.isFinite(Number(s.highlighter.size))) {
+      const size = Number(s.highlighter.size);
+      const slots = [...HIGHLIGHTER_SIZES];
+      const near = slots.reduce((best, v, i) => (Math.abs(v - size) < Math.abs(slots[best] - size) ? i : best), 0);
+      slots[near] = size;
+      s.highlighterSizes = slots;
+    }
     delete s.shape;
   }
   return settleTools(s);
 }
 
 /**
- * nib.tools on every load, whatever its version: the Shapes and Ask tools are on their way out, so they never
- * come back as the tool Esc returns to. (The toolbar still offers Shapes for now, so a v1 user can save it again.)
+ * nib.tools on every load, whatever its version: the Shapes and Ask tools are gone, so they never come back as
+ * the tool Esc returns to (a build from before they went could still have saved them at v1).
  */
 export function settleTools(persisted: unknown): Obj {
   const s: Obj = isObj(persisted) ? { ...persisted } : {};

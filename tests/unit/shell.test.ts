@@ -121,6 +121,9 @@ test('old pens become the felt marker at the width they drew', () => {
   assert.equal(t.lastInkTool, 'pen');
   assert.equal((t.eraser as { highlighterOnly: boolean }).highlighterOnly, true, 'the eraser option is kept');
   assert.equal(migrateTools({ lastInkTool: 'ask' }, 0).lastInkTool, 'lasso');
+  assert.deepEqual(migrateTools({ highlighter: { color: '#ffe14d', size: 20 } }, 0).highlighterSizes, [10, 20, 24], 'a free highlighter size becomes the nearest slot');
+  assert.deepEqual(migrateTools({ highlighter: { color: '#ffe14d', size: 16 } }, 0).highlighterSizes, [10, 16, 24]);
+  assert.ok(!('highlighterSizes' in migrateTools({}, 0)), 'nothing saved: the defaults stand');
   assert.deepEqual(migrateTools({ pen: { brush: 'marker', size: 2 } }, 1).pen, { brush: 'marker', size: 2 }, 'already current: untouched');
 });
 

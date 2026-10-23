@@ -26,7 +26,11 @@ const inkBlock = page.locator(`${V} .ink-block-node`).first();
 await inkBlock.scrollIntoViewIfNeeded();
 await inkBlock.hover();
 await inkBlock.locator('.ink-more').first().click();
-await page.click('.ink-menu .menu-item:has-text("Tutor me through it")');
+check((await page.locator('.ink-menu .menu-item:has-text("Ask about this")').count()) === 1 && !(await page.locator('.ink-menu .menu-item:has-text("Tutor")').count()), 'the handwriting menu has one Ask about this…');
+await page.click('.ink-menu .menu-item:has-text("Ask about this")');
+await page.waitForSelector(`${V} .snip-ask`);
+check((await page.locator(`${V} .snip-quick button`).allTextContents()).join('·').includes('Explain·Hint·Check my work·Solve it'), 'it opens the Ask composer with Explain · Hint · Check my work · Solve it');
+await page.click(`${V} .snip-quick button:has-text("Hint")`);
 await page.waitForSelector('.assistant .msg.is-bot');
 await waitIdle();
 const tutor = await page.textContent('.assistant .msg.is-bot .md');
@@ -59,22 +63,65 @@ await page.setViewportSize({ width: 1440, height: 940 });
 await page.waitForTimeout(400);
 check(await sidebarShown(), '…and widening it brings the sidebar back');
 
-// 4. Snip & ask: drag over the squeeze-theorem area.
-await page.locator(`${V} .tb-tool[data-tool="ask"]`).click();
+// 4. Select a box over the Squeeze theorem heading and the ink beside it. The assistant is open, so Ask puts
+// the area in its composer instead of opening a second composer on the page.
+const composerAtts = '.assistant .composer-atts .att';
+await page.locator(`${V} .tb-tool[data-tool="lasso"]`).click();
 const heading = page.locator(`${V} .ProseMirror h2:has-text("Squeeze theorem")`);
 await heading.scrollIntoViewIfNeeded();
-const hb = await heading.boundingBox();
-await page.mouse.move(hb.x - 10, hb.y - 6);
-await page.mouse.down();
-await page.mouse.move(hb.x + 640, hb.y + 150, { steps: 10 });
-await page.mouse.up();
-await page.waitForSelector(`${V} .snip-ask`);
+const boxOver = async () => {
+  const hb = await heading.boundingBox();
+  await page.mouse.move(hb.x - 10, hb.y - 6);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + 640, hb.y + 150, { steps: 10 });
+  await page.mouse.up();
+};
+await boxOver();
+await page.waitForSelector(composerAtts);
+await page.waitForTimeout(200);
+check(
+  (await page.locator(`${V} .ink-sel-menu`).count()) === 1 && !(await page.locator(`${V} .snip-ask`).count()),
+  'with the assistant open, letting go of the box puts the area in its composer; the ink it caught stays selected',
+);
+check((await page.locator(`${composerAtts} img`).count()) > 0, 'the area went into the assistant’s composer as a picture');
+check(/Text in that area/.test((await page.locator(composerAtts).allTextContents()).join(' ')), '…with the typed text inside the box');
 await shot(page, 'ai-03-snip');
+const attsBefore = await page.locator(composerAtts).count();
+await page.click(`${V} .ink-sel-menu .sel-btn:has-text("Ask")`);
+await page.waitForTimeout(400);
+check(
+  (await page.locator(composerAtts).count()) === attsBefore && !(await page.locator(`${V} .snip-ask`).count()),
+  'Ask on the selection uses that composer too, without a second picture or a composer on the page',
+);
+await page.locator('.assistant textarea').fill('What does this say?');
+await page.locator('.assistant textarea').press('Enter');
+await waitIdle();
+check((await page.locator('.assistant .msg.is-user').last().locator('.msg-att-chip, .msg-att-img').count()) > 0, 'sending it asks about that area');
+const worked = page.locator(`${V} .ink-block-node`).first();
+await worked.scrollIntoViewIfNeeded();
+await worked.hover();
+await worked.locator('.ink-more').first().click();
+await page.click('.ink-menu .menu-item:has-text("Ask about this")');
+await page.waitForTimeout(300);
+check(
+  !(await page.locator(`${V} .snip-ask`).count()) && /Handwriting/.test((await page.locator(composerAtts).allTextContents()).join(' ')),
+  'with the assistant open, a handwriting area’s Ask about this… goes into its composer too',
+);
+
+// 4b. With the assistant closed, the same box's Ask opens the composer on the page; Explain asks at once.
+await page.click('.top-btn:has-text("Assistant"), .top-btn[title^="Assistant"]');
+await page.waitForFunction(() => !document.querySelector('.assistant'));
+await page.locator(`${V} .tb-tool[data-tool="lasso"]`).click();
+await boxOver();
+await page.click(`${V} .ink-sel-menu .sel-btn:has-text("Ask")`);
+await page.waitForSelector(`${V} .snip-ask`);
 await page.click(`${V} .snip-quick button:has-text("Explain")`);
+await page.waitForSelector('.assistant .msg.is-user');
 await page.waitForTimeout(300);
 await waitIdle();
 const lastUser = page.locator('.assistant .msg.is-user').last();
-check((await lastUser.locator('.msg-att-chip, .msg-att-img').count()) > 0, 'the snipped area (text + ink) was attached');
+check((await lastUser.locator('.msg-att-img').count()) > 0, 'the selected area (picture + text) was attached');
+check(!(await page.locator(`${V} .snip-ask`).count()), 'and the composer on the page closed');
 await shot(page, 'ai-04-snip-answer');
 
 // 5. Text selection → Ask AI.

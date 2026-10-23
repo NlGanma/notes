@@ -42,6 +42,8 @@ export interface Attachment {
   image?: string;
   /** Text content (selection, transcript, typed text in a region). */
   text?: string;
+  /** The block a part of the page came from, so the answer is about (and goes under) it, not the caret's block. */
+  anchor?: string;
 }
 
 export interface SourceRef {
@@ -651,7 +653,7 @@ export const useAssistant = create<AssistantState>()(
           const liveCaret = homework && !attachments.length && opts.focus === undefined ? caretContext(noteId) : undefined;
           const moved = !!liveCaret && !!prevUser?.focus && liveCaret !== prevUser.focus;
           const inherit = !attachments.length && !opts.anchor && !!prevUser && (opts.inherit || !moved);
-          const anchor = opts.anchor ?? (inherit ? prevUser!.anchor : undefined) ?? currentBlockId(noteId);
+          const anchor = opts.anchor ?? attachments.find((a) => a.anchor)?.anchor ?? (inherit ? prevUser!.anchor : undefined) ?? currentBlockId(noteId);
           // In homework, the problem under the caret is what the student means by "this".
           // A follow-up keeps the earlier turn's problem: its saved focus, or the text the student pointed at
           // (e.g. a selection). Handwriting-only turns have no text, so nothing is guessed from the caret.

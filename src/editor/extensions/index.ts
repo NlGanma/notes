@@ -70,7 +70,7 @@ export function buildExtensions() {
       heading: { levels: [1, 2, 3] },
       trailingNode: false,
       link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
-      dropcursor: { color: '#2160e8', width: 2 },
+      dropcursor: { color: '#2a78d6', width: 2 },
       undoRedo: { depth: 500, newGroupDelay: 650 },
       codeBlock: { HTMLAttributes: { spellcheck: 'false' } },
     }),
@@ -80,7 +80,7 @@ export function buildExtensions() {
       placeholder: ({ editor, node }) => {
         if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
         if (editor.state.doc.childCount === 1 && editor.state.doc.firstChild?.content.size === 0) {
-          return 'Start typing, or pick up the pen and write…   “/” for blocks';
+          return 'Start typing, or pick the marker and write…   “/” for blocks';
         }
         return 'Type “/” for blocks, ⌘D to sketch inline';
       },

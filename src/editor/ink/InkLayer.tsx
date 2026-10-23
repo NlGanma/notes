@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import { Copy, CopyPlus, GraduationCap, Sigma, MessageCircleQuestion, Trash2, Type } from 'lucide-react';
+import { Copy, CopyPlus, MessageCircleQuestion, Sigma, Trash2, Type } from 'lucide-react';
 import type { Bounds, Stroke } from '../../lib/ink/types';
 import { livePath, strokePath, strokeSvgAttrs } from '../../lib/ink/render';
 import {
@@ -12,7 +12,6 @@ import {
   hitStroke,
   offsetBounds,
   pathLength,
-  polygonBounds,
   scaleStroke,
   simplifyPoints,
   strokeBounds,
@@ -20,9 +19,10 @@ import {
   translateStroke,
   unionBounds,
 } from '../../lib/ink/geometry';
-import { recognizeShape, shapeFromDrag, straightenIfLinear } from '../../lib/ink/shapes';
-import { HIGHLIGHT_COLORS, INK_COLORS } from '../../lib/ink/brushes';
+import { recognizeShape, straightenIfLinear } from '../../lib/ink/shapes';
+import { BRUSHES } from '../../lib/ink/brushes';
 import { useInkHint, useTools } from '../../state/tools';
+import { useUI } from '../../state/ui';
 import { isElectron } from '../../lib/platform';
 import { rhythmKey } from '../extensions/rhythm';
 import type { Transaction } from '@tiptap/pm/state';
@@ -57,11 +57,15 @@ import {
 } from './typeFlow';
 import { cx, uid } from '../../lib/util';
 import { SnipAsk, type AskMode } from './SnipAsk';
+import { useAvailability } from '../../components/ai/ComposerStatus';
+import { useSideShift } from './inView';
 
 const EMPTY: Stroke[] = [];
 
-/** How far (screen px) a press on ink must travel before it becomes a drag; less is a tap. */
+/** How far (screen px) a press must travel before it becomes a drag or a Select box; less is a tap. */
 const DRAG_START = 3;
+/** A Select box smaller than this (screen px) on both sides is a tap. */
+const TAP_BOX = 6;
 /** How close (screen px) a dragged blob's edge must come to the margin or other writing to line up with it. */
 const SNAP = 7;
 const DROP_HINT = 'Release to put it in the text · ⌥ keeps it as ink';
@@ -107,6 +111,10 @@ export interface InkAskRequest {
   strokes: Stroke[];
   blockIds: string[];
   label: string;
+  /** Sent as it is in place of the blocks' text: an equation inside a quote or list (`blockIds` then only places the reply). */
+  text?: string;
+  /** Where the reply goes when the box covers no block (blank lines under a paragraph): placement only, no text. */
+  place?: string;
 }
 
 export interface InkLayerHandle {
@@ -115,6 +123,8 @@ export interface InkLayerHandle {
   hasSelection(): boolean;
   /** Turns the inline sketch at `pos` back into handwriting where it is, selected. */
   popOut(pos: number): void;
+  /** Opens the Ask composer under a handwriting area or an equation (their ⋯ menus). */
+  askAbout(blockId: string | null, pos?: number): void;
 }
 
 interface Props {
@@ -124,6 +134,11 @@ interface Props {
   line: number;
   session: React.MutableRefObject<InkSession>;
   onAsk(req: InkAskRequest): void;
+  /**
+   * The assistant panel is open: put what was captured in its composer instead of asking at once. `focus: false`
+   * leaves the keyboard with caught ink, so ⌫, ⌘C and the arrows still act on it.
+   */
+  onAttach(req: Omit<InkAskRequest, 'mode' | 'prompt'>, opts?: { focus?: boolean }): void;
   onConvert(req: { to: 'text' | 'math'; strokes: Stroke[]; selection: SelectionItem[] }): void;
   captureRegion(clientRect: DOMRect): Promise<string | null>;
 }
@@ -136,6 +151,20 @@ export interface SelectionItem {
 interface Selection {
   items: SelectionItem[];
   bounds: Bounds; // absolute
+  /** The box the student dragged to make it. Ask looks at this as well as the ink; moving the ink forgets it. */
+  area?: Bounds;
+}
+
+/** The inline Ask composer: under an area of the page, a selection, or a handwriting area. */
+interface AskAt {
+  /** What it sits under. */
+  under: Bounds;
+  /** The part of the page it asks about (captured as a picture). Null for a handwriting area. */
+  region: Bounds | null;
+  /** Draw `region` as a dashed frame (nothing was selected in it). */
+  framed: boolean;
+  /** A handwriting area or an equation, asked about from its ⋯ menu. */
+  block?: { id: string | null; pos?: number; math: boolean };
 }
 
 type Pt = { x: number; y: number };
@@ -171,7 +200,23 @@ interface DropPlan {
 type Gesture =
   | { kind: 'draw'; id: number; stroke: Stroke; anchor: { x: number; y: number; t: number }; snapped: boolean; timer: number }
   | { kind: 'erase'; id: number; last: { x: number; y: number } | null }
-  | { kind: 'lasso'; id: number; poly: number[]; client: Pt }
+  | {
+      kind: 'marquee';
+      id: number;
+      /** Where it was pressed, and where the pointer is (layer coordinates). */
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      client: Pt;
+      started: boolean;
+      /** ⇧ adds to the selection. */
+      add: boolean;
+      /** Space held: the box moves at its size (from this pointer position). */
+      space: Pt | null;
+      /** ⌥ held: the box grows from its centre. */
+      alt: boolean;
+    }
   | {
       kind: 'move';
       id: number;
@@ -186,9 +231,37 @@ type Gesture =
       /** A sketch being pulled out of the text (its strokes in layer coordinates) rather than the selection. */
       popped?: { pos: number; dom: HTMLElement; strokes: Stroke[] };
     }
-  | { kind: 'scale'; id: number; ax: number; ay: number; d0: number; s: number; moved: boolean; client: Pt }
-  | { kind: 'shape'; id: number; x0: number; y0: number; x1: number; y1: number; shift: boolean }
-  | { kind: 'snip'; id: number; x0: number; y0: number; x1: number; y1: number };
+  | { kind: 'scale'; id: number; ax: number; ay: number; d0: number; s: number; moved: boolean; client: Pt };
+
+type MarqueeGesture = Extract<Gesture, { kind: 'marquee' }>;
+
+/** The rectangle a Select box covers: from the press point, or (⌥) centred on it. */
+export function marqueeRect(g: { x0: number; y0: number; x1: number; y1: number; alt: boolean }): Bounds {
+  if (g.alt) {
+    const dx = Math.abs(g.x1 - g.x0);
+    const dy = Math.abs(g.y1 - g.y0);
+    return { minX: g.x0 - dx, minY: g.y0 - dy, maxX: g.x0 + dx, maxY: g.y0 + dy };
+  }
+  return { minX: Math.min(g.x0, g.x1), minY: Math.min(g.y0, g.y1), maxX: Math.max(g.x0, g.x1), maxY: Math.max(g.y0, g.y1) };
+}
+
+const rectPoly = (r: Bounds) => [r.minX, r.minY, r.maxX, r.minY, r.maxX, r.maxY, r.minX, r.maxY];
+
+/** Strokes a Select box catches: at least half of a stroke inside, or a dot or tick whose centre is. */
+function caughtBy(lay: InkLayout, r: Bounds): SelectionItem[] {
+  const poly = rectPoly(r);
+  const out: SelectionItem[] = [];
+  for (const b of lay.blocks)
+    for (const s of b.ink) {
+      if (!boundsIntersect(offsetBounds(strokeBounds(s), 0, b.top), r)) continue;
+      const c = strokeCenter(s);
+      if (fractionInside(s, poly, 0, b.top) >= 0.5 || (s.pts.length <= 9 && fractionInside({ ...s, pts: [c.x, c.y, 0.5] }, poly, 0, b.top) === 1))
+        out.push({ blockId: b.id, strokeId: s.id });
+    }
+  return out;
+}
+
+const sameBounds = (a: Bounds, b: Bounds) => Math.abs(a.minX - b.minX) + Math.abs(a.minY - b.minY) + Math.abs(a.maxX - b.maxX) + Math.abs(a.maxY - b.maxY) < 0.01;
 
 type MoveGesture = Extract<Gesture, { kind: 'move' }>;
 
@@ -291,7 +364,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   // Filter ids per note: url(#id) finds the first match in the whole window,
   // and a match inside a hidden note's layer draws nothing.
   const uidPart = useId().replace(/[^\w-]/g, '');
-  const ids = { grain: `nib-grain-${uidPart}`, selected: `nib-selected-${uidPart}`, lifted: `nib-lifted-${uidPart}` };
+  const ids = { grain: `nib-grain-${uidPart}`, selected: `nib-selected-${uidPart}`, lifted: `nib-lifted-${uidPart}`, caught: `nib-caught-${uidPart}` };
 
   const [layout, setLayout] = useState<InkLayout>({ blocks: [], contentBottom: 0 });
   const layoutRef = useRef(layout);
@@ -311,8 +384,16 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   const [popped, setPopped] = useState<Stroke[] | null>(null);
   /** Just dropped: the menu waits for a tap, so it doesn't cover the next thing you reach for. */
   const [quiet, setQuiet] = useState(false);
-  const [overlay, setOverlay] = useState<{ lasso?: number[]; shape?: Stroke; snip?: Bounds } | null>(null);
-  const [snip, setSnip] = useState<{ bounds: Bounds; capturing: boolean } | null>(null);
+  /** A Select box being dragged, and the strokes it would catch. */
+  const [overlay, setOverlay] = useState<{ marquee: Bounds; caught: Set<string> } | null>(null);
+  const [ask, setAskState] = useState<AskAt | null>(null);
+  const askRef = useRef(ask);
+  const setAsk = (a: AskAt | null) => {
+    askRef.current = a;
+    setAskState(a);
+  };
+  /** Taking a picture of the page: the frame, halo, handles and menus step out of it. */
+  const [capturing, setCapturing] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
   const gesture = useRef<Gesture | null>(null);
@@ -374,15 +455,18 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const where = new Map<string, string>();
     for (const b of layout.blocks) for (const s of b.ink) where.set(s.id, b.id);
     const items = sel.items.flatMap((it) => (where.has(it.strokeId) ? [{ blockId: where.get(it.strokeId)!, strokeId: it.strokeId }] : []));
-    setSelection(items.length ? selectionFromItems(items, layout) : null);
+    const next = items.length ? selectionFromItems(items, layout) : null;
+    // The dragged box stays with the selection while the ink in it hasn't moved (a recolour, typing elsewhere).
+    if (next && sel.area && sameBounds(next.bounds, sel.bounds)) next.area = sel.area;
+    setSelection(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
 
-  // Leaving the lasso tool clears the selection.
+  // Leaving Select clears the selection; any change of tool puts the Ask composer away.
   const tool = useTools((s) => s.tool);
   useEffect(() => {
     if (tool !== 'lasso') setSelection(null);
-    if (tool !== 'ask') setSnip(null);
+    setAsk(null);
     if (tool !== 'pen' && tool !== 'highlighter' && tool !== 'eraser' && cursorRef.current) cursorRef.current.style.display = 'none';
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
@@ -398,6 +482,16 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       useTools.getState().setTool('lasso');
       (propsRef.current.editor.view.dom as HTMLElement).blur();
       place(out.strokes, new Set(), undefined, (tr) => removeInlineNode(tr, pos));
+    },
+    askAbout: (blockId: string | null, pos?: number) => {
+      const found = blockAsk(blockId, pos);
+      if (!found) return;
+      // The assistant is open: the question is typed there, not in a second composer on the page.
+      if (useUI.getState().assistant) {
+        propsRef.current.onAttach(found.req);
+        return;
+      }
+      setAsk({ under: found.under, region: null, framed: false, block: { id: blockId, pos, math: found.req.label === 'Equation' } });
     },
   }));
 
@@ -450,6 +544,162 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     return strokeAt(items, p.x, p.y, (touch ? 9 : 4) / (propsRef.current.scale || 1)) >= 0;
   }
 
+  // ---------------------------------------------------------------- asking about part of the page
+  /** What Ask sends about a region: a picture of it, the ink that crosses it and the blocks it covers. */
+  async function capture(region: Bounds): Promise<Omit<InkAskRequest, 'mode' | 'prompt'>> {
+    const strokes: Stroke[] = [];
+    const blockIds: string[] = [];
+    let place: string | undefined;
+    for (const blk of layoutRef.current.blocks) {
+      if (blk.zoneEnd < region.minY || blk.top > region.maxY) continue;
+      place = blk.id;
+      const before = strokes.length;
+      for (const s of blk.ink) {
+        const abs = translateStroke(s, 0, blk.top);
+        if (boundsIntersect(strokeBounds(abs), region)) strokes.push(abs);
+      }
+      // A block's text counts when the box covers some of it, not when the box only grazes its edge.
+      const over = Math.min(region.maxY, blk.top + blk.height) - Math.max(region.minY, blk.top);
+      if (strokes.length > before || over >= Math.min(8, blk.height / 2)) blockIds.push(blk.id);
+    }
+    // The frame, halo, handles and menus step out of the picture.
+    setCapturing(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    let image: string | null = null;
+    try {
+      const wrap = wrapRef.current!.getBoundingClientRect();
+      const s = propsRef.current.scale || 1;
+      const rect = new DOMRect(wrap.left + region.minX * s, wrap.top + region.minY * s, (region.maxX - region.minX) * s, (region.maxY - region.minY) * s);
+      image = await propsRef.current.captureRegion(rect);
+    } catch {
+      image = null;
+    }
+    setCapturing(false);
+    return { image, strokes, blockIds, place, label: 'Area of the page' };
+  }
+
+  /** With the assistant open, what is captured goes into its composer; otherwise a composer opens under it. */
+  async function askRegion(region: Bounds, under: Bounds, framed: boolean) {
+    if (useUI.getState().assistant) {
+      setAsk(null);
+      propsRef.current.onAttach(await capture(region));
+      return;
+    }
+    setAsk({ under, region, framed });
+  }
+
+  /** The selection menu's Ask: the box that was dragged and the ink in it, or just the ink's frame. */
+  function askSelection() {
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const inv = 1 / (propsRef.current.scale || 1);
+    const frame = selectionFrame(sel.bounds, inv).frame;
+    const region = sel.area ? unionBounds([sel.area, frame])! : frame;
+    // (under the frame's handles)
+    void askRegion(region, { ...frame, maxY: frame.maxY + 5 * inv }, false);
+  }
+
+  /**
+   * A handwriting area's ink, or an equation's text, as Ask sends it, and where the composer goes: under the
+   * writing itself, or the width of the column for an equation.
+   */
+  function blockAsk(blockId: string | null, pos?: number): { req: Omit<InkAskRequest, 'mode' | 'prompt'>; under: Bounds } | null {
+    const width = wrapRef.current?.offsetWidth ?? 600;
+    const b = blockId ? layoutRef.current.blocks.find((x) => x.id === blockId) : undefined;
+    if (b) {
+      const strokes = b.ink.map((s) => translateStroke(s, 0, b.top));
+      const bb = unionBounds(b.ink.map(strokeBounds));
+      const under = bb ? offsetBounds(bb, 0, b.top) : { minX: 0, minY: b.top, maxX: width, maxY: b.top + b.height };
+      return { req: { strokes, blockIds: [b.id], label: b.type === 'mathBlock' ? 'Equation' : 'Handwriting' }, under };
+    }
+    // An equation inside a quote, callout or list isn't a block of the page's layout (nor has an id of its own):
+    // found by its position, with the reply placed after the block it is in.
+    const { editor, scale } = propsRef.current;
+    const wrap = wrapRef.current;
+    if (pos == null || !wrap || pos < 0 || pos >= editor.state.doc.content.size) return null;
+    const node = editor.state.doc.nodeAt(pos);
+    const el = editor.view.nodeDOM(pos);
+    if (node?.type.name !== 'mathBlock' || !(el instanceof HTMLElement)) return null;
+    const $pos = editor.state.doc.resolve(pos);
+    const outer = ($pos.depth > 0 ? $pos.node(1) : node).attrs.id as string | null;
+    const s = scale || 1;
+    const top = (el.getBoundingClientRect().top - wrap.getBoundingClientRect().top) / s;
+    return {
+      req: { strokes: [], blockIds: outer ? [outer] : [], label: 'Equation', text: `$$${node.attrs.latex as string}$$` },
+      under: { minX: 0, minY: top, maxX: width, maxY: top + el.offsetHeight },
+    };
+  }
+
+  async function submitAsk(a: AskAt, mode: AskMode, prompt?: string) {
+    if (a.block) {
+      const found = blockAsk(a.block.id, a.block.pos);
+      setAsk(null);
+      if (found) propsRef.current.onAsk({ ...found.req, mode, prompt });
+      return;
+    }
+    if (!a.region) return;
+    const req = await capture(a.region);
+    setAsk(null);
+    propsRef.current.onAsk({ ...req, mode, prompt });
+  }
+
+  // ---------------------------------------------------------------- the Select box
+  const marqueeRaf = useRef(0);
+  /** Draws the box and the halo on what it would catch, once a frame. */
+  function paintMarquee(g: MarqueeGesture) {
+    if (marqueeRaf.current) return;
+    marqueeRaf.current = requestAnimationFrame(() => {
+      marqueeRaf.current = 0;
+      if (gesture.current !== g || !g.started) return;
+      const r = marqueeRect(g);
+      setOverlay({ marquee: r, caught: new Set(caughtBy(layoutRef.current, r).map((i) => i.strokeId)) });
+    });
+  }
+
+  function cancelMarquee() {
+    if (gesture.current?.kind !== 'marquee') return;
+    gesture.current = null;
+    setOverlay(null);
+  }
+
+  /** Ink just picked up takes the keyboard from a text field (the assistant's composer, say), so ⌫ and ⌘C act on it. */
+  function keysToInk() {
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest('textarea, input')) active.blur();
+  }
+
+  function finishMarquee(g: MarqueeGesture) {
+    setQuiet(false);
+    const r = marqueeRect(g);
+    const s = propsRef.current.scale || 1;
+    if (!g.started || ((r.maxX - r.minX) * s < TAP_BOX && (r.maxY - r.minY) * s < TAP_BOX)) {
+      // A tap just off the ink still picks up the blob it was meant for.
+      const blob = blobAt({ x: g.x0, y: g.y0 }, true);
+      setSelection(blob ? selectionFromItems(blob) : null);
+      if (blob) keysToInk();
+      return;
+    }
+    const prev = g.add ? selectionRef.current : null;
+    let items = caughtBy(layoutRef.current, r);
+    if (prev) items = [...prev.items, ...items.filter((i) => !prev.items.some((p) => p.strokeId === i.strokeId))];
+    if (items.length) {
+      const sel = selectionFromItems(items);
+      if (!sel) return;
+      sel.area = prev?.area ? unionBounds([prev.area, r])! : r;
+      setSelection(sel);
+      keysToInk();
+      // With the assistant open, the box goes into its composer too, but the keyboard stays with the ink, which
+      // stays selected: boxing ink is as often to move or delete it as to ask about it.
+      if (useUI.getState().assistant) {
+        const frame = selectionFrame(sel.bounds, 1 / s).frame;
+        void capture(unionBounds([sel.area, frame])!).then((req) => propsRef.current.onAttach(req, { focus: false }));
+      }
+      return;
+    }
+    // Nothing caught (typed text, an equation, a scan): the box stays, as an area of the page to ask about.
+    void askRegion(r, r, true);
+  }
+
   // ---------------------------------------------------------------- pointer look
   function setCursor(c: string | null) {
     if (c === cursorKind.current) return;
@@ -460,7 +710,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     else delete el.dataset.inkCursor;
   }
 
-  /** A hand over ink you can pick up (with the lasso, or ⌘ and the pen), arrows over the resize handles. */
+  /** A hand over ink you can pick up (with Select, or ⌘ and the pen), arrows over the resize handles. */
   function hoverCursor(meta: boolean): string | null {
     const h = hover.current;
     if (!h || isUi(h.target)) return null;
@@ -981,7 +1231,37 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     setCursor(hoverCursor(false));
   }
 
-  // Keyboard shortcuts for a lasso selection.
+  // While a Select box is dragged: Space moves it, ⌥ grows it from its centre, Esc lets it go. Caught here,
+  // first, so the note never takes the Space as typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const g = gesture.current;
+      if (g?.kind !== 'marquee') return;
+      const down = e.type === 'keydown';
+      if (e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        g.space = down ? (g.space ?? { x: g.x1, y: g.y1 }) : null;
+      } else if (e.key === 'Alt') {
+        e.preventDefault();
+        g.alt = down;
+        paintMarquee(g);
+      } else if (e.key === 'Escape' && down) {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelMarquee();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKey, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keyboard shortcuts for a selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const g = gesture.current;
@@ -1108,7 +1388,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       setHeld('press');
     };
 
-    /** Pressing on a sketch in the text with the lasso pulls it back out as handwriting. */
+    /** Pressing on a sketch in the text with Select pulls it back out as handwriting. */
     const startPopOut = (e: PointerEvent, p: Pt, dom: HTMLElement): boolean => {
       const ed = propsRef.current.editor;
       let pos = -1;
@@ -1144,6 +1424,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
 
     const onDown = (e: PointerEvent) => {
       if (isUi(e.target)) return;
+      // A press anywhere else puts the Ask composer away.
+      if (askRef.current) setAsk(null);
       const t = effectiveTool(e);
       if (!t) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -1163,7 +1445,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       const st = useTools.getState();
       const id = e.pointerId;
 
-      // With the lasso — or ⌘ with the pen — a press on ink picks up the whole word or drawing.
+      // With Select — or ⌘ with the pen — a press on ink picks up the whole word or drawing.
       const penGrab = (t === 'pen' || t === 'highlighter') && e.metaKey;
       if (t === 'lasso' || penGrab) {
         const sketch = t === 'lasso' ? (e.target as Element | null)?.closest?.('.ink-inline-node') : null;
@@ -1190,9 +1472,21 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         }
         if (hit) return startMove(e, p);
         if (t === 'lasso') {
-          setSelection(null);
-          gesture.current = { kind: 'lasso', id, poly: [p.x, p.y], client: { x: e.clientX, y: e.clientY } };
-          setOverlay({ lasso: [p.x, p.y] });
+          // On the bare page: a Select box, from here (it shows once the pointer has moved).
+          if (!e.shiftKey) setSelection(null);
+          gesture.current = {
+            kind: 'marquee',
+            id,
+            x0: p.x,
+            y0: p.y,
+            x1: p.x,
+            y1: p.y,
+            client: { x: e.clientX, y: e.clientY },
+            started: false,
+            add: e.shiftKey,
+            space: null,
+            alt: e.altKey,
+          };
           return;
         }
       }
@@ -1203,7 +1497,8 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         const isHl = t === 'highlighter';
         const stroke: Stroke = {
           id: uid('s'),
-          brush: isHl ? 'highlighter' : st.pen.brush,
+          // The felt marker is the only pen.
+          brush: isHl ? 'highlighter' : 'marker',
           color: isHl ? st.highlighter.color : st.pen.color,
           size: isHl ? st.highlighter.size : st.pen.size,
           pts: [p.x, p.y, e.pointerType === 'pen' ? Math.max(0.05, e.pressure) : 0.5],
@@ -1218,11 +1513,6 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         erasingRef.current = new Map();
         eraseAlong(null, p);
         (gesture.current as Extract<Gesture, { kind: 'erase' }>).last = p;
-      } else if (t === 'shapes') {
-        gesture.current = { kind: 'shape', id, x0: p.x, y0: p.y, x1: p.x, y1: p.y, shift: e.shiftKey };
-      } else if (t === 'ask') {
-        setSnip(null);
-        gesture.current = { kind: 'snip', id, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
       }
     };
 
@@ -1235,22 +1525,36 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         const shape = recognizeShape(g.stroke.pts);
         if (!shape) return;
         g.snapped = true;
-        g.stroke = { ...g.stroke, brush: 'mono', pts: shape.pts, closed: shape.closed, size: Math.max(1.2, g.stroke.size * 0.95) };
+        // A clean line drawn at the marker's own width, so a snapped shape reads as the same pen.
+        const size = Math.max(1.2, g.stroke.size * BRUSHES.marker.sizeScale * 0.95);
+        g.stroke = { ...g.stroke, brush: 'mono', pts: shape.pts, closed: shape.closed, size };
         setFlash(g.stroke.id);
         setTimeout(() => setFlash(null), 380);
         scheduleLive();
       }, 520);
     };
 
-    /** Follows the pointer (or the page scrolling under it) during a lasso, move or resize. */
+    /** Follows the pointer (or the page scrolling under it) during a Select box, move or resize. */
     const pointerAt = (g: Gesture, client: Pt) => {
       const p = toLocal({ clientX: client.x, clientY: client.y });
       lastPointer.current = p;
       if (hover.current) hover.current = { ...hover.current, p, target: null };
-      if (g.kind === 'lasso') {
+      if (g.kind === 'marquee') {
         g.client = client;
-        g.poly.push(p.x, p.y);
-        setOverlay({ lasso: g.poly.slice() });
+        if (g.space) {
+          // Space: the whole box follows the pointer.
+          g.x0 += p.x - g.space.x;
+          g.y0 += p.y - g.space.y;
+          g.space = p;
+        }
+        g.x1 = p.x;
+        g.y1 = p.y;
+        if (!g.started) {
+          if (Math.hypot(g.x1 - g.x0, g.y1 - g.y0) * (propsRef.current.scale || 1) < DRAG_START) return;
+          g.started = true;
+          startAutoscroll();
+        }
+        paintMarquee(g);
       } else if (g.kind === 'move') {
         g.client = client;
         const dx = p.x - g.sx;
@@ -1290,7 +1594,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       const tick = () => {
         autoRaf.current = 0;
         const g = gesture.current;
-        if (!g || (g.kind !== 'lasso' && g.kind !== 'move' && g.kind !== 'scale')) return;
+        if (!g || (g.kind !== 'marquee' && g.kind !== 'move' && g.kind !== 'scale')) return;
         const sc = wrapRef.current?.closest('.note-scroll') as HTMLElement | null;
         if (sc) {
           const r = sc.getBoundingClientRect();
@@ -1340,28 +1644,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       } else if (g.kind === 'erase') {
         eraseAlong(g.last, p);
         g.last = p;
-      } else if (g.kind === 'lasso' || g.kind === 'move' || g.kind === 'scale') {
-        if (g.kind === 'move') g.alt = e.altKey;
-        if (g.kind === 'lasso') startAutoscroll();
+      } else if (g.kind === 'marquee' || g.kind === 'move' || g.kind === 'scale') {
+        if (g.kind === 'move' || g.kind === 'marquee') g.alt = e.altKey;
         pointerAt(g, { x: e.clientX, y: e.clientY });
-      } else if (g.kind === 'shape') {
-        g.x1 = p.x;
-        g.y1 = p.y;
-        g.shift = e.shiftKey;
-        setOverlay({ shape: shapeStroke(g) });
-      } else if (g.kind === 'snip') {
-        g.x1 = p.x;
-        g.y1 = p.y;
-        setOverlay({
-          snip: { minX: Math.min(g.x0, g.x1), minY: Math.min(g.y0, g.y1), maxX: Math.max(g.x0, g.x1), maxY: Math.max(g.y0, g.y1) },
-        });
       }
-    };
-
-    const shapeStroke = (g: Extract<Gesture, { kind: 'shape' }>): Stroke => {
-      const st = useTools.getState();
-      const geo = shapeFromDrag(st.shape.kind, g.x0, g.y0, g.x1, g.y1, g.shift, st.pen.size);
-      return { id: 'shape-preview', brush: 'mono', color: st.pen.color, size: Math.max(1.2, st.pen.size), pts: geo.pts, closed: geo.closed };
     };
 
     const onUp = (e: PointerEvent) => {
@@ -1391,10 +1677,12 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         erasingRef.current = null;
         setErasing(null);
         if (work && work.size && !cancelled) applyInkEdits(propsRef.current.editor, work, propsRef.current.line);
-      } else if (g.kind === 'lasso') {
+      } else if (g.kind === 'marquee') {
+        if (marqueeRaf.current) cancelAnimationFrame(marqueeRaf.current);
+        marqueeRaf.current = 0;
         setOverlay(null);
         if (cancelled) return;
-        finishLasso(g.poly);
+        finishMarquee(g);
       } else if (g.kind === 'move' || g.kind === 'scale') {
         if (g.kind === 'move' && g.moved && !cancelled) {
           g.alt = e.altKey;
@@ -1422,16 +1710,6 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         setQuiet(g.moved && !cancelled);
         hover.current = { p: toLocal(e), touch: e.pointerType === 'touch', target: e.target, mouse: e.pointerType !== 'touch' };
         setCursor(hoverCursor(e.metaKey));
-      } else if (g.kind === 'shape') {
-        setOverlay(null);
-        if (cancelled || Math.hypot(g.x1 - g.x0, g.y1 - g.y0) < 4) return;
-        const s = shapeStroke(g);
-        commitStroke({ ...s, id: uid('s'), pts: compactPoints(s.pts) });
-      } else if (g.kind === 'snip') {
-        setOverlay(null);
-        const b = { minX: Math.min(g.x0, g.x1), minY: Math.min(g.y0, g.y1), maxX: Math.max(g.x0, g.x1), maxY: Math.max(g.y0, g.y1) };
-        if (cancelled || b.maxX - b.minX < 12 || b.maxY - b.minY < 12) return;
-        setSnip({ bounds: b, capturing: false });
       }
     };
 
@@ -1458,36 +1736,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, wrapRef]);
 
-  function finishLasso(poly: number[]) {
-    setQuiet(false);
-    const lay = layoutRef.current;
-    const pb = polygonBounds(poly);
-    const tiny = pb.maxX - pb.minX < 6 && pb.maxY - pb.minY < 6;
-    if (tiny) {
-      // A tap just off the ink still picks up the blob it was meant for.
-      const blob = blobAt({ x: poly[0], y: poly[1] }, true);
-      setSelection(blob ? selectionFromItems(blob) : null);
-      return;
-    }
-    const items: SelectionItem[] = [];
-    for (const b of lay.blocks) {
-      for (const s of b.ink) {
-        const sb = offsetBounds(strokeBounds(s), 0, b.top);
-        if (!boundsIntersect(sb, pb)) continue;
-        const frac = fractionInside(s, poly, 0, b.top);
-        const c = strokeCenter(s);
-        if (frac >= 0.5 || (s.pts.length <= 9 && fractionInside({ ...s, pts: [c.x, c.y, 0.5] }, poly, 0, b.top) === 1)) {
-          items.push({ blockId: b.id, strokeId: s.id });
-        }
-      }
-    }
-    setSelection(items.length ? selectionFromItems(items) : null);
-  }
-
   // ---------------------------------------------------------------- render
   const dragging = held === 'drag';
   const hidden = useMemo(() => (dragging && selection ? new Set(selection.items.map((i) => i.strokeId)) : null), [dragging, selection]);
   const selParts = useMemo(() => placedOf(selection, layout), [selection, layout]); // eslint-disable-line react-hooks/exhaustive-deps
+  const caughtParts = useMemo(() => {
+    if (!overlay?.caught.size) return [];
+    return placedAll(layout).items.filter(({ stroke }) => overlay.caught.has(stroke.id) && stroke.brush !== 'highlighter');
+  }, [overlay, layout]);
 
   const blockInk = (b: BlockBox) => (erasing?.get(b.id) ?? b.ink) as Stroke[];
 
@@ -1496,6 +1752,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   const cursorColor = st.tool === 'highlighter' ? st.highlighter.color : st.pen.color;
   const inv = 1 / (scale || 1);
   const frame = selection ? selectionFrame(selection.bounds, inv).frame : null;
+  const highlighterOnly = selParts.length > 0 && selParts.every(({ stroke }) => stroke.brush === 'highlighter');
 
   return (
     <>
@@ -1523,8 +1780,12 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
             <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.25" result="mask" />
             <feComposite in="SourceGraphic" in2="mask" operator="in" />
           </filter>
+          {/* Ink selection is clay, so it shows on black writing. */}
           <filter id={ids.selected} x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#2160e8" floodOpacity="0.55" />
+            <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#c6613f" floodOpacity="0.6" />
+          </filter>
+          <filter id={ids.caught} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#d97757" floodOpacity="0.75" />
           </filter>
           <filter id={ids.lifted} x="-20%" y="-20%" width="140%" height="160%">
             <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#1c1c1e" floodOpacity="0.22" />
@@ -1535,7 +1796,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         )}
         {/* The selection, drawn again on top with a glow; while dragging it is the only copy, lifted off the page. */}
         <g ref={dragPenRef}>
-          {selection && (
+          {selection && (!capturing || dragging) && (
             <g filter={`url(#${dragging ? ids.lifted : ids.selected})`} opacity={dragging ? 1 : 0.9}>
               {selParts
                 .filter(({ stroke }) => stroke.brush !== 'highlighter')
@@ -1556,14 +1817,39 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
           )}
         </g>
         <path ref={livePathRef} className={cx(flash && 'ink-snap-flash')} />
-        {overlay?.shape && <path d={strokePath(overlay.shape)} {...strokeSvgAttrs(overlay.shape)} />}
-        {overlay?.lasso && overlay.lasso.length > 3 && <polyline className="lasso-path" points={overlay.lasso.join(' ')} style={{ strokeWidth: 1.5 * inv }} />}
-        {(overlay?.snip || snip) && <SnipRect b={(overlay?.snip ?? snip!.bounds) as Bounds} inv={inv} hidden={!!snip?.capturing} />}
-        {frame && !snip && !dragging && (
+        {/* A Select box being dragged: what it would catch glows. */}
+        {caughtParts.length > 0 && (
+          <g filter={`url(#${ids.caught})`}>
+            {caughtParts.map(({ stroke, top }) => (
+              <path key={stroke.id} transform={`translate(0 ${top})`} d={strokePath(stroke)} {...strokeSvgAttrs(stroke)} />
+            ))}
+          </g>
+        )}
+        {overlay && (
+          <rect
+            className="marquee"
+            x={overlay.marquee.minX}
+            y={overlay.marquee.minY}
+            width={overlay.marquee.maxX - overlay.marquee.minX}
+            height={overlay.marquee.maxY - overlay.marquee.minY}
+            style={{ strokeWidth: inv }}
+          />
+        )}
+        {ask?.framed && ask.region && !capturing && (
+          <rect
+            className="area-frame"
+            x={ask.region.minX}
+            y={ask.region.minY}
+            width={ask.region.maxX - ask.region.minX}
+            height={ask.region.maxY - ask.region.minY}
+            style={{ strokeWidth: 1.25 * inv, strokeDasharray: `${5 * inv} ${4 * inv}` }}
+          />
+        )}
+        {frame && !dragging && !capturing && (
           <g className="sel-box" style={{ strokeWidth: inv }}>
-            <rect x={frame.minX} y={frame.minY} width={frame.maxX - frame.minX} height={frame.maxY - frame.minY} rx={6 * inv} />
+            <rect x={frame.minX} y={frame.minY} width={frame.maxX - frame.minX} height={frame.maxY - frame.minY} />
             {frameCorners(frame).map(([x, y], i) => (
-              <circle key={i} className="sel-handle" cx={x} cy={y} r={5 * inv} />
+              <circle key={i} className="sel-handle" cx={x} cy={y} r={4.5 * inv} style={{ strokeWidth: 1.5 * inv }} />
             ))}
           </g>
         )}
@@ -1575,7 +1861,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
             <path ref={caretRef} className="drop-caret" display="none" style={{ strokeWidth: 2 * inv }} />
             <rect ref={roomRef} className="room-band" display="none" rx={6 * inv} />
             <line ref={roomLineRef} className="room-line" display="none" style={{ strokeWidth: 3 * inv }} />
-            <rect ref={dragBoxRef} className="drag-box" display="none" rx={6 * inv} style={{ strokeWidth: inv, strokeDasharray: `${4 * inv} ${4 * inv}` }} />
+            <rect ref={dragBoxRef} className="drag-box" display="none" style={{ strokeWidth: inv, strokeDasharray: `${4 * inv} ${4 * inv}` }} />
           </g>
         )}
         <g ref={cursorRef} className="ink-cursor" style={{ display: 'none' }}>
@@ -1587,20 +1873,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
         </g>
       </svg>
 
-      {selection && frame && !held && !quiet && (
+      {selection && frame && !held && !quiet && !ask && !capturing && (
         <SelectionMenu
           frame={frame}
           inv={inv}
           scale={scale || 1}
           count={selection.items.length}
-          onAsk={(mode) => {
-            props.onAsk({
-              mode,
-              strokes: selectedStrokesAbs(),
-              blockIds: [...new Set(selection.items.map((i) => i.blockId))],
-              label: 'Selected handwriting',
-            });
-          }}
+          colors={highlighterOnly ? st.highlighterColors : st.penColors}
+          onAsk={askSelection}
           onConvert={(to) => props.onConvert({ to, strokes: selectedStrokesAbs(), selection: selection.items })}
           onColor={(color) => editSelected((s) => ({ ...s, id: s.id, color }))}
           onDuplicate={() => duplicateSelection()}
@@ -1608,65 +1888,35 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
             clipboard = selectedStrokesAbs();
           }}
           onDelete={deleteSelection}
-          highlighterOnly={selParts.every(({ stroke }) => stroke.brush === 'highlighter')}
         />
       )}
 
-      {snip && !snip.capturing && (
+      {ask && !capturing && (
         <SnipAsk
-          bounds={snip.bounds}
+          key={`${ask.under.minX},${ask.under.maxY},${ask.block?.id ?? ask.block?.pos ?? ''}`}
+          bounds={ask.under}
           inv={inv}
-          onCancel={() => setSnip(null)}
-          onSubmit={async (mode, prompt) => {
-            const b = snip.bounds;
-            const lay = layoutRef.current;
-            const strokes: Stroke[] = [];
-            const blockIds: string[] = [];
-            for (const blk of lay.blocks) {
-              if (blk.zoneEnd < b.minY || blk.top > b.maxY) continue;
-              blockIds.push(blk.id);
-              for (const s of blk.ink) {
-                const abs = translateStroke(s, 0, blk.top);
-                if (boundsIntersect(strokeBounds(abs), b)) strokes.push(abs);
-              }
-            }
-            setSnip({ bounds: b, capturing: true });
-            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-            let image: string | null = null;
-            try {
-              const wrap = wrapRef.current!.getBoundingClientRect();
-              const s = propsRef.current.scale || 1;
-              const rect = new DOMRect(wrap.left + b.minX * s, wrap.top + b.minY * s, (b.maxX - b.minX) * s, (b.maxY - b.minY) * s);
-              image = await propsRef.current.captureRegion(rect);
-            } catch {
-              image = null;
-            }
-            setSnip({ bounds: b, capturing: false });
-            props.onAsk({ mode, prompt, image, strokes, blockIds, label: 'Area of the page' });
-          }}
+          placeholder={ask.block ? (ask.block.math ? 'Ask about this equation…' : 'Ask about this handwriting…') : undefined}
+          onCancel={() => setAsk(null)}
+          onSubmit={(mode, prompt) => void submitAsk(ask, mode, prompt)}
         />
       )}
     </>
   );
 });
 
-function SnipRect({ b, inv, hidden }: { b: Bounds; inv: number; hidden: boolean }) {
-  if (hidden) return null;
-  return (
-    <g className="snip-rect" style={{ strokeWidth: 1.5 * inv }}>
-      <rect x={b.minX} y={b.minY} width={b.maxX - b.minX} height={b.maxY - b.minY} rx={8 * inv} />
-    </g>
-  );
-}
-
+/**
+ * What can be done with the selected ink, in one quiet bar over it: ask about it, turn it into text or math,
+ * recolour it, copy it or delete it.
+ */
 function SelectionMenu(props: {
   /** The selection's frame (with its handles at the corners). */
   frame: Bounds;
   inv: number;
   scale: number;
   count: number;
-  highlighterOnly: boolean;
-  onAsk(mode: AskMode): void;
+  colors: string[];
+  onAsk(): void;
   onConvert(to: 'text' | 'math'): void;
   onColor(c: string): void;
   onDuplicate(): void;
@@ -1676,6 +1926,8 @@ function SelectionMenu(props: {
   const { frame, inv, scale } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [below, setBelow] = useState(false);
+  const availability = useAvailability();
+  const unanswerable = availability === 'offline' ? 'Local AI isn’t running' : availability === 'nomodel' ? 'No chat model chosen' : null;
   // Clear of the frame and its handles: above it, unless that would put it under the toolbar.
   const gap = 8 * inv;
   useLayoutEffect(() => {
@@ -1692,10 +1944,10 @@ function SelectionMenu(props: {
     scroller.addEventListener('scroll', check, { passive: true });
     return () => scroller.removeEventListener('scroll', check);
   }, [frame, inv, scale, gap]);
-  const colors = props.highlighterOnly ? HIGHLIGHT_COLORS.slice(0, 5) : INK_COLORS.filter((_, i) => [0, 2, 5, 7, 8, 10].includes(i));
+  const shift = useSideShift(ref, inv, [frame, inv, scale]);
   // (5: the handles' radius)
   const top = below ? frame.maxY + 5 * inv + gap : frame.minY - 5 * inv - gap;
-  const left = (frame.minX + frame.maxX) / 2;
+  const left = (frame.minX + frame.maxX) / 2 + shift;
   return (
     <div
       ref={ref}
@@ -1705,34 +1957,34 @@ function SelectionMenu(props: {
       style={{ left, top, transform: `translate(-50%, ${below ? '0' : '-100%'}) scale(${inv})`, transformOrigin: below ? '50% 0' : '50% 100%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button className="sel-btn" onClick={() => props.onAsk('explain')} title="Ask about this">
-        <MessageCircleQuestion size={14} /> Ask
-      </button>
-      <button className="sel-btn" onClick={() => props.onAsk('tutor')} title="Guide me through this problem">
-        <GraduationCap size={14} /> Tutor
+      <button className="sel-btn is-ask" onClick={props.onAsk} disabled={!!unanswerable} title={unanswerable ?? 'Ask about this'}>
+        <MessageCircleQuestion size={15} />
+        Ask
       </button>
       <span className="sel-sep" />
-      <button className="sel-btn icon" onClick={() => props.onConvert('text')} title="Convert to typed text">
-        <Type size={14} />
+      <button className="sel-btn" onClick={() => props.onConvert('text')} title="Turn into typed text">
+        <Type size={15} />
+        Text
       </button>
-      <button className="sel-btn icon" onClick={() => props.onConvert('math')} title="Convert to typeset math">
-        <Sigma size={14} />
+      <button className="sel-btn" onClick={() => props.onConvert('math')} title="Turn into typeset math">
+        <Sigma size={15} />
+        Math
       </button>
       <span className="sel-sep" />
-      {colors.map((c) => (
-        <button key={c.value} className="sel-swatch" title={c.name} onClick={() => props.onColor(c.value)}>
-          <span style={{ background: c.value }} />
+      {props.colors.map((c, i) => (
+        <button key={`${i}${c}`} className="sel-swatch" title="Recolour" aria-label={`Recolour ${i + 1}`} onClick={() => props.onColor(c)}>
+          <span style={{ background: c }} />
         </button>
       ))}
       <span className="sel-sep" />
-      <button className="sel-btn icon" onClick={props.onDuplicate} title="Duplicate (⌘D)">
-        <CopyPlus size={14} />
+      <button className="sel-btn icon" onClick={props.onDuplicate} title="Duplicate  ⌘D" aria-label="Duplicate">
+        <CopyPlus size={15} />
       </button>
-      <button className="sel-btn icon" onClick={props.onCopy} title="Copy (⌘C)">
-        <Copy size={14} />
+      <button className="sel-btn icon" onClick={props.onCopy} title="Copy  ⌘C" aria-label="Copy">
+        <Copy size={15} />
       </button>
-      <button className="sel-btn icon is-danger" onClick={props.onDelete} title="Delete (⌫)">
-        <Trash2 size={14} />
+      <button className="sel-btn icon is-danger" onClick={props.onDelete} title="Delete  ⌫" aria-label="Delete">
+        <Trash2 size={15} />
       </button>
     </div>
   );

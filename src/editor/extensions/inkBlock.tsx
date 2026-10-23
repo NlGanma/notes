@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useRef, useState } from 'react';
-import { Eye, EyeOff, GraduationCap, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
+import { Eye, EyeOff, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
 import { useTools } from '../../state/tools';
 import type { InkTranscript, Stroke } from '../../lib/ink/types';
 import { deleteBlock, fittedHeight, inkOf, insertParagraphInInk, setInkBlockHeight, trimInkBlock } from '../ink/ops';
@@ -154,8 +154,6 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
     handle.addEventListener('pointercancel', up);
   };
 
-  const isMath = transcript && (transcript.kind === 'math' || transcript.kind === 'mixed');
-
   return (
     <NodeViewWrapper
       ref={rootRef}
@@ -165,7 +163,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
       data-id={id}
       onPointerDown={onPointerDown}
     >
-      {!ink.length && <div className="ink-block-hint">Handwriting area — pick a pen and write, or click to type</div>}
+      {!ink.length && <div className="ink-block-hint">Handwriting area — pick the marker and write, or click to type</div>}
 
       {/* One hover-only handle in the left gutter (Notion's block handle) instead of a column of icons. */}
       <div className="ink-actions" data-ui contentEditable={false}>
@@ -183,10 +181,8 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
       </div>
       <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
         <div className="menu ink-menu" role="menu">
-          {item(<MessageCircleQuestion size={20} />, 'Ask about this', () => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'explain' }))}
-          {(isMath || ink.length > 0) &&
-            item(<GraduationCap size={20} />, 'Tutor me through it', () => editorBus.emit('ink:ask', { editor, blockId: id, mode: 'tutor' }))}
-          <div className="menu-sep" />
+          {ink.length > 0 && item(<MessageCircleQuestion size={20} />, 'Ask about this…', () => editorBus.emit('block:ask', { editor, blockId: id }))}
+          {ink.length > 0 && <div className="menu-sep" />}
           {transcript &&
             !transcript.stale &&
             item(showTranscript ? <EyeOff size={20} /> : <Eye size={20} />, showTranscript ? 'Hide what Nib read' : 'Show what Nib read', () =>

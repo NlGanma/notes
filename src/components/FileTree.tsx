@@ -19,7 +19,7 @@ import type { MenuItem } from './common/ContextMenu';
 import { confirmDialog, pickFolder, promptDialog } from './common/dialogs';
 import { editClass, newFolder, newHomework, newNote, reviewFolder, reviewNote } from '../lib/commands';
 import { isReviewable } from '../lib/review/tree';
-import { classForFolder, HOMEWORK_SUBFOLDER } from '../lib/classes';
+import { classForFolder, HOMEWORK_SUBFOLDER, homeworkFolders, inFolder, moveTarget } from '../lib/classes';
 import { displayTitle } from '../lib/displayTitle';
 import type { NoteDoc } from '../lib/vault/types';
 import { bridge } from '../lib/platform';
@@ -157,14 +157,7 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
         if (d) useUI.getState().openNote(d.meta.id, { newTab: true });
       },
     },
-    {
-      label: 'Move to…',
-      icon: <FolderInput {...ICON} />,
-      run: async () => {
-        const choice = await pickFolder(`Move ${short(name)} to…`, n.meta.folder);
-        if (choice !== null) vault.moveNote(n.meta.id, choice);
-      },
-    },
+    { label: 'Move to…', icon: <FolderInput {...ICON} />, run: () => moveNoteTo(n) },
     ...(isReviewable(n) ? [{ label: 'Review this note', icon: <Repeat {...ICON} />, run: () => reviewNote(n.meta.id) }] : []),
     n.meta.homework
       ? {
@@ -186,6 +179,18 @@ export function noteMenu(n: NoteDoc): MenuItem[] {
     { separator: true },
     { label: 'Move to Trash', icon: <Trash2 {...ICON} />, danger: true, run: () => trashNote(n.meta.id) },
   ];
+}
+
+/** Move to… for a note, from its row, its tab or the editor's ⋯ menu. */
+export async function moveNoteTo(n: NoteDoc) {
+  const { folderMeta } = useVault.getState();
+  const hidden = homeworkFolders(folderMeta);
+  // Homework sitting in its class's Homework folder shows as in the class.
+  const current = hidden.some((h) => inFolder(n, h)) ? (classForFolder(n.meta.folder, folderMeta) ?? '') : n.meta.folder;
+  const choice = await pickFolder(`Move ${short(displayTitle(n))} to…`, current, { exclude: hidden });
+  if (choice === null) return;
+  const target = moveTarget(n, choice, useVault.getState().folderMeta);
+  if (target !== n.meta.folder) useVault.getState().moveNote(n.meta.id, target);
 }
 
 export function trashNote(id: string) {

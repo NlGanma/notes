@@ -74,9 +74,9 @@ export function editedAt(ts: number, now = Date.now()): string {
 }
 
 /**
- * The top of the paper, as Apple Notes lays it out: a centred line with the class and the date, then the
- * title. Nothing else lives inside the page. (Tags are kept in the note's data for what they mark, e.g. the
- * guide, but are not shown or edited.)
+ * The top of the paper, as Apple Notes lays it out: a quiet line with where the note lives and when it was
+ * edited, then the title in the serif. A homework note's line is only the time: its class is in the bar under
+ * the title. (Tags stay in the note's data for what they mark, e.g. the guide, but are not shown.)
  */
 export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) {
   const updateMeta = useVault((s) => s.updateMeta);
@@ -123,68 +123,68 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
     if (t !== note.meta.title) updateMeta(note.meta.id, { title: t });
   };
 
-  const folderLabel = note.meta.folder ? note.meta.folder.split('/').join(' / ') : 'Notes';
-
-  const titleEl = (
-    <textarea
-      ref={titleRef}
-      className="page-title"
-      value={title}
-      rows={1}
-      placeholder={isDateTitle(note) ? displayTitle(note) : 'Untitled'}
-      spellCheck={false}
-      onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
-      onBlur={commitTitle}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === 'ArrowDown') {
-          e.preventDefault();
-          commitTitle();
-          focusBody(editor, e.key === 'Enter');
+  const go = (path: string) => () => useUI.getState().setView({ kind: 'folder', path });
+  // Where it lives: class › subfolder, a plain folder (each part a link), or nothing for a loose note.
+  const crumbs: { label: string; onClick(): void; cls?: boolean }[] = [];
+  if (!note.meta.homework) {
+    if (cls) {
+      crumbs.push({ label: cls.name, onClick: () => useUI.getState().setView({ kind: 'class', path: cls.path }), cls: true });
+      if (subPath && subPath !== HOMEWORK_SUBFOLDER) {
+        let at = cls.path;
+        for (const part of subPath.split('/')) {
+          at = `${at}/${part}`;
+          crumbs.push({ label: part, onClick: go(at) });
         }
-      }}
-    />
-  );
+      }
+    } else if (note.meta.folder) {
+      let at = '';
+      for (const part of note.meta.folder.split('/')) {
+        at = at ? `${at}/${part}` : part;
+        crumbs.push({ label: part, onClick: go(at) });
+      }
+    }
+  }
 
   return (
-    // No is-homework class: a homework's header is any note's, without the old assignment-page title.
-    <header className="page-header" data-ui>
-      {/* Homework names its class in the row under its title (HomeworkBar), so its meta line is just the date. */}
-      {note.meta.homework && (
-        <div className="page-meta">
-          <span className="crumb-date">{editedAt(note.meta.updated)}</span>
-        </div>
-      )}
-      {!note.meta.homework && (
-        <div className="page-meta">
-          {cls ? (
-            <>
-              <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })} title={`Open ${cls.name}`}>
-                {cls.name}
-              </button>
-              {subPath && subPath !== HOMEWORK_SUBFOLDER && (
-                <>
-                  <span className="crumb-sep">/</span>
-                  <button className="crumb" onClick={() => useUI.getState().setView({ kind: 'folder', path: note.meta.folder })}>
-                    {subPath.split('/').join(' / ')}
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <button
-              className="crumb"
-              onClick={() => useUI.getState().setView(note.meta.folder ? { kind: 'folder', path: note.meta.folder } : { kind: 'home' })}
-            >
-              {folderLabel}
+    <header className={cx('page-header', note.meta.homework && 'is-homework')} data-ui>
+      <div className="page-meta">
+        {crumbs.map((c, i) => (
+          <span key={i} className="crumb-part">
+            {i > 0 && (
+              <span className="crumb-sep" aria-hidden>
+                ›
+              </span>
+            )}
+            <button className={cx('crumb', c.cls && 'is-class')} onClick={c.onClick} title={c.label}>
+              {c.label}
             </button>
-          )}
+          </span>
+        ))}
+        {crumbs.length > 0 && (
           <span className="crumb-dot" aria-hidden>
             ·
           </span>
-          <span className="crumb-date">{editedAt(note.meta.updated)}</span>
-        </div>
-      )}
-      {titleEl}
+        )}
+        <span className="crumb-date">{editedAt(note.meta.updated)}</span>
+      </div>
+      <textarea
+        ref={titleRef}
+        className="page-title"
+        value={title}
+        rows={1}
+        placeholder={isDateTitle(note) ? displayTitle(note) : 'Untitled'}
+        spellCheck={false}
+        aria-label="Title"
+        onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
+        onBlur={commitTitle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            commitTitle();
+            focusBody(editor, e.key === 'Enter');
+          }
+        }}
+      />
       {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       {note.meta.homework && <HomeworkBar note={note} />}
     </header>
