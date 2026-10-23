@@ -60,7 +60,7 @@ function Attachment({
  * work" card (status, the notes it answers from as attachments, Add or create,
  * Mark as done) and the card to ask the assistant about it.
  */
-export function HomeworkBar({ note, tags }: { note: NoteDoc; /** The page's hashtags, shown above the class-colour rule. */ tags?: React.ReactNode }) {
+export function HomeworkBar({ note }: { note: NoteDoc }) {
   const notes = useVault((s) => s.notes);
   const folderMeta = useVault((s) => s.folderMeta);
   const hw = note.meta.homework!;
@@ -225,7 +225,6 @@ export function HomeworkBar({ note, tags }: { note: NoteDoc; /** The page's hash
           {!hw.due ? 'No due date' : missing ? `Missing · was due ${shortDate(hw.due)}` : dueLine(hw.due)}
         </button>
       </div>
-      {tags}
       <div className="hw-rule" />
 
       <section className="hw-work" aria-label="Your work">

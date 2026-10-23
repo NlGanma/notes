@@ -1,17 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
-import { ClipboardList, Hash, X } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
 import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, themeVars } from '../../lib/classes';
-import { openContextMenu } from '../../components/common/ContextMenu';
 import { HomeworkBar } from './HomeworkBar';
 
-// The paper picker lives in the toolbar now; Settings still imports these from here.
-export { PAPERS, PaperSwatch } from './PagePanels';
 
 /**
  * Moves the caret from the title into the note body — synchronously, so fast
@@ -40,26 +37,19 @@ export function editedAt(ts: number, now = Date.now()): string {
 }
 
 /**
- * The top of the paper, as Apple Notes lays it out: a centred line with the class and the date, the title,
- * then hashtags as plain text. Nothing else lives inside the page.
+ * The top of the paper, as Apple Notes lays it out: a centred line with the class and the date, then the
+ * title. Nothing else lives inside the page. (Tags are kept in the note's data for what they mark, e.g. the
+ * guide, but are not shown or edited.)
  */
 export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) {
   const updateMeta = useVault((s) => s.updateMeta);
   const focusTitle = useUI((s) => s.focusTitle);
   const [title, setTitle] = useState(note.meta.title);
-  const [tagInput, setTagInput] = useState<string | null>(null);
-  const [pick, setPick] = useState(0);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const folderMeta = useVault((s) => s.folderMeta);
   const classPath = classForFolder(note.meta.folder, folderMeta);
   const cls = classPath ? classInfo(classPath, folderMeta[classPath]) : null;
   const subPath = cls ? note.meta.folder.slice(cls.path.length + 1) : '';
-  const allTags = useVault((s) => {
-    const set = new Set<string>();
-    for (const n of Object.values(s.notes)) for (const t of n.meta.tags) set.add(t);
-    return [...set].sort().join('\u0000');
-  });
-
   useEffect(() => setTitle(note.meta.title), [note.meta.id, note.meta.title]);
 
   // The title grows with its text. A note opened in a background tab has no size yet, so measure again once it shows.
@@ -95,101 +85,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
     if (t !== note.meta.title) updateMeta(note.meta.id, { title: t });
   };
 
-  const addTag = (raw: string) => {
-    const tag = raw.trim().replace(/^#/, '').toLowerCase().replace(/\s+/g, '-');
-    if (tag && !note.meta.tags.includes(tag)) updateMeta(note.meta.id, { tags: [...note.meta.tags, tag] });
-  };
-  const removeTag = (tag: string) => updateMeta(note.meta.id, { tags: note.meta.tags.filter((x) => x !== tag) });
-
-  const suggestions = tagInput
-    ? allTags
-        .split('\u0000')
-        .filter((t) => t && t.startsWith(tagInput.toLowerCase().replace(/^#/, '')) && !note.meta.tags.includes(t))
-        .slice(0, 5)
-    : [];
-
   const folderLabel = note.meta.folder ? note.meta.folder.split('/').join(' / ') : 'Notes';
-
-  const tagsRow = (
-    <div className={cx('page-tags', !note.meta.tags.length && tagInput === null && 'is-empty')}>
-      {note.meta.tags.map((t) => (
-        <button
-          key={t}
-          className="tag"
-          onClick={() => useUI.getState().setView({ kind: 'tag', tag: t })}
-          onContextMenu={(e) => openContextMenu(e, [{ label: 'Remove tag', icon: <X size={20} />, run: () => removeTag(t) }])}
-          title="Click to see notes with this tag · right-click to remove"
-        >
-          #{t}
-        </button>
-      ))}
-      {tagInput === null ? (
-        <button className="tag-add" onClick={() => setTagInput('')}>
-          + Add tag
-        </button>
-      ) : (
-        <span className="tag-input-wrap">
-          <Hash size={14} />
-          <input
-            autoFocus
-            className="tag-input"
-            value={tagInput}
-            placeholder="tag"
-            onChange={(e) => {
-              setTagInput(e.target.value);
-              setPick(0);
-            }}
-            onBlur={() => {
-              if (tagInput.trim()) addTag(tagInput);
-              setTagInput(null);
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                addTag(e.key === 'Enter' && suggestions[pick] && tagInput.trim() ? suggestions[pick] : tagInput);
-                setTagInput('');
-              } else if (e.key === 'Escape') setTagInput(null);
-              else if (e.key === 'Backspace' && !tagInput && note.meta.tags.length) {
-                // Backspace at the start removes the last tag (Apple Notes / Notion).
-                e.preventDefault();
-                removeTag(note.meta.tags[note.meta.tags.length - 1]);
-              } else if (e.key === 'ArrowDown' && suggestions.length) {
-                e.preventDefault();
-                setPick((p) => (p + 1) % suggestions.length);
-              } else if (e.key === 'ArrowUp' && suggestions.length) {
-                e.preventDefault();
-                setPick((p) => (p - 1 + suggestions.length) % suggestions.length);
-              } else if (e.key === 'Tab' && suggestions[pick]) {
-                e.preventDefault();
-                addTag(suggestions[pick]);
-                setTagInput('');
-              }
-            }}
-          />
-          {suggestions.length > 0 && (
-            <span className="tag-suggest">
-              {suggestions.map((s, i) => (
-                <button
-                  key={s}
-                  className={cx(i === pick && 'is-active')}
-                  onMouseEnter={() => setPick(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    addTag(s);
-                    setTagInput('');
-                  }}
-                >
-                  <Hash size={16} />
-                  {s}
-                </button>
-              ))}
-            </span>
-          )}
-        </span>
-      )}
-    </div>
-  );
 
   const titleEl = (
     <textarea
@@ -259,7 +155,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
       ) : (
         titleEl
       )}
-      {note.meta.homework ? <HomeworkBar note={note} tags={tagsRow} /> : tagsRow}
+      {note.meta.homework && <HomeworkBar note={note} />}
     </header>
   );
 }

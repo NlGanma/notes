@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, Copy, FolderInput, Minus, Plus, Printer, Trash2, ZoomIn } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Code2, Copy, Download, FileDown, FileJson, FileType2, FolderInput, Minus, Plus, SpellCheck, Trash2, ZoomIn } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
-import { useSettings, type LineSpacing, type Paper } from '../../state/settings';
+import { useSettings, type LineSpacing } from '../../state/settings';
+import { normalizePaper, PAPERS, type Paper } from '../../lib/paper';
+import { PaperPicker } from '../../components/PaperPicker';
+import { PolishPanel } from '../../components/PolishPanel';
 import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
 import { HOMEWORK_SUBFOLDER, listClasses } from '../../lib/classes';
@@ -11,18 +14,7 @@ import { ClassBadge } from '../../components/classes/ClassIcon';
 import { exportNote } from '../../lib/export';
 import { newClass } from '../../lib/commands';
 
-/** GoodNotes' template names. */
-export const PAPERS: { id: Paper; label: string }[] = [
-  { id: 'blank', label: 'Blank' },
-  { id: 'ruled', label: 'Ruled' },
-  { id: 'grid', label: 'Squared' },
-  { id: 'dots', label: 'Dotted' },
-  { id: 'legal', label: 'Legal pad' },
-];
-
-export function PaperSwatch({ paper }: { paper: Paper }) {
-  return <span className={cx('paper-swatch', `paper-${paper}`)} />;
-}
+export { PAPERS };
 
 const SPACINGS: [LineSpacing, string][] = [
   ['compact', 'Compact'],
@@ -30,22 +22,15 @@ const SPACINGS: [LineSpacing, string][] = [
   ['roomy', 'Roomy'],
 ];
 
-/** The toolbar's Paper popover: template thumbnails (GoodNotes), then line spacing and the default. */
+/** The toolbar's Paper popover: the three papers, then line spacing. */
 export function PaperPanel({ note }: { note: NoteDoc }) {
   const settings = useSettings();
-  const paper = note.meta.paper ?? settings.paper;
+  const paper = normalizePaper(note.meta.paper);
   const setPaper = (p: Paper) => useVault.getState().updateMeta(note.meta.id, { paper: p, updated: note.meta.updated });
   return (
     <div className="paper-panel">
       <div className="pp-title">Paper</div>
-      <div className="pp-grid" role="radiogroup" aria-label="Paper">
-        {PAPERS.map((p) => (
-          <button key={p.id} role="radio" aria-checked={paper === p.id} className={cx('pp-item', paper === p.id && 'is-active')} onClick={() => setPaper(p.id)}>
-            <span className={cx('pp-thumb', `paper-${p.id}`)} />
-            <span className="pp-label">{p.label}</span>
-          </button>
-        ))}
-      </div>
+      <PaperPicker value={paper} onChange={setPaper} size="m" />
       <div className="pp-sep" />
       <div className="pp-title">
         Line spacing <span className="pp-sub">All notes</span>
@@ -58,10 +43,6 @@ export function PaperPanel({ note }: { note: NoteDoc }) {
           </button>
         ))}
       </div>
-      <label className="pp-default">
-        <input type="checkbox" checked={settings.paper === paper} onChange={(e) => e.target.checked && settings.set({ paper })} />
-        <span>Use {PAPERS.find((p) => p.id === paper)?.label.toLowerCase()} for new notes</span>
-      </label>
     </div>
   );
 }
@@ -69,6 +50,7 @@ export function PaperPanel({ note }: { note: NoteDoc }) {
 /** ⋯ More: the note's own actions, in the order of Apple Notes' More menu. */
 export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
   const [moving, setMoving] = useState(false);
+  const [sub, setSub] = useState<null | 'polish' | 'export'>(null);
   const zoom = useUI((s) => s.zoom);
   const folderMeta = useVault((s) => s.folderMeta);
   const folders = useVault((s) => s.folders);
@@ -113,8 +95,57 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
     );
   }
 
+  if (sub === 'polish')
+    return (
+      <div className="menu polish-sheet">
+        <PolishPanel noteId={id} onDone={onDone} />
+      </div>
+    );
+
+  if (sub === 'export')
+    return (
+      <div className="menu more-menu">
+        <button className="menu-item" onClick={() => setSub(null)}>
+          <ArrowLeft size={16} />
+          <span className="menu-label">Export</span>
+        </button>
+        <div className="menu-sep" />
+        {(
+          [
+            ['pdf', 'PDF document', <FileDown size={16} key="i" />, `${MOD}P`],
+            ['md', 'Markdown', <FileType2 size={16} key="i" />, ''],
+            ['html', 'Web page (HTML)', <Code2 size={16} key="i" />, ''],
+            ['nib', 'Nib note (.nib)', <FileJson size={16} key="i" />, ''],
+          ] as const
+        ).map(([kind, label, icon, hint]) => (
+          <button
+            key={kind}
+            className="menu-item"
+            onClick={() => {
+              onDone();
+              void exportNote(id, kind);
+            }}
+          >
+            {icon}
+            <span className="menu-label">{label}</span>
+            {hint && <span className="menu-hint">{hint}</span>}
+          </button>
+        ))}
+      </div>
+    );
+
   return (
     <div className="menu more-menu">
+      <button className="menu-item" onClick={() => setSub('polish')}>
+        <SpellCheck size={20} />
+        <span className="menu-label">Polish…</span>
+      </button>
+      <button className="menu-item" onClick={() => setSub('export')}>
+        <Download size={20} />
+        <span className="menu-label">Export</span>
+        <ChevronRight size={16} />
+      </button>
+      <div className="menu-sep" />
       <button className="menu-item" onClick={() => setMoving(true)}>
         <FolderInput size={20} />
         <span className="menu-label">Move to class</span>
@@ -128,7 +159,7 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
         }}
       >
         <Copy size={20} />
-        <span className="menu-label">Make a copy</span>
+        <span className="menu-label">Duplicate</span>
       </button>
       <div className="menu-item more-zoom">
         <ZoomIn size={20} />
@@ -143,18 +174,6 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
           <Plus size={18} />
         </button>
       </div>
-      <div className="menu-sep" />
-      <button
-        className="menu-item"
-        onClick={() => {
-          onDone();
-          void exportNote(id, 'pdf');
-        }}
-      >
-        <Printer size={20} />
-        <span className="menu-label">Print</span>
-        <span className="menu-hint">{MOD}P</span>
-      </button>
       <div className="menu-sep" />
       <button
         className="menu-item"

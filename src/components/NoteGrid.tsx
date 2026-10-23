@@ -1,386 +1,209 @@
-import { Fragment, memo, useMemo } from 'react';
-import { ArrowDownUp, Check, ChevronRight, ClipboardList, FileText, Folder, FolderPlus, LayoutGrid, List, MoreVertical, Plus, RotateCcw, Star, Tag, Trash2 } from 'lucide-react';
+import { Fragment, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronLeft, Folder, FolderPlus, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-react';
+import type { JSONContent } from '@tiptap/core';
 import { useVault } from '../state/vault';
 import { useUI, type View } from '../state/ui';
-import { useSettings } from '../state/settings';
 import type { NoteDoc } from '../lib/vault/types';
-import { docToHTML } from '../lib/doc/toHTML';
 import { cx, plural } from '../lib/util';
-import { newFolder, newNote } from '../lib/commands';
-import { classForFolder, classInfo, themeVars } from '../lib/classes';
-import { folderMenu, noteMenu, noteTitle } from './FileTree';
-import { openContextMenu } from './common/ContextMenu';
+import { newFolder } from '../lib/commands';
+import { classForFolder, classInfo, HOMEWORK_SUBFOLDER } from '../lib/classes';
+import { displayTitle } from '../lib/displayTitle';
+import { normalizePaper } from '../lib/paper';
+import { folderMenu, noteMenu, short } from './FileTree';
+import { PaperThumb } from './PaperPicker';
+import { Popover } from './common/Popover';
+import { openContextMenu, type MenuItem } from './common/ContextMenu';
 import { confirmDialog } from './common/dialogs';
 
-const thumbCache = new Map<string, string>();
+/*
+ * All notes, a folder, and Trash, as Apple Notes lists them: a serif title, folders first, then notes
+ * grouped by when they were last edited. Each note row shows its paper, its name, and a second line
+ * with the date and the first words. The class page lists its notes with the same rows.
+ */
 
-function thumbHTML(n: NoteDoc): string {
-  const key = `${n.meta.id}:${n.meta.updated}`;
-  let html = thumbCache.get(key);
-  if (!html) {
-    html = docToHTML(n.content, { maxBlocks: 16 });
-    thumbCache.set(key, html);
-    if (thumbCache.size > 400) thumbCache.delete(thumbCache.keys().next().value!);
-  }
-  return html;
-}
+const DAY = 86_400_000;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export const NoteThumb = memo(function NoteThumb({ note, width = 200 }: { note: NoteDoc; width?: number }) {
-  const defaultPaper = useSettings((s) => s.paper);
-  const scale = width / 816;
-  return (
-    <div className="thumb" style={{ width, height: width * 1.22 }}>
-      <div className={cx('thumb-page nib-doc', `paper-${note.meta.paper ?? defaultPaper}`)} style={{ transform: `scale(${scale})` }}>
-        <div className="thumb-title">{note.meta.title || 'Untitled'}</div>
-        <div className="thumb-body" dangerouslySetInnerHTML={{ __html: thumbHTML(note) }} />
-      </div>
-    </div>
-  );
-});
-
-function viewTitle(v: View): string {
-  switch (v.kind) {
-    case 'home':
-      return 'All notes';
-    case 'folder':
-      return v.path.split('/').pop()!;
-    case 'tag':
-      return v.tag;
-    case 'favorites':
-      return 'Favorites';
-    case 'recent':
-      return 'Recent';
-    case 'trash':
-      return 'Trash';
-    default:
-      return '';
-  }
-}
-
-/** Google Drive's Recent sections, newest first. The week starts on Sunday. */
-function recentGroup(t: number): string {
-  const now = new Date();
-  const day = (n: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - n).getTime();
+/** Apple Notes' sections, newest first: Today, Yesterday, Previous 7 days, Previous 30 days, then months, then years. */
+export function dateGroup(t: number, now = Date.now()): string {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const m = midnight.getTime();
+  if (t >= m) return 'Today';
+  if (t >= m - DAY) return 'Yesterday';
+  if (t >= m - 7 * DAY) return 'Previous 7 days';
+  if (t >= m - 30 * DAY) return 'Previous 30 days';
   const d = new Date(t);
-  if (t >= day(0)) return 'Today';
-  if (t >= day(1)) return 'Yesterday';
-  if (t >= day(now.getDay())) return 'Earlier this week';
-  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) return 'Earlier this month';
-  if (d.getFullYear() === now.getFullYear()) return 'Earlier this year';
-  return 'Older';
+  return d.getFullYear() === midnight.getFullYear() ? MONTHS[d.getMonth()] : String(d.getFullYear());
 }
 
-/** The class a note belongs to, for its avatar letter and theme. */
-function useClassOf(n: NoteDoc) {
-  const folderMeta = useVault((s) => s.folderMeta);
-  const p = classForFolder(n.meta.folder, folderMeta);
-  return p ? classInfo(p, folderMeta[p]) : null;
+/** A row's date: the time today, "Yesterday", the weekday this week, else the date. */
+export function rowDate(t: number, now = Date.now()): string {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const d = new Date(t);
+  if (t >= midnight.getTime()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (t >= midnight.getTime() - DAY) return 'Yesterday';
+  if (t >= midnight.getTime() - 6 * DAY) return WEEKDAYS[d.getDay()];
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() === midnight.getFullYear() ? {} : { year: 'numeric' }) });
 }
 
-/** Notes and folders as Google Drive shows files: folder tiles, then note cards (or a list). */
-export function NoteGrid({ view }: { view: View }) {
-  const notes = useVault((s) => s.notes);
-  const folders = useVault((s) => s.folders);
-  const folderMeta = useVault((s) => s.folderMeta);
-  const { gridMode, sort } = useUI();
+const snippets = new WeakMap<NoteDoc, string>();
 
-  const list = useMemo(() => {
-    let l = Object.values(notes);
-    if (view.kind === 'trash') l = l.filter((n) => n.meta.trashed);
-    else {
-      l = l.filter((n) => !n.meta.trashed);
-      if (view.kind === 'folder') l = l.filter((n) => n.meta.folder === view.path);
-      if (view.kind === 'home') l = l.filter((n) => !n.meta.homework);
-      if (view.kind === 'tag') l = l.filter((n) => n.meta.tags.includes(view.tag));
-      if (view.kind === 'favorites') l = l.filter((n) => n.meta.pinned);
+/** The first words of a note after its name, for the second line of its row. */
+export function noteSnippet(n: NoteDoc): string {
+  const hit = snippets.get(n);
+  if (hit !== undefined) return hit;
+  const lines: string[] = [];
+  const walk = (nodes: JSONContent[] | undefined) => {
+    for (const b of nodes ?? []) {
+      if (lines.join(' ').length > 160) return;
+      if (b.type === 'text') lines.push(b.text ?? '');
+      // Math, handwriting and pictures don't read as a line of text; the row shows the words around them.
+      else if (b.type === 'mathInline' || b.type === 'inkInline') lines.push('…');
+      else if (b.type === 'mathBlock' || b.type === 'inkBlock' || b.type === 'image' || b.type === 'codeBlock') continue;
+      else {
+        walk(b.content);
+        if (b.type === 'paragraph' || b.type === 'heading') lines.push('\n');
+      }
     }
-    const by = view.kind === 'recent' ? 'updated' : sort;
-    l.sort((a, b) =>
-      by === 'title'
-        ? noteTitle(a).localeCompare(noteTitle(b), undefined, { numeric: true })
-        : by === 'created'
-          ? b.meta.created - a.meta.created
-          : b.meta.updated - a.meta.updated,
-    );
-    if (view.kind === 'recent') l = l.slice(0, 24);
-    return l;
-  }, [notes, view, sort]);
-
-  // All notes shows plain folders only: classes have their own pages.
-  const subfolders = useMemo(() => {
-    if (view.kind === 'home') return folders.filter((f) => !f.includes('/') && !classForFolder(f, folderMeta));
-    if (view.kind === 'folder') return folders.filter((f) => f.startsWith(view.path + '/') && !f.slice(view.path.length + 1).includes('/'));
-    return [];
-  }, [folders, folderMeta, view]);
-
-  // Recent splits into time sections; the list is already newest first, so each section is one run.
-  const groups = useMemo(
-    () =>
-      view.kind !== 'recent'
-        ? null
-        : list.reduce(
-            (out, n) => {
-              const label = recentGroup(n.meta.updated);
-              const last = out[out.length - 1];
-              if (last?.label === label) last.notes.push(n);
-              else out.push({ label, notes: [n] });
-              return out;
-            },
-            [] as { label: string; notes: NoteDoc[] }[],
-          ),
-    [list, view.kind],
-  );
-
-  const folderCount = (path: string) =>
-    Object.values(notes).filter((n) => !n.meta.trashed && (n.meta.folder === path || n.meta.folder.startsWith(path + '/'))).length;
-  const folderStyle = (f: string) => (folderMeta[f]?.color ? { color: folderMeta[f]!.color, fill: folderMeta[f]!.color } : undefined);
-  const openFolder = (f: string) => {
-    useUI.getState().setView({ kind: 'folder', path: f });
-    useUI.getState().toggleFolder(f, true);
   };
+  walk(n.content.content);
+  const name = displayTitle(n);
+  const text = lines
+    .join('')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l, i) => l && !(i < 3 && (l === name || (name.endsWith('…') && l.startsWith(name.slice(0, -1))))))
+    .filter((l) => !(n.meta.homework && l === 'My work'))
+    .join(' ')
+    .replace(/(\s*…\s*)+/g, ' … ')
+    .trim()
+    .slice(0, 140);
+  snippets.set(n, text);
+  return text;
+}
 
-  const title = viewTitle(view);
-  const folderPath = view.kind === 'folder' ? view.path : '';
-  const canCreate = view.kind === 'home' || view.kind === 'folder' || view.kind === 'tag';
-  const sortLabel = sort === 'updated' ? 'Last edited' : sort === 'title' ? 'Name' : 'Date created';
+/** Notes in date sections (by last edit, or by when they were made), or one list when sorted by name. */
+function groupNotes(list: NoteDoc[], sort: 'updated' | 'title' | 'created') {
+  if (sort === 'title') return [{ label: '', notes: list }];
+  const out: { label: string; notes: NoteDoc[] }[] = [];
+  for (const n of list) {
+    const label = dateGroup(sort === 'created' ? n.meta.created : n.meta.updated);
+    const last = out[out.length - 1];
+    if (last?.label === label) last.notes.push(n);
+    else out.push({ label, notes: [n] });
+  }
+  return out;
+}
 
+function openFromRow(n: NoteDoc, e?: React.MouseEvent) {
+  useUI.getState().openNote(n.meta.id, { newTab: !!e && (e.metaKey || e.ctrlKey || e.button === 1) });
+}
+
+const menuAt = (e: React.MouseEvent, items: MenuItem[]) => {
+  e.stopPropagation();
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  openContextMenu({ clientX: r.right - 200, clientY: r.bottom + 4, preventDefault: () => undefined }, items);
+};
+
+/**
+ * A note in a list: its paper, its name, and "date  first words" under it. `place` adds where it lives
+ * (All notes shows a class's colour and name; Trash says where it came from).
+ */
+export function NoteRow({ note, place, trash }: { note: NoteDoc; place?: 'class' | 'from'; trash?: boolean }) {
+  const folderMeta = useVault((s) => s.folderMeta);
+  const clsPath = place ? classForFolder(note.meta.folder, folderMeta) : null;
+  const cls = clsPath ? classInfo(clsPath, folderMeta[clsPath]) : null;
+  const from = place === 'from' ? (cls?.name ?? (note.meta.folder.split('/').pop() || '')) : '';
+  const name = displayTitle(note);
+  const items = trash ? trashMenu(note) : noteMenu(note);
   return (
-    <div className="screen notes-view">
-      <div className="screen-head">
-        {view.kind === 'folder' ? (
-          <nav className="crumbs" aria-label="Breadcrumb">
-            {/* Plain folders start from All notes (Drive's "My Drive ›"); a class's subfolders start from the class. */}
-            {!classForFolder(view.path, folderMeta) && (
-              <span className="crumb-step">
-                <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'home' })}>
-                  All notes
-                </button>
-                <ChevronRight size={20} className="crumb-sep" />
-              </span>
-            )}
-            {view.path
-              .split('/')
-              .slice(0, -1)
-              .map((part, i, arr) => (
-                <span key={i} className="crumb-step">
-                  <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'folder', path: [...arr.slice(0, i), part].join('/') })}>
-                    {part}
-                  </button>
-                  <ChevronRight size={20} className="crumb-sep" />
-                </span>
-              ))}
-            <h1 className="screen-title">{title}</h1>
-          </nav>
-        ) : (
-          <h1 className="screen-title">
-            {view.kind === 'tag' && <Tag size={20} className="screen-title-icon" />}
-            {title}
-          </h1>
-        )}
-        <span className="grow" />
-        {view.kind !== 'trash' && view.kind !== 'recent' && (
-          <button
-            className="btn is-ghost is-quiet"
-            onClick={() => useUI.getState().set({ sort: sort === 'updated' ? 'title' : sort === 'title' ? 'created' : 'updated' })}
-            title="Change the order"
-          >
-            <ArrowDownUp size={18} /> {sortLabel}
-          </button>
-        )}
-        <div className="seg" role="radiogroup" aria-label="Layout">
-          <button className={cx(gridMode === 'list' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'list' })} aria-label="List" title="List layout">
-            {gridMode === 'list' && <Check size={16} />}
-            <List size={18} />
-          </button>
-          <button className={cx(gridMode === 'grid' && 'is-active')} onClick={() => useUI.getState().set({ gridMode: 'grid' })} aria-label="Grid" title="Grid layout">
-            {gridMode === 'grid' && <Check size={16} />}
-            <LayoutGrid size={18} />
-          </button>
-        </div>
-      </div>
-
-      <div className="screen-scroll">
-        <div className="notes-body">
-          {view.kind === 'trash' && list.length > 0 && (
-            <div className="info-bar">
-              <span>Notes in the Trash stay here until you empty it.</span>
-              <span className="grow" />
-              <button
-                className="btn is-ghost"
-                onClick={async () => {
-                  if (
-                    await confirmDialog({
-                      title: 'Empty the Trash?',
-                      message: `${plural(list.length, 'note')} will be deleted permanently.`,
-                      confirm: 'Empty Trash',
-                      danger: true,
-                    })
-                  )
-                    void useVault.getState().emptyTrash();
-                }}
-              >
-                Empty trash
-              </button>
-            </div>
+    <div
+      className={cx('note-row', trash && 'is-trashed')}
+      role="button"
+      tabIndex={0}
+      data-note-id={note.meta.id}
+      onClick={(e) => !trash && openFromRow(note, e)}
+      onAuxClick={(e) => !trash && e.button === 1 && openFromRow(note, e)}
+      onKeyDown={(e) => e.key === 'Enter' && !trash && openFromRow(note)}
+      onContextMenu={(e) => openContextMenu(e, items)}
+      title={name}
+    >
+      <PaperThumb paper={normalizePaper(note.meta.paper)} className="note-row-paper" />
+      <span className="note-row-text">
+        <span className={cx('note-row-title', !note.meta.title && 'is-derived')}>{name}</span>
+        <span className="note-row-sub">
+          <span className="note-row-date">{rowDate(trash && note.meta.trashed ? note.meta.trashed : note.meta.updated)}</span>
+          {place === 'class' && cls && (
+            <span className="note-row-class" title={cls.name}>
+              <span className="class-square" style={{ background: cls.color }} />
+              <span className="note-row-class-name">{cls.name}</span>
+            </span>
           )}
-
-          {canCreate && (
-            <div className="notes-toolbar">
-              <button
-                className="btn is-primary is-create"
-                onClick={() => {
-                  const doc = newNote(folderPath);
-                  if (view.kind === 'tag') useVault.getState().updateMeta(doc.meta.id, { tags: [view.tag] });
-                }}
-              >
-                <Plus size={22} /> New note
-              </button>
-              {(view.kind === 'home' || view.kind === 'folder') && (
-                <button className="btn is-secondary" onClick={() => void newFolder(folderPath)}>
-                  <FolderPlus size={20} /> Folder
-                </button>
-              )}
-            </div>
-          )}
-
-          {gridMode === 'grid' && subfolders.length > 0 && (
-            <>
-              <h2 className="notes-section">Folders</h2>
-              <div className="folder-grid">
-                {subfolders.map((f) => (
-                  <div
-                    key={f}
-                    className="folder-tile notebook"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openFolder(f)}
-                    onKeyDown={(e) => e.key === 'Enter' && useUI.getState().setView({ kind: 'folder', path: f })}
-                    onContextMenu={(e) => openContextMenu(e, folderMenu(f))}
-                    title={`${f.split('/').pop()} · ${plural(folderCount(f), 'note')}`}
-                  >
-                    <Folder size={20} className="folder-tile-icon" style={folderStyle(f)} />
-                    <span className="folder-tile-name">{f.split('/').pop()}</span>
-                    <button
-                      className="icon-btn folder-tile-more"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openContextMenu(e, folderMenu(f));
-                      }}
-                      aria-label="More"
-                    >
-                      <MoreVertical size={20} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {list.length === 0 && subfolders.length === 0 ? (
-            <EmptyState view={view} />
-          ) : gridMode === 'grid' ? (
-            list.length === 0 ? null : groups ? (
-              groups.map((g) => (
-                <Fragment key={g.label}>
-                  <h2 className="notes-section">{g.label}</h2>
-                  <div className="note-grid">
-                    {g.notes.map((n) => (
-                      <NoteCard key={n.meta.id} note={n} trash={false} />
-                    ))}
-                  </div>
-                </Fragment>
-              ))
-            ) : (
-              <>
-                {subfolders.length > 0 && <h2 className="notes-section">Notes</h2>}
-                <div className="note-grid">
-                  {list.map((n) => (
-                    <NoteCard key={n.meta.id} note={n} trash={view.kind === 'trash'} />
-                  ))}
-                </div>
-              </>
-            )
-          ) : (
-            // Drive's list: folders are rows too, first, under the one column header.
-            <div className="note-list" role="table">
-              <div className="note-list-head" role="row">
-                <span className="note-list-name">Name</span>
-                <span className="note-list-where">Location</span>
-                <span className="note-list-date">{view.kind === 'trash' ? 'Trashed' : 'Last edited'}</span>
-                <span className="note-list-more" />
-              </div>
-              {subfolders.map((f) => (
-                <div
-                  key={f}
-                  className="note-row is-folder"
-                  role="row"
-                  tabIndex={0}
-                  onClick={() => openFolder(f)}
-                  onKeyDown={(e) => e.key === 'Enter' && openFolder(f)}
-                  onContextMenu={(e) => openContextMenu(e, folderMenu(f))}
-                  title={`${f.split('/').pop()} · ${plural(folderCount(f), 'note')}`}
-                >
-                  <span className="note-list-name">
-                    <Folder size={20} className="folder-tile-icon" style={folderStyle(f)} />
-                    <span className="note-row-title">{f.split('/').pop()}</span>
-                  </span>
-                  <span className="note-list-where">
-                    <Folder size={16} className="note-card-folder-icon" />
-                    <span className="note-list-where-text">{view.kind === 'folder' ? view.path.split('/').pop() : 'Notes'}</span>
-                  </span>
-                  <span className="note-list-date" />
-                  <span className="note-list-more">
-                    <button
-                      className="icon-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openContextMenu(e, folderMenu(f));
-                      }}
-                      aria-label="More"
-                    >
-                      <MoreVertical size={20} />
-                    </button>
-                  </span>
-                </div>
-              ))}
-              {groups
-                ? groups.map((g) => (
-                    <Fragment key={g.label}>
-                      <div className="note-list-group" role="row">
-                        {g.label}
-                      </div>
-                      {g.notes.map((n) => (
-                        <NoteListRow key={n.meta.id} note={n} trash={false} />
-                      ))}
-                    </Fragment>
-                  ))
-                : list.map((n) => <NoteListRow key={n.meta.id} note={n} trash={view.kind === 'trash'} />)}
-            </div>
-          )}
-        </div>
-      </div>
+          {from && <span className="note-row-from">From {from}</span>}
+          <span className="note-row-snippet">{noteSnippet(note)}</span>
+        </span>
+      </span>
+      {trash && (
+        <button
+          className="btn is-ghost is-quiet note-row-restore"
+          onClick={(e) => {
+            e.stopPropagation();
+            useVault.getState().restoreNote(note.meta.id);
+          }}
+        >
+          <RotateCcw size={14} strokeWidth={1.5} /> Restore
+        </button>
+      )}
+      <button className="icon-btn is-tiny row-more" aria-label="More" onClick={(e) => menuAt(e, items)}>
+        <MoreHorizontal size={16} strokeWidth={1.5} />
+      </button>
     </div>
   );
 }
 
-function open(n: NoteDoc, trash: boolean, e?: React.MouseEvent) {
-  if (trash) return;
-  useUI.getState().openNote(n.meta.id, { newTab: !!(e && (e.metaKey || e.ctrlKey)) || true });
+/** A folder in a list: its icon (in the class colour inside a class), name and note count. */
+export function FolderRow({ path, count }: { path: string; count: number }) {
+  const folderMeta = useVault((s) => s.folderMeta);
+  const clsPath = classForFolder(path, folderMeta);
+  const color = clsPath ? classInfo(clsPath, folderMeta[clsPath]).color : undefined;
+  const name = path.split('/').pop()!;
+  const open = () => useUI.getState().setView({ kind: 'folder', path });
+  return (
+    <div
+      className="folder-row"
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => e.key === 'Enter' && open()}
+      onContextMenu={(e) => openContextMenu(e, folderMenu(path))}
+      title={name}
+    >
+      <Folder size={18} strokeWidth={1.5} className="folder-row-icon" style={color ? { color } : undefined} />
+      <span className="folder-row-name">{name}</span>
+      <span className="folder-row-count">{plural(count, 'note')}</span>
+      <button className="icon-btn is-tiny row-more" aria-label="More" onClick={(e) => menuAt(e, folderMenu(path))}>
+        <MoreHorizontal size={16} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
 }
 
-function trashMenu(n: NoteDoc) {
+function trashMenu(n: NoteDoc): MenuItem[] {
   return [
-    { label: 'Restore', icon: <RotateCcw size={20} />, run: () => useVault.getState().restoreNote(n.meta.id) },
+    { label: 'Restore', icon: <RotateCcw size={16} strokeWidth={1.5} />, run: () => useVault.getState().restoreNote(n.meta.id) },
     { separator: true },
     {
-      label: 'Delete forever',
-      icon: <Trash2 size={20} />,
+      label: 'Delete forever…',
+      icon: <Trash2 size={16} strokeWidth={1.5} />,
       danger: true,
       run: async () => {
         if (
           await confirmDialog({
-            title: 'Delete forever?',
-            message: `“${noteTitle(n)}” can’t be recovered from Nib afterwards.`,
+            title: `Delete ${short(displayTitle(n))} forever?`,
+            message: 'It can’t be brought back afterwards.',
             confirm: 'Delete forever',
             danger: true,
           })
@@ -391,124 +214,182 @@ function trashMenu(n: NoteDoc) {
   ];
 }
 
-const edited = (t: number) => {
-  const d = new Date(t);
-  return new Date().toDateString() === d.toDateString()
-    ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-};
+const SORTS: ['updated' | 'title' | 'created', string][] = [
+  ['updated', 'Last edited'],
+  ['title', 'Name'],
+  ['created', 'Created'],
+];
 
-/** A note as a Google Drive grid card: type icon, title and ⋮; a page preview; who/where and when. */
-export const NoteCard = memo(function NoteCard({ note, trash }: { note: NoteDoc; trash: boolean }) {
-  const cls = useClassOf(note);
-  const menu = (e: React.MouseEvent) => openContextMenu(e, trash ? trashMenu(note) : noteMenu(note));
+function SortMenu() {
+  const sort = useUI((s) => s.sort);
+  const btn = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   return (
-    <div
-      className="note-card"
-      role="button"
-      tabIndex={0}
-      style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
-      onClick={(e) => open(note, trash, e)}
-      onKeyDown={(e) => e.key === 'Enter' && open(note, trash)}
-      onContextMenu={menu}
-    >
-      <div className="note-card-top">
-        {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
-        <span className={cx('note-card-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
-        {note.meta.pinned && !trash && <Star size={16} className="note-card-star is-on" />}
-        <button
-          className="icon-btn note-card-more"
-          onClick={(e) => {
-            e.stopPropagation();
-            menu(e);
-          }}
-          aria-label="More"
-        >
-          <MoreVertical size={20} />
-        </button>
-      </div>
-      <div className="note-card-thumb">
-        <NoteThumb note={note} width={196} />
-      </div>
-      <div className="note-card-meta">
-        {cls ? (
-          <span className="class-letter is-small" title={cls.name}>
-            {cls.name.charAt(0).toUpperCase()}
-          </span>
-        ) : (
-          <Folder size={16} className="note-card-folder-icon" />
-        )}
-        <span className="note-card-when">
-          {trash ? 'Trashed' : 'Edited'} {edited(note.meta.updated)}
-        </span>
-        {trash && (
-          <button
-            className="icon-btn is-tiny note-card-restore"
-            aria-label="Restore"
-            title="Restore"
-            onClick={(e) => {
-              e.stopPropagation();
-              useVault.getState().restoreNote(note.meta.id);
-            }}
-          >
-            <RotateCcw size={18} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-});
-
-/** A note as a Google Drive list row: Name | Location | Last edited | ⋮. */
-export function NoteListRow({ note, trash }: { note: NoteDoc; trash: boolean }) {
-  const cls = useClassOf(note);
-  const where = cls ? cls.name + (note.meta.folder !== cls.path ? ` › ${note.meta.folder.split('/').pop()}` : '') : note.meta.folder.split('/').pop() || 'Notes';
-  return (
-    <div
-      className="note-row"
-      role="row"
-      tabIndex={0}
-      style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
-      onClick={(e) => open(note, trash, e)}
-      onKeyDown={(e) => e.key === 'Enter' && open(note, trash)}
-      onContextMenu={(e) => openContextMenu(e, trash ? trashMenu(note) : noteMenu(note))}
-    >
-      <span className="note-list-name">
-        {note.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />}
-        <span className={cx('note-row-title', !note.meta.title && 'is-untitled')}>{noteTitle(note)}</span>
-        {note.meta.pinned && <Star size={16} className="note-row-star" />}
-      </span>
-      <span className="note-list-where">
-        {cls ? <span className="class-letter is-small">{cls.name.charAt(0).toUpperCase()}</span> : <Folder size={16} className="note-card-folder-icon" />}
-        <span className="note-list-where-text">{where}</span>
-      </span>
-      <span className="note-list-date">{edited(note.meta.updated)}</span>
-      <span className="note-list-more">
-        <button
-          className="icon-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            openContextMenu(e, trash ? trashMenu(note) : noteMenu(note));
-          }}
-          aria-label="More"
-        >
-          <MoreVertical size={20} />
-        </button>
-      </span>
-    </div>
+    <>
+      <button ref={btn} className={cx('btn is-ghost is-quiet sort-btn', open && 'is-on')} onClick={() => setOpen(!open)} aria-haspopup="menu">
+        {SORTS.find(([k]) => k === sort)?.[1]}
+        <ChevronDown size={14} strokeWidth={1.5} />
+      </button>
+      <Popover anchor={btn.current} open={open} onClose={() => setOpen(false)} align="end" className="menu-pop">
+        <div className="menu" role="menu">
+          <div className="menu-caption">Sort by</div>
+          {SORTS.map(([k, label]) => (
+            <button
+              key={k}
+              className="menu-item"
+              role="menuitemradio"
+              aria-checked={sort === k}
+              onClick={() => {
+                setOpen(false);
+                useUI.getState().set({ sort: k });
+              }}
+            >
+              <span className="menu-label">{label}</span>
+              {sort === k && <Check size={16} strokeWidth={1.5} />}
+            </button>
+          ))}
+        </div>
+      </Popover>
+    </>
   );
 }
 
-function EmptyState({ view }: { view: View }) {
-  const text =
-    view.kind === 'trash'
-      ? 'Nothing in the Trash'
-      : view.kind === 'favorites'
-        ? 'No favorites yet. Star a note to keep it here.'
-        : view.kind === 'tag'
-          ? 'No notes with this label'
-          : view.kind === 'recent'
-            ? 'No recent notes'
-            : 'No notes here yet';
-  return <div className="screen-empty">{text}</div>;
+const byName = (a: NoteDoc, b: NoteDoc) => displayTitle(a).localeCompare(displayTitle(b), undefined, { numeric: true });
+
+/** All notes (view 'home'), a folder page, or Trash. */
+export function NotesPage({ view }: { view: View }) {
+  const notes = useVault((s) => s.notes);
+  const folders = useVault((s) => s.folders);
+  const folderMeta = useVault((s) => s.folderMeta);
+  const sort = useUI((s) => s.sort);
+  const folderPath = view.kind === 'folder' ? view.path : '';
+  const isTrash = view.kind === 'trash';
+
+  const trashed = useMemo(() => Object.values(notes).filter((n) => n.meta.trashed), [notes]);
+
+  const list = useMemo(() => {
+    let l: NoteDoc[];
+    if (isTrash) l = [...trashed].sort((a, b) => (b.meta.trashed ?? 0) - (a.meta.trashed ?? 0));
+    else {
+      // All notes: every note except homework (homework lives in Homework and its class).
+      l = Object.values(notes).filter((n) => !n.meta.trashed && (view.kind === 'folder' ? n.meta.folder === folderPath : !n.meta.homework));
+      l.sort(sort === 'title' ? byName : sort === 'created' ? (a, b) => b.meta.created - a.meta.created : (a, b) => b.meta.updated - a.meta.updated);
+    }
+    return l;
+  }, [notes, trashed, isTrash, view.kind, folderPath, sort]);
+
+  // Folders first: the plain folders on All notes (classes have their own page), the subfolders on a folder page.
+  const subfolders = useMemo(() => {
+    if (view.kind === 'home') return folders.filter((f) => !f.includes('/') && !classForFolder(f, folderMeta));
+    if (view.kind === 'folder') return folders.filter((f) => f.startsWith(folderPath + '/') && !f.slice(folderPath.length + 1).includes('/'));
+    return [];
+  }, [folders, folderMeta, view.kind, folderPath]);
+
+  const countIn = (path: string) => Object.values(notes).filter((n) => !n.meta.trashed && (n.meta.folder === path || n.meta.folder.startsWith(path + '/'))).length;
+
+  // Where the back link goes: a class's folder to its parent (the class page at the top), a plain folder to its parent or All notes.
+  const back = useMemo((): { label: string; view: View } | null => {
+    if (isTrash) return { label: 'All notes', view: { kind: 'home' } };
+    if (view.kind !== 'folder') return null;
+    const parent = folderPath.includes('/') ? folderPath.slice(0, folderPath.lastIndexOf('/')) : '';
+    if (!parent) return { label: 'All notes', view: { kind: 'home' } };
+    return { label: parent.split('/').pop()!, view: folderMeta[parent]?.kind === 'class' ? { kind: 'class', path: parent } : { kind: 'folder', path: parent } };
+  }, [isTrash, view.kind, folderPath, folderMeta]);
+
+  const title = isTrash ? 'Trash' : view.kind === 'folder' ? folderPath.split('/').pop()! : 'All notes';
+  const groups = isTrash ? [{ label: '', notes: list }] : groupNotes(list, sort);
+  const empty = !list.length && !subfolders.length;
+  const inClassHomework = view.kind === 'folder' && folderPath.endsWith('/' + HOMEWORK_SUBFOLDER) && !!classForFolder(folderPath, folderMeta);
+
+  return (
+    <div className={cx('screen list-page', isTrash ? 'trash-view' : 'notes-view')}>
+      <div className="screen-scroll">
+        <div className="list-col">
+          <header className="list-head">
+            {back && (
+              <button className="list-back" onClick={() => useUI.getState().setView(back.view)}>
+                <ChevronLeft size={14} strokeWidth={1.5} />
+                {back.label}
+              </button>
+            )}
+            <div className="list-head-row">
+              <h1 className="list-title" title={title}>
+                {title}
+              </h1>
+              <span className="grow" />
+              {view.kind === 'home' && (
+                <>
+                  <SortMenu />
+                  <button className="btn is-ghost is-quiet trash-link" onClick={() => useUI.getState().setView({ kind: 'trash' })}>
+                    <Trash2 size={14} strokeWidth={1.5} />
+                    Trash{trashed.length ? ` (${trashed.length})` : ''}
+                  </button>
+                  <button className="btn is-secondary" onClick={() => void newFolder('')}>
+                    <FolderPlus size={16} strokeWidth={1.5} /> New folder
+                  </button>
+                </>
+              )}
+              {view.kind === 'folder' && (
+                <>
+                  {!inClassHomework && (
+                    <button className="btn is-ghost is-quiet" onClick={() => void newFolder(folderPath)}>
+                      <FolderPlus size={14} strokeWidth={1.5} /> New folder
+                    </button>
+                  )}
+                  <button className="icon-btn" aria-label="Folder menu" onClick={(e) => menuAt(e, folderMenu(folderPath))}>
+                    <MoreHorizontal size={18} strokeWidth={1.5} />
+                  </button>
+                </>
+              )}
+              {isTrash && list.length > 0 && (
+                <button
+                  className="btn is-secondary"
+                  onClick={async () => {
+                    if (
+                      await confirmDialog({
+                        title: 'Empty Trash?',
+                        message: `${plural(list.length, 'note')} will be deleted for good.`,
+                        confirm: 'Empty Trash',
+                        danger: true,
+                      })
+                    )
+                      void useVault.getState().emptyTrash();
+                  }}
+                >
+                  Empty Trash
+                </button>
+              )}
+            </div>
+          </header>
+
+          {empty ? (
+            <div className="list-empty">{isTrash ? 'Trash is empty' : view.kind === 'folder' ? 'Nothing in this folder yet' : 'No notes yet'}</div>
+          ) : (
+            <>
+              {subfolders.length > 0 && (
+                <section className="list-section">
+                  <h2 className="list-caption">Folders</h2>
+                  {subfolders.map((f) => (
+                    <FolderRow key={f} path={f} count={countIn(f)} />
+                  ))}
+                </section>
+              )}
+              {groups.map((g, i) =>
+                g.notes.length ? (
+                  <Fragment key={g.label || i}>
+                    <section className="list-section">
+                      {(g.label || subfolders.length > 0) && <h2 className="list-caption">{g.label || 'Notes'}</h2>}
+                      {g.notes.map((n) => (
+                        <NoteRow key={n.meta.id} note={n} place={isTrash ? 'from' : view.kind === 'home' ? 'class' : undefined} trash={isTrash} />
+                      ))}
+                    </section>
+                  </Fragment>
+                ) : null,
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

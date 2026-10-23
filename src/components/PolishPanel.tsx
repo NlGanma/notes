@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   AlignLeft,
-  CaseSensitive,
   GraduationCap,
   Check,
   FoldVertical,
@@ -12,7 +11,6 @@ import {
   Pilcrow,
   ScanText,
   Sigma,
-  Tags,
   Text,
 } from 'lucide-react';
 import { useVault } from '../state/vault';
@@ -24,8 +22,6 @@ import { toast } from './common/toast';
 import { cx } from '../lib/util';
 
 const ICONS: Record<Suggestion['icon'], React.ReactNode> = {
-  title: <CaseSensitive size={20} />,
-  tags: <Tags size={20} />,
   space: <FoldVertical size={20} />,
   lines: <Pilcrow size={20} />,
   list: <List size={20} />,

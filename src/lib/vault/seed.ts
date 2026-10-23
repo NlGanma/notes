@@ -105,11 +105,11 @@ export function buildSeedNotes(): NoteDoc[] {
       ),
       h(2, 'Things to try'),
       todo(
-        [false, 'Choose the pen (⌥P) and write anywhere below — the page grows as you go'],
+        [false, 'Choose the marker (⌥P) and write anywhere below. The page grows as you go'],
         [false, 'Type a sentence, write a symbol right after it, then keep typing ', fixInline(), ' — it joins the sentence'],
         [false, 'Press ⌘D to sketch a symbol inline, exactly at the cursor'],
         [false, 'Draw a circle or a box and ', i('hold'), ' at the end — it snaps into a clean shape'],
-        [false, 'Pick ', b('Ask'), ' in the toolbar and drag over anything on the page to ask about it'],
+        [false, 'Pick ', b('Select'), ' (⌥S), drag a box over anything on the page, and ask about it'],
         [false, 'Open ', b('Ask your notes'), ' (⇧⌘L) and ask a question across every notebook'],
         [
           false,
@@ -118,14 +118,14 @@ export function buildSeedNotes(): NoteDoc[] {
           ' → Problem Set 4 and ask for help — answers come only from Lecture 4, and anything else is marked ',
           i('Not from your notes'),
         ],
-        [false, 'Add your own class with ', b('+'), ' next to ', b('Classes'), ' — new notes and homework made there stay with it'],
+        [false, 'Add your own class with ', b('New class'), ' on the ', b('Classes'), ' page. Notes and homework made there stay with it'],
       ),
       h(2, 'Make it pretty, fast'),
       ul(
         ['Type ', b('/'), ' for any block: headings, checklists, equations, callouts, handwriting areas.'],
         ['Markdown works as you type: ', b('#'), ' heading, ', b('-'), ' list, ', b('[]'), ' checklist, ', b('$x^2$'), ' math, ', b('$$'), ' equation.'],
         ['Everything snaps to the same baseline grid, so typed text and handwriting always line up.'],
-        ['The ', b('Polish'), ' button suggests cleanups: tidy spacing, harmonise ink colours, typeset handwritten math.'],
+        [b('Polish'), ', in the ⋯ menu, suggests cleanups: tidy spacing, harmonise ink colours, typeset handwritten math.'],
       ),
       h(2, 'Your AI stays on your Mac'),
       p(
@@ -145,7 +145,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const calc = note(
     'Lecture 4 — Limits & Continuity',
     'Calculus I',
-    ['calculus', 'exam-2'],
+    [],
     doc(
       p(i('Prof. Alvarez · Tuesday')),
       h(2, 'Definition of a limit'),
@@ -233,7 +233,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const bio = note(
     'Cell Structure & Organelles',
     'Biology',
-    ['biology', 'cells'],
+    [],
     doc(
       p(i('Ch. 6 — reading + lab notes')),
       inkBlock(ink.cell, 320),
@@ -270,7 +270,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const phys = note(
     'Kinematics — cheat sheet',
     'Physics',
-    ['physics', 'formulas'],
+    [],
     doc(
       p('Constant acceleration only. Pick the equation that is ', b('missing'), ' the variable you don’t know.'),
       math('v = v_0 + a t'),
@@ -292,7 +292,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const hist = note(
     'French Revolution — essay outline',
     'History',
-    ['history', 'essay'],
+    [],
     doc(
       p(b('Thesis: '), 'The French Revolution was driven less by Enlightenment ideas alone than by a fiscal crisis that made those ideas politically urgent.'),
       h(2, 'Causes'),
@@ -326,7 +326,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const hw = note(
     'Problem Set 4 — Limits & Continuity',
     'Calculus I/Homework',
-    ['calculus'],
+    [],
     doc(
       p(i('Show all work. Use the methods from Lecture 4.')),
       ol(
@@ -347,7 +347,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const pretImp = note(
     'Pretérito vs. imperfecto',
     unit,
-    ['spanish', 'grammar'],
+    [],
     doc(
       p(i('Unidad 3 · clase del martes')),
       h(2, 'El pretérito'),
@@ -373,7 +373,7 @@ export function buildSeedNotes(): NoteDoc[] {
   const vocab = note(
     'Vocabulario — la niñez',
     unit,
-    ['spanish', 'vocab'],
+    [],
     doc(
       p('Words for talking about childhood (use them with the imperfect).'),
       ul(

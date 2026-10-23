@@ -9,8 +9,8 @@ import { lineHeightFor } from '../editor/registry';
 import { docToText } from './ai/context';
 import { markdownToEditorHTML } from './ai/markdown';
 import { rearrangeCheck } from './ai/verify';
-import { complete, parseJSONLoose, transcribeStrokes } from './ai/actions';
-import { BULLETS_PROMPT, SUMMARY_PROMPT, TAGS_PROMPT, TITLE_PROMPT } from './ai/prompts';
+import { complete, transcribeStrokes } from './ai/actions';
+import { BULLETS_PROMPT, SUMMARY_PROMPT } from './ai/prompts';
 import { fittedHeight, setTranscript } from '../editor/ink/ops';
 import { uid, wordCount } from './util';
 import { useVault } from '../state/vault';
@@ -23,7 +23,7 @@ import { homeworkFolderFor, suggestClass } from './classes';
 
 export interface Suggestion {
   id: string;
-  icon: 'title' | 'tags' | 'space' | 'lines' | 'list' | 'colors' | 'read' | 'math' | 'bullets' | 'summary' | 'headings' | 'class';
+  icon: 'space' | 'lines' | 'list' | 'colors' | 'read' | 'math' | 'bullets' | 'summary' | 'headings' | 'class';
   title: string;
   detail: string;
   action: string;
@@ -87,35 +87,6 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
   const blocks = note.content.content ?? [];
   const text = docToText(note.content);
   const words = wordCount(text);
-
-  // Title
-  if (!note.meta.title.trim() && words > 8) {
-    const firstHeading = blocks.find((b) => b.type === 'heading');
-    const guess = firstHeading ? textOf(firstHeading).trim() : '';
-    out.push({
-      id: 'title',
-      icon: 'title',
-      title: 'Give this note a title',
-      detail: guess ? `Use “${guess.slice(0, 48)}”` : 'Untitled notes are hard to find later.',
-      action: guess || !opts.ai ? 'Add title' : 'Suggest',
-      ai: guess ? undefined : 'chat',
-      async apply(_e, n) {
-        let title = guess;
-        if (!title && opts.ai)
-          title = (await complete([{ role: 'user', content: TITLE_PROMPT(text.slice(0, 4000)) }], { label: 'Polish · title', maxTokens: 40 })).text
-            .trim()
-            .replace(/^["'#\s]+|["'\s.]+$/g, '');
-        if (!title)
-          title = text
-            .replace(/[#*=>$`[\]]/g, '')
-            .trim()
-            .split(/\s+/)
-            .slice(0, 6)
-            .join(' ');
-        useVault.getState().updateMeta(n.meta.id, { title });
-      },
-    });
-  }
 
   // File unfiled notes in the class they belong to.
   {
@@ -399,26 +370,6 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
         if (added.length) throw new Error(`The rewrite added things your paragraph doesn’t say (${added.slice(0, 3).map((a) => `“${a}”`).join(', ')}), so your paragraph was left as it is.`);
         const nodes = htmlToNodes(editor, markdownToEditorHTML(md));
         if (nodes.length) editor.view.dispatch(editor.state.tr.replaceWith(at.pos, at.pos + at.size, nodes));
-      },
-    });
-  }
-
-  // AI: tags
-  if (!note.meta.tags.length && words > 40 && opts.ai) {
-    out.push({
-      id: 'tags',
-      icon: 'tags',
-      title: 'Add tags',
-      detail: 'Tags group related notes across folders',
-      action: 'Suggest',
-      ai: 'chat',
-      async apply(_e, n) {
-        const res = await complete([{ role: 'user', content: TAGS_PROMPT(text.slice(0, 4000)) }], { label: 'Polish · tags', json: false, maxTokens: 60 });
-        const tags = (parseJSONLoose<string[]>(res.text) ?? res.text.split(/[,\n]/))
-          .map((t) => String(t).toLowerCase().replace(/^#/, '').trim().replace(/\s+/g, '-'))
-          .filter((t) => t && t.length < 30)
-          .slice(0, 4);
-        if (tags.length) useVault.getState().updateMeta(n.meta.id, { tags: [...new Set([...n.meta.tags, ...tags])] });
       },
     });
   }

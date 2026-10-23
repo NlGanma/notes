@@ -188,12 +188,6 @@ export const TRANSCRIBE_PROMPT = `Transcribe the handwriting in this image exact
 - "description": if it is a drawing or diagram, one sentence describing it (including its labels); otherwise "".
 Do not solve, correct, or explain anything.`;
 
-export const TITLE_PROMPT = (text: string) =>
-  `Suggest a concise, specific title (at most 7 words) for these study notes. Reply with the title only, no quotes.\n\n${text}`;
-
-export const TAGS_PROMPT = (text: string) =>
-  `Suggest 2 to 4 short lowercase tags (single words or hyphenated) that describe these notes. Reply with a JSON array of strings only.\n\n${text}`;
-
 export const SUMMARY_PROMPT = (text: string) =>
   `Write a 2–3 sentence summary of these notes for the top of the page. Use only what these notes say; add nothing. Plain Markdown, LaTeX for math. Reply with the summary only.\n\n${text}`;
 
