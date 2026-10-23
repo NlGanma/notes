@@ -1271,7 +1271,10 @@ const marginHits = await page.evaluate(() => {
   const at = (x, y) => !!document.elementFromPoint(x, y)?.closest('.ink-actions');
   return { beside: at(block.left - 4, block.top + 16), above: at(btn.left + 12, block.top + 1), button: at(btn.left + 12, btn.top + 12) };
 });
-check(marginHits && !marginHits.beside && !marginHits.above && marginHits.button, `around the handwriting's ⋯, only the button itself takes the pointer (${JSON.stringify(marginHits)})`);
+check(
+  marginHits && !marginHits.beside && !marginHits.above && marginHits.button,
+  `around the handwriting's ⋯, only the button itself takes the pointer (${JSON.stringify(marginHits)})`,
+);
 const keyBox = await boxAround(keyIds);
 await page.mouse.move(keyBox.x0, keyBox.y0);
 await page.mouse.down();
@@ -1332,7 +1335,9 @@ await page.click('.sidebar .nav-classes-label');
 await page.waitForSelector('.classes-view');
 await page.waitForTimeout(300);
 check(
-  !(await noteIds()).includes(emptyId) && !(await page.evaluate((id) => window.__nib.ui.getState().tabs.includes(id), emptyId)) && (await noteIds()).includes(keyNote),
+  !(await noteIds()).includes(emptyId) &&
+    !(await page.evaluate((id) => window.__nib.ui.getState().tabs.includes(id), emptyId)) &&
+    (await noteIds()).includes(keyNote),
   'a ⌘N note left empty is gone, tab and all, and the one written in stays',
 );
 
