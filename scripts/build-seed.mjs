@@ -426,6 +426,16 @@ const out = {};
   ];
 }
 
+// The felt marker is the only pen: each stroke becomes a marker stroke drawn as wide as before
+// (BRUSHES sizeScale: fountain 1.25, ballpoint 1, marker 1.6). Highlighter and clean shapes stay.
+const SIZE_SCALE = { fountain: 1.25, ballpoint: 1 };
+for (const strokes of Object.values(out))
+  for (const st of strokes)
+    if (SIZE_SCALE[st.brush]) {
+      st.size = +((st.size * SIZE_SCALE[st.brush]) / 1.6).toFixed(3);
+      st.brush = 'marker';
+    }
+
 const file = path.join(root, 'src/lib/vault/seedInk.json');
 fs.writeFileSync(file, JSON.stringify(out));
 console.log('wrote', file, Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.length])));
@@ -438,8 +448,8 @@ if (previewIdx > 0) {
     const pts = [];
     for (let i = 0; i < st.pts.length; i += 3) pts.push([st.pts[i], st.pts[i + 1], st.pts[i + 2]]);
     const o = getStroke(pts, {
-      size: st.size * (st.brush === 'highlighter' ? 1 : 1.25),
-      thinning: st.brush === 'highlighter' ? 0 : 0.62,
+      size: st.size * (st.brush === 'highlighter' ? 1 : 1.6),
+      thinning: 0,
       smoothing: 0.62,
       streamline: 0.42,
       last: true,

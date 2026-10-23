@@ -40,7 +40,7 @@ export function sanitizeStrokes(raw: unknown): Stroke[] {
     const s = o as Record<string, unknown>;
     const stroke: Stroke = {
       id: safeId(s.id, i),
-      brush: BRUSHES.includes(s.brush as Brush) ? (s.brush as Brush) : 'ballpoint',
+      brush: BRUSHES.includes(s.brush as Brush) ? (s.brush as Brush) : 'marker',
       color: safeColor(s.color),
       size: Math.min(200, Math.max(0.1, num(s.size, 2))),
       pts: (s.pts as unknown[]).map((p) => num(p, 0)),

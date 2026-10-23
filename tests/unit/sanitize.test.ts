@@ -44,7 +44,7 @@ test('a crafted .nib cannot inject markup through ink attributes', () => {
   assert.equal(inline.strokes[0].color, '#1c1c1e');
   const ink = doc.content.content![1].attrs!;
   assert.equal(ink.height, 64);
-  assert.equal(ink.ink[0].brush, 'ballpoint');
+  assert.equal(ink.ink[0].brush, 'marker', 'an unknown brush becomes the marker');
   assert.deepEqual(ink.ink[0].pts, [1, 2, 0.5, 4, 0, 0.5]);
 });
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { eraseFromStroke, pathLength, pointInPolygon, strokeBounds } from '../../src/lib/ink/geometry';
 import { recognizeShape } from '../../src/lib/ink/shapes';
 import type { Stroke } from '../../src/lib/ink/types';
+import seedInk from '../../src/lib/vault/seedInk.json';
 import {
   autoscrollSpeed,
   blobGroups,
@@ -333,4 +334,11 @@ test('a sketch dropped into text lands between words with tidy spaces, small eno
   assert.equal(fitInline(14, 4, 21, 9), 1);
   assert.ok(Math.abs(fitInline(40, 4, 21, 9) - 0.5) < 1e-9);
   assert.ok(fitInline(19.5, 6, 21, 9) < 1);
+});
+
+test('the demo notes are written with the felt marker, the only pen', () => {
+  const strokes = Object.values(seedInk as unknown as Record<string, Stroke[]>).flat();
+  const brushes = new Set(strokes.map((s) => s.brush));
+  assert.ok(brushes.has('marker'));
+  assert.deepEqual([...brushes].filter((b) => b !== 'marker' && b !== 'highlighter' && b !== 'mono'), []);
 });
