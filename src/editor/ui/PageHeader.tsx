@@ -147,37 +147,42 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
 
   return (
     <header className={cx('page-header', note.meta.homework && 'is-homework')} data-ui>
-      <div className="page-meta">
-        {/* Homework names its class in the row under its title, so here it shows only the date. */}
-        {note.meta.homework ? null : cls ? (
-          <>
-            <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })} title={`Open ${cls.name}`}>
-              {cls.name}
+      {/* Homework names its class in the row under its title (HomeworkBar), so its meta line is just the date. */}
+      {note.meta.homework && (
+        <div className="page-meta">
+          <span className="crumb-date">{editedAt(note.meta.updated)}</span>
+        </div>
+      )}
+      {!note.meta.homework && (
+        <div className="page-meta">
+          {cls ? (
+            <>
+              <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })} title={`Open ${cls.name}`}>
+                {cls.name}
+              </button>
+              {subPath && subPath !== HOMEWORK_SUBFOLDER && (
+                <>
+                  <span className="crumb-sep">/</span>
+                  <button className="crumb" onClick={() => useUI.getState().setView({ kind: 'folder', path: note.meta.folder })}>
+                    {subPath.split('/').join(' / ')}
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <button
+              className="crumb"
+              onClick={() => useUI.getState().setView(note.meta.folder ? { kind: 'folder', path: note.meta.folder } : { kind: 'home' })}
+            >
+              {folderLabel}
             </button>
-            {subPath && subPath !== HOMEWORK_SUBFOLDER && (
-              <>
-                <span className="crumb-sep">/</span>
-                <button className="crumb" onClick={() => useUI.getState().setView({ kind: 'folder', path: note.meta.folder })}>
-                  {subPath.split('/').join(' / ')}
-                </button>
-              </>
-            )}
-          </>
-        ) : (
-          <button
-            className="crumb"
-            onClick={() => useUI.getState().setView(note.meta.folder ? { kind: 'folder', path: note.meta.folder } : { kind: 'home' })}
-          >
-            {folderLabel}
-          </button>
-        )}
-        {!note.meta.homework && (
+          )}
           <span className="crumb-dot" aria-hidden>
             ·
           </span>
-        )}
-        <span className="crumb-date">{editedAt(note.meta.updated)}</span>
-      </div>
+          <span className="crumb-date">{editedAt(note.meta.updated)}</span>
+        </div>
+      )}
       {titleEl}
       {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       {note.meta.homework && <HomeworkBar note={note} />}

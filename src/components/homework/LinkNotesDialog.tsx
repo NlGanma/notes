@@ -19,7 +19,7 @@ export function LinkNotesDialog() {
       initial={hw.meta.homework}
       query={hw}
       onClose={close}
-      onDone={(sel) => {
+      onInsert={(sel) => {
         // Read fresh: the homework may have changed while the dialog was open.
         const cur = useVault.getState().notes[hw.meta.id]?.meta.homework ?? hw.meta.homework!;
         useVault.getState().updateMeta(hw.meta.id, { homework: { ...cur, ...sel } });

@@ -679,7 +679,8 @@ button.hw-chip:hover,
   background: rgba(42, 120, 214, 0.45);
 }
 .link-folder {
-  width: 28px;
+  width: 18px;
+  margin: 0 3px;
   flex: none;
   color: var(--text-3);
 }

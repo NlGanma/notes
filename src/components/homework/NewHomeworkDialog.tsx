@@ -149,7 +149,8 @@ export function NewHomeworkDialog() {
   const placeholder = dateTitle({ ...draft, meta: { ...draft.meta, title: '' } });
 
   return (
-    <Modal open onClose={close} width={520} bare className="hw-dialog">
+    // Esc with a menu open closes just the menu.
+    <Modal open onClose={() => !classOpen && !dueOpen && close()} width={520} bare className="hw-dialog">
       <div
         className={cx('hw-new', dragOver && 'is-drop')}
         onKeyDown={(e) => {
@@ -302,7 +303,7 @@ export function NewHomeworkDialog() {
         initial={sel}
         query={draft}
         onClose={() => setPickerOpen(false)}
-        onDone={(s) => {
+        onInsert={(s) => {
           setAnswers(s);
           setPickerOpen(false);
         }}

@@ -50,14 +50,17 @@ function Hit({ text, q }: { text: string; q: string }) {
  */
 export function NotePicker({
   open,
+  title = 'Choose notes',
   classPath,
   excludeId,
   initial,
   query,
-  onDone,
+  initialTab,
+  onInsert,
   onClose,
 }: {
   open: boolean;
+  title?: string;
   /** The homework's class: the "This class" tab and the suggestions' boost. */
   classPath: string | null;
   /** The homework itself, never offered as its own source. */
@@ -65,7 +68,9 @@ export function NotePicker({
   initial: SourceSelection;
   /** The homework (or the draft of a new one) that suggestions are matched against. */
   query: NoteDoc | null;
-  onDone(sel: SourceSelection): void;
+  /** Where to start; by default Suggested when there are suggestions, else This class, else All. */
+  initialTab?: PickerTab;
+  onInsert(sel: SourceSelection): void;
   onClose(): void;
 }) {
   const notes = useVault((s) => s.notes);
@@ -89,7 +94,7 @@ export function NotePicker({
     if (!open) return;
     setSources(new Set(initial.sources));
     setFolders(new Set(initial.folders));
-    const t: PickerTab = suggestions.length ? 'suggested' : classPath ? 'class' : 'all';
+    const t: PickerTab = initialTab ?? (suggestions.length ? 'suggested' : classPath ? 'class' : 'all');
     setTab(t);
     setPath(t === 'class' && classPath ? classPath : '');
     setQ('');
@@ -206,7 +211,7 @@ export function NotePicker({
   };
 
   const sel: SourceSelection = { sources: [...sources], folders: [...folders] };
-  const done = () => onDone(sel);
+  const done = () => onInsert(sel);
   const loose = sel.sources.filter((id) => notes[id] && !notes[id].meta.trashed && !sel.folders.some((f) => inFolder(notes[id], f)));
   const count = sel.folders.length ? summarize(sel, notes, folderMeta) : loose.length ? `${plural(loose.length, 'note')} chosen` : 'No notes chosen';
 
@@ -237,7 +242,9 @@ export function NotePicker({
     <Modal open onClose={onClose} width={560} bare className="link-dialog">
       <div className="link-frame">
         <div className="link-head">
-          <h2 className="dialog-title">Choose notes</h2>
+          <h2 className="dialog-title" title={title}>
+            {title}
+          </h2>
           <label className="link-search">
             <Search size={16} strokeWidth={1.5} />
             <input

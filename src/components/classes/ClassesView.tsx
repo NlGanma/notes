@@ -10,6 +10,7 @@ import { newClass, openClass } from '../../lib/commands';
 import { cx, formatRelativeTime } from '../../lib/util';
 import { folderMenu } from '../FileTree';
 import { openContextMenu, type MenuItem } from '../common/ContextMenu';
+import { byDue } from '../homework/sources';
 import { ClassGlyph } from './ClassIcon';
 
 /** The class icon on a darker circle arcing in from the right of a coloured header. */
@@ -35,11 +36,11 @@ export function menuUnder(e: React.MouseEvent, items: MenuItem[]) {
 
 type CardRow = { note: NoteDoc; kind: 'homework' | 'note' };
 
-/** What a card shows under its header: the homework due soonest, then the notes edited last; two at most. */
+/** What a card shows under its header: unfinished homework, soonest due first, then the notes edited last; two at most. */
 function cardRows(path: string, notes: Record<string, NoteDoc>): CardRow[] {
   const due = classHomework(path, notes)
-    .filter((n) => !n.meta.homework!.done && n.meta.homework!.due)
-    .sort((a, b) => a.meta.homework!.due! - b.meta.homework!.due!)
+    .filter((n) => !n.meta.homework!.done)
+    .sort(byDue)
     .slice(0, 2)
     .map((note): CardRow => ({ note, kind: 'homework' }));
   const recent = classNotes(path, notes)
@@ -76,7 +77,7 @@ export function ClassCard({ cls, notes }: { cls: ClassInfo; notes: Record<string
             <button key={note.meta.id} className={cx('class-card-row', `is-${kind}`)} onClick={() => useUI.getState().openNote(note.meta.id)}>
               {kind === 'homework' ? <span className="class-card-ring" aria-hidden /> : <FileText size={14} strokeWidth={1.5} className="class-card-glyph" />}
               <span className="class-card-title">{displayTitle(note)}</span>
-              <span className={cx('class-card-when', due?.tone === 'overdue' && 'is-overdue')}>{due ? due.text : formatRelativeTime(note.meta.updated)}</span>
+              <span className={cx('class-card-when', due?.tone === 'overdue' && 'is-overdue')}>{due ? due.text : kind === 'note' ? formatRelativeTime(note.meta.updated) : ''}</span>
             </button>
           );
         })}

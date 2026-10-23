@@ -508,7 +508,7 @@
   flex-direction: column;
   gap: 6px;
   border-radius: var(--radius-xl);
-  box-shadow: inset 0 0 0 1px var(--border);
+  border: 1.5px dashed var(--border-strong);
 }
 
 /* Narrow windows: the grid keeps two columns as long as it can, then one; the page keeps its gutters. */
