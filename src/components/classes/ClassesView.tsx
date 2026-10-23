@@ -13,13 +13,11 @@ import { openContextMenu, type MenuItem } from '../common/ContextMenu';
 import { byDue } from '../homework/sources';
 import { ClassGlyph } from './ClassIcon';
 
-/** The class icon on a darker circle arcing in from the right of a coloured header. */
+/** The class icon, quiet, at the lower right of a coloured header: the colour carries the card. */
 export function ClassArt({ icon, h }: { icon: ClassInfo['icon']; h: number }) {
-  const d = h * 1.7;
   const s = Math.round(h * 0.36);
   return (
     <span className="class-art" aria-hidden>
-      <span className="class-art-circle" style={{ width: d, height: d, right: -(d / 2 - h * 0.3), top: h / 2 - d / 2 + h * 0.18 }} />
       <span className="class-art-icon" style={{ right: h * 0.28, bottom: h * 0.16 }}>
         <ClassGlyph icon={icon} size={s} />
       </span>

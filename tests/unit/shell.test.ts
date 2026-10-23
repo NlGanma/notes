@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePaper, PAPERS } from '../../src/lib/paper';
 import { dateTitle, displayTitle, isDateTitle } from '../../src/lib/displayTitle';
+import { clockTime, tabLabels } from '../../src/lib/tabLabels';
 import { markerSizeFor, migrateSettings, migrateTools, migrateUI, settleTools } from '../../src/state/migrate';
 import { parseNoteFile, type NoteDoc } from '../../src/lib/vault/types';
 import { savedUI, useUI } from '../../src/state/ui';
@@ -68,6 +69,34 @@ test('an empty note goes by its date, homework by when it is due', () => {
   assert.equal(displayTitle(due), 'Homework · due Sat, Oct 24', 'the homework template heading is not a name');
   assert.equal(dateTitle(note({ type: 'doc', content: [] }, { homework: { sources: [], folders: [] } })), 'Homework · Oct 22');
   assert.ok(!isDateTitle(note({ type: 'doc', content: [para('typed')] })));
+});
+
+test('tabs with the same name are told apart by the time, the part that differs first', () => {
+  const t = (h: number, m: number) => new Date(2026, 9, 23, h, m, 5).getTime();
+  const blank = (id: string, created: number, meta: Partial<NoteDoc['meta']> = {}) => note({ type: 'doc', content: [para('')] }, { id, created, ...meta });
+  const typed = (id: string, created: number) => note({ type: 'doc', content: [para('Limits')] }, { id, created });
+  const hw = (id: string, created: number) => blank(id, created, { homework: { sources: [], folders: [], due: at(2026, 10, 24) } });
+  const tabs = tabLabels([
+    note({ type: 'doc', content: [] }, { id: 'w', title: 'Welcome to Nib' }),
+    blank('c', t(12, 52) + 2),
+    blank('a', t(12, 52)),
+    blank('b', t(12, 52) + 1),
+    blank('d', t(13, 5)),
+    typed('e', t(9, 0)),
+    typed('f', t(21, 7)),
+    hw('g', t(8, 30)),
+    hw('h', t(8, 31)),
+  ]);
+  const label = (id: string) => tabs.get(id)!.label;
+  assert.equal(label('w'), 'Welcome to Nib');
+  // The shared date gives way to the time; the same minute counts up by creation order.
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(label), ['12:52 PM', '12:52 PM 2', '12:52 PM 3', '1:05 PM']);
+  assert.equal(tabs.get('b')!.full, 'Note · Oct 23, 12:52 PM 2', 'the tooltip keeps the whole name');
+  assert.deepEqual(['e', 'f'].map(label), ['Limits, 9:00 AM', 'Limits, 9:07 PM']);
+  assert.equal(label('g'), 'Homework · due Sat, Oct 24, 8:30 AM', 'a due date is kept');
+  assert.equal(clockTime(new Date(2026, 9, 23, 0, 4).getTime()), '12:04 AM');
+  // A lone untitled note keeps its plain name.
+  assert.equal(tabLabels([blank('a', t(12, 52))]).get('a')!.label, 'Note · Oct 23');
 });
 
 test('the name is never stored', () => {
@@ -143,6 +172,19 @@ test('old default papers become one of the three', () => {
   assert.ok(!('paper' in migrateSettings({}, 0)));
 });
 
+test('a closed tab goes back where it was, without taking the page', () => {
+  const ui = useUI.getState();
+  useUI.setState({ tabs: ['a', 'b', 'c'], view: { kind: 'home' } });
+  ui.closeTab('b');
+  assert.deepEqual(useUI.getState().tabs, ['a', 'c']);
+  ui.reopenTab('b', 1);
+  assert.deepEqual(useUI.getState().tabs, ['a', 'b', 'c']);
+  assert.deepEqual(useUI.getState().view, { kind: 'home' });
+  ui.reopenTab('b', 0);
+  assert.deepEqual(useUI.getState().tabs, ['a', 'b', 'c'], 'a tab that is open stays where it is');
+  useUI.setState({ tabs: [] });
+});
+
 test('a sidebar put away for the window is saved as shown; one hidden by hand stays hidden', () => {
   const saved = (p: { sidebar: boolean; sidebarAuto: boolean }) => savedUI({ ...useUI.getState(), ...p }).sidebar;
   assert.equal(saved({ sidebar: false, sidebarAuto: true }), true, 'a narrow window or the assistant hid it');
@@ -169,4 +211,20 @@ test('a sidebar put away for the window is saved as shown; one hidden by hand st
     else delete g.window;
     useUI.setState({ sidebar: true, sidebarAuto: false });
   }
+});
+
+test('a row preview reads math as text and keeps headings apart from the sentences around them', async () => {
+  const { noteSnippet, plainMath } = await import('../../src/components/NoteGrid');
+  assert.equal(plainMath('\\lim_{x \\to a} f(x) = L'), 'lim x → a f(x) = L');
+  assert.equal(plainMath('\\frac{x^2-9}{x-3}'), '(x²-9)/(x-3)');
+  assert.equal(plainMath('|f(x) - L| < \\varepsilon'), '|f(x) - L| < ε');
+  const n = note({
+    type: 'doc',
+    content: [
+      para('Prof. Alvarez · Tuesday'),
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Definition of a limit' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'We write ' }, { type: 'mathInline', attrs: { latex: '\\lim_{x \\to a} f(x) = L' } }, { type: 'text', text: ' when f(x) gets close to L.' }] },
+    ],
+  }, { title: 'Lecture 4' });
+  assert.equal(noteSnippet(n), 'Prof. Alvarez · Tuesday · Definition of a limit · We write lim x → a f(x) = L when f(x) gets close to L.');
 });

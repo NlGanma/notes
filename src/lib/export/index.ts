@@ -104,7 +104,8 @@ export async function exportNote(id: string, kind: ExportKind) {
       root.innerHTML = '';
     }
   } catch (e) {
-    toast.error('Export failed', String((e as Error).message ?? e));
+    console.warn('Export failed', e);
+    toast.error('Couldn’t export the note', 'Try again, or pick another format.');
     return null;
   }
 }

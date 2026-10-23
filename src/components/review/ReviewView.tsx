@@ -1,8 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
-import { useAI } from '../../state/ai';
+import { useAI, visionModel } from '../../state/ai';
 import { dueNotes, useReview } from '../../state/review';
 import { buildReviewTree, isReviewable, selectionLabel, unreadLabels } from '../../lib/review/tree';
 import { dayLabel } from '../../lib/review/session';
@@ -10,6 +9,8 @@ import { ReviewPicker } from './ReviewPicker';
 import { ReviewSession } from './ReviewSession';
 import { ReviewSummary } from './ReviewSummary';
 import { countIdeas, Switch } from './parts';
+import { readNoteInk, unreadInk } from './readInk';
+import { toast } from '../common/toast';
 import { cx, plural } from '../../lib/util';
 
 const LENGTHS: { n: number; label: string }[] = [
@@ -18,7 +19,7 @@ const LENGTHS: { n: number; label: string }[] = [
   { n: 25, label: 'Long' },
 ];
 
-/** Review: pick any notes (mix classes if you like), then practise until you know them. */
+/** Review: pick any notes (mix classes if you like), then practice until you know them. */
 export function ReviewView({ preset }: { preset?: string[] }) {
   const loaded = useReview((s) => s.loaded);
   const session = useReview((s) => s.session);
@@ -56,6 +57,8 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const file = useReview((s) => s.file);
   // As the sidebar's Settings row reads it: online, offline, or still starting.
   const ai = useAI((s) => (s.status === 'online' ? 'online' : s.status === 'offline' ? 'offline' : 'loading'));
+  const canRead = useAI((s) => s.status === 'online' && !!visionModel(s));
+  const [inkRead, setInkRead] = useState<{ done: number; total: number } | null>(null);
   const tree = useMemo(() => buildReviewTree(notes, folders, folderMeta), [notes, folders, folderMeta]);
   // Picked notes that can still be reviewed (not trashed since).
   const selected = useMemo(() => new Set(selection.filter((id) => notes[id] && isReviewable(notes[id]))), [selection, notes]);
@@ -119,8 +122,9 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
       </Fragment>
     );
 
+  // With nothing picked, "Nothing picked yet" and the greyed Start already say it.
   const helper = !selected.size
-    ? 'Pick notes to start.'
+    ? null
     : !stats.total
       ? 'Nothing in these notes can be asked about yet.'
       : !askable
@@ -131,6 +135,24 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const cut = label.lastIndexOf(' · ');
   const who = selected.size && cut > 0 ? label.slice(0, cut) : label;
   const start = () => useReview.getState().start([...selected]);
+
+  // Reads the unread handwriting here, so the student needn't find the block's menu in each note.
+  const readNow = async () => {
+    const ids = [...new Set(stats.blocked.map((b) => b.id))];
+    const total = ids.reduce((n, id) => n + unreadInk(notes[id]?.content).length, 0);
+    setInkRead({ done: 0, total });
+    let read = 0;
+    try {
+      for (const id of ids) read += await readNoteInk(id, () => setInkRead((r) => r && { ...r, done: r.done + 1 }));
+      if (read) toast.success('Handwriting read', `${plural(read, 'area')}. It can be reviewed now.`);
+      else toast.error('Couldn’t read the handwriting', 'The vision model found no writing in it.');
+    } catch (e) {
+      console.warn('Reading handwriting failed', e);
+      toast.error('Couldn’t read the handwriting', 'Check the vision model in Settings → Local AI.');
+    } finally {
+      setInkRead(null);
+    }
+  };
 
   return (
     <div className="screen review-view rv-setup-page">
@@ -210,39 +232,48 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                   </label>
                 </div>
 
+                {/* Handwriting nothing has read can't be asked about: where it is, and a way to read it from here. */}
                 {stats.blocked.length > 0 && (
-                  <div className="rv-warn">
-                    <AlertTriangle size={16} />
-                    <span>
-                      Handwriting in{' '}
+                  <div className="rv-unread">
+                    <div className="rv-unread-head">
+                      <span className="rv-unread-title">Handwriting not read yet</span>
+                      {canRead && (
+                        <button className="btn is-ghost is-quiet rv-read-now" disabled={!!inkRead} onClick={() => void readNow()}>
+                          {inkRead && <span className="rv-spinner" />}
+                          {inkRead ? `Reading ${Math.min(inkRead.done + 1, inkRead.total)} of ${inkRead.total}` : 'Read it now'}
+                        </button>
+                      )}
+                    </div>
+                    <ul className="rv-unread-list">
                       {stats.blocked.map((b, i) => (
-                        <Fragment key={i}>
-                          {i === 0 ? '' : i === stats.blocked.length - 1 ? ' and ' : ', '}
-                          <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id)} title="Open this note">
+                        <li key={i}>
+                          <button className="rv-unread-link" onClick={() => useUI.getState().openNote(b.id)} title="Open this note">
                             {b.label}
                           </button>
-                        </Fragment>
-                      ))}{' '}
-                      isn’t read yet. Open the note and use “Read handwriting” to review it.
-                    </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Offline, the status row below already says why it can't be read now. */}
+                    {!canRead && ai === 'online' && <div className="rv-unread-hint">Reading it needs a vision model, set in Settings → Local AI.</div>}
                   </div>
                 )}
 
                 {helper && <div className="rv-helper">{helper}</div>}
-                <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={start}>
-                  Start review
-                </button>
                 {/* Review works offline: questions are built from the notes and short answers are checked by code. */}
                 {ai !== 'online' && (
-                  <div className="rv-promise">
-                    {ai === 'offline'
-                      ? 'The local AI is offline. Questions come straight from your notes, and you check some answers yourself.'
-                      : 'Starting the local model…'}{' '}
-                    <button className="rv-promise-link" onClick={() => useUI.getState().openSettings('ai')}>
+                  <div className={cx('composer-status rv-status', `is-${ai}`)} role="status">
+                    <span className="composer-status-dot" aria-hidden />
+                    <span className="composer-status-text">
+                      {ai === 'offline' ? 'The local AI is offline. Questions come straight from your notes.' : 'Starting the local model…'}
+                    </span>
+                    <button className="composer-status-link" onClick={() => useUI.getState().openSettings('ai')}>
                       Open settings
                     </button>
                   </div>
                 )}
+                <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={start}>
+                  Start review
+                </button>
               </aside>
             </div>
           )}

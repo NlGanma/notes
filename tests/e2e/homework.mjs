@@ -160,6 +160,22 @@ check(await page.locator('.class-view .class-homework .hw-row-item:has-text("Pro
   check(!(await page.locator('.drop-hint').count()), '…and the drop overlay goes away');
 }
 
+// ⌘K runs a command typed by name, even though the Welcome note mentions the same words; nothing found says so.
+await page.keyboard.press('Meta+k');
+await page.fill('.palette-input input', 'new hom');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.hw-dialog', { timeout: 3000 }).catch(() => undefined);
+check(await page.locator('.hw-dialog').count(), '⌘K “new hom” and Enter opens New homework, not a note that mentions it');
+await page.click('.hw-dialog .btn:has-text("Cancel")');
+await page.keyboard.press('Meta+k');
+await page.fill('.palette-input input', 'zzqx');
+await page.waitForTimeout(200);
+check(
+  (await page.locator('.palette-empty:has-text("No matches")').count()) && !(await page.locator('.palette-item.is-active').count()),
+  '…and a query nothing matches says No matches, with nothing picked for Enter',
+);
+await page.keyboard.press('Escape');
+
 // ---------------------------------------------------------------- homework from a photo (OCR)
 await page.click('.nav-item:has-text("Homework")');
 await page.click('.homework-view .btn.is-primary:has-text("New homework")');
@@ -271,8 +287,17 @@ check(await page.locator(`${V} .callout[data-variant="outside"]`).count(), 'inse
 
 // ---------------------------------------------------------------- linking notes
 await page.click(`${V} .hw-source-chip button[aria-label^="Remove"]`);
-await page.waitForSelector(`${V} .hw-no-sources`);
-check(/Link notes so the assistant can answer from them/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar asks for linked notes');
+await page.waitForSelector(`${V} .hw-work-note:has-text("No notes linked yet")`);
+check(true, 'with no sources the line under the bar says none are linked');
+const muted = await page.evaluate((v) => {
+  const probe = document.body.appendChild(document.createElement('span'));
+  probe.style.color = 'var(--text-3)';
+  const want = getComputedStyle(probe).color;
+  probe.remove();
+  return getComputedStyle(document.querySelector(`${v} .hw-work-note`)).color === want;
+}, V);
+check(muted, '…in the muted line, as amber is kept for the AI’s own knowledge');
+check(/Link notes/.test(await page.textContent(`${V} .hw-link-btn`)) && !(await page.locator(`${V} .hw-meta-row .hw-link-btn`).count()), '…and the one button that links them sits at the end of the sources line');
 check(await page.locator(`${V} .hw-suggest:has-text("Lecture 4")`).count(), 'with nothing linked, Lecture 4 is suggested');
 await page.click('.assistant .icon-btn[title="New conversation"]');
 await page.click('.starter:has-text("Give me a hint")');
@@ -287,6 +312,7 @@ await page.click('.link-dialog .link-row:has-text("Lecture 4")');
 await page.click('.link-dialog .btn.is-primary');
 await page.waitForTimeout(300);
 check(/Lecture 4/.test(await page.textContent(`${V} .hw-bar`)), 'linking a note shows it as a source');
+check(/^Change…$/.test((await page.textContent(`${V} .hw-link-btn`)).trim()), '…and the button reads Change… once notes are linked');
 
 // ---------------------------------------------------------------- harness: retries & continue
 await page.click('.assistant .icon-btn[title="New conversation"]');
@@ -455,6 +481,49 @@ await page.click('.class-dialog .class-to-folder');
 await page.click('.modal .btn:has-text("Turn into folder")');
 await page.waitForSelector('.notes-view .list-title:has-text("Scratch")');
 check((await folderMeta()).Scratch?.kind !== 'class' && !(await page.locator('.sidebar .nav-class:has-text("Scratch")').count()), 'Turn into a plain folder makes the class a folder in All notes');
+
+// ---------------------------------------------------------------- Make this a class waits for the dialog's answer
+await page.click('.notes-view button[aria-label="Folder menu"]');
+check(
+  !(await page.locator('.context-menu .menu-item:has-text("New note here"), .context-menu .menu-item:has-text("New folder inside")').count()),
+  'the folder page’s ⋯ leaves out what the page already does (New note here, New folder inside)',
+);
+await page.click('.context-menu .menu-item:has-text("Make this a class")');
+await page.waitForSelector('.class-dialog');
+check(
+  /Make Scratch a class/.test(await page.textContent('.class-dialog .dialog-title')) && !(await page.locator('.class-dialog .class-to-folder').count()),
+  'Make this a class opens the class dialog titled for the folder',
+);
+await page.click('.class-dialog .btn:has-text("Cancel")');
+await page.waitForTimeout(250);
+check((await folderMeta()).Scratch?.kind !== 'class' && (await page.locator('.notes-view .list-title:has-text("Scratch")').count()), '…and Cancel leaves it a plain folder');
+await page.click('.notes-view button[aria-label="Folder menu"]');
+await page.click('.context-menu .menu-item:has-text("Make this a class")');
+await page.click('.class-dialog button[type="submit"]');
+await page.waitForSelector('.class-view .class-title:has-text("Scratch")');
+check((await folderMeta()).Scratch?.kind === 'class', '…while Make class makes it one');
+
+// ---------------------------------------------------------------- Move to Trash says so, with Undo
+const welcomeTrashed = () => page.evaluate(() => !!Object.values(window.__nib.vault.getState().notes).find((n) => n.meta.title === 'Welcome to Nib')?.meta.trashed);
+const tabTitles = () => page.locator('.mainbar .tab').evaluateAll((ts) => ts.map((t) => t.title));
+// Welcome open in a tab behind the list, so Undo has a tab to put back.
+await showSidebar(page);
+await page.click('.nav-item:has-text("All notes")');
+await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').first().click();
+await page.waitForSelector('.note-view:not(.is-hidden) .page-title');
+await showSidebar(page);
+await page.click('.nav-item:has-text("All notes")');
+await page.waitForSelector('.notes-view');
+const tabsBefore = await tabTitles();
+await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').first().click({ button: 'right' });
+await page.click('.context-menu .menu-item:has-text("Move to Trash")');
+await page.waitForSelector('.toast:has-text("to Trash")', { timeout: 3000 }).catch(() => undefined);
+check((await welcomeTrashed()) && (await page.locator('.toast:has-text("to Trash")').count()), 'Move to Trash on a row trashes the note and says so');
+check(tabsBefore.includes('Welcome to Nib') && !(await tabTitles()).includes('Welcome to Nib'), '…and closes its tab');
+await page.click('.toast:has-text("to Trash") .toast-action:has-text("Undo")');
+await page.waitForTimeout(250);
+check(!(await welcomeTrashed()) && (await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').count()), '…and Undo brings it back');
+check(JSON.stringify(await tabTitles()) === JSON.stringify(tabsBefore) && (await page.locator('.notes-view').count()), '…with its tab where it was, and the list still on screen');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.

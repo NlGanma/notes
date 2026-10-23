@@ -32,7 +32,6 @@ const todo = (...items: [boolean, ...Inline[]][]): JSONContent => ({
 const math = (latex: string): JSONContent => ({ type: 'mathBlock', attrs: { latex } });
 const inkBlock = (strokes: Stroke[], height: number): JSONContent => ({ type: 'inkBlock', attrs: { height, ink: strokes } });
 const callout = (variant: string, ...content: JSONContent[]): JSONContent => ({ type: 'callout', attrs: { variant }, content });
-const code = (s: string): JSONContent => ({ type: 'codeBlock', attrs: { language: 'bash' }, content: [text(s)] });
 const quote = (...content: JSONContent[]): JSONContent => ({ type: 'blockquote', content });
 const annotated = (block: JSONContent, strokes: Stroke[]): JSONContent => ({ ...block, attrs: { ...(block.attrs ?? {}), ink: strokes } });
 const doc = (...content: JSONContent[]): JSONContent => ({ type: 'doc', content });
@@ -86,57 +85,46 @@ export function buildSeedNotes(): NoteDoc[] {
     '',
     ['guide'],
     doc(
-      p(
-        'Nib is a notebook where ',
-        b('typing and handwriting live on the same page'),
-        ' — and where your own ',
-        b('local AI'),
-        ' can read both. Nothing leaves your Mac.',
-      ),
+      p('Nib is a notebook for ', b('typing and handwriting on the same page'), ', with a ', b('local AI'), ' that reads both. Nothing leaves your Mac.'),
       inkBlock(ink.welcome, 96),
-      callout(
-        'tip',
-        p(
-          b('Just start typing'),
-          ' after you write. Your text lands on the ruled line right under your handwriting. Press ',
-          b('Esc'),
-          ' to pick the marker back up.',
-        ),
-      ),
+      p(b('Just start typing'), ' after you write. Your text lands on the ruled line under your handwriting. Press ', b('Esc'), ' to pick the marker back up.'),
       h(2, 'Things to try'),
       todo(
-        [false, 'Choose the marker (⌥P) and write anywhere below. The page grows as you go'],
-        [false, 'Type a sentence, write a symbol right after it, then keep typing ', fixInline(), ' — it joins the sentence'],
-        [false, 'Press ⌘D to sketch a symbol inline, exactly at the cursor'],
-        [false, 'Draw a circle or a box and ', i('hold'), ' at the end — it snaps into a clean shape'],
-        [false, 'Pick ', b('Select'), ' (⌥S), drag a box over anything on the page, and ask about it'],
-        [false, 'Open ', b('Ask your notes'), ' (⇧⌘L) and ask a question across every notebook'],
+        [false, 'Pick the marker (⌥P) and write anywhere below. The page grows as you go.'],
+        [false, 'Type a sentence, write a symbol right after it ', fixInline(), ' and keep typing. It joins the sentence.'],
+        [false, 'Press ⌘D to sketch a symbol inline, right at the cursor.'],
+        [false, 'Draw a circle or a box and ', i('hold'), ' at the end. It snaps into a clean shape.'],
+        [false, 'Pick ', b('Select'), ' (⌥S) and drag a box over anything on the page to ask about it. Hold Space to move the box.'],
+        [false, 'Open ', b('Ask your notes'), ' (⇧⌘L) and ask a question across all your notes.'],
         [
           false,
           'Open ',
           b('Homework'),
-          ' → Problem Set 4 and ask for help — answers come only from Lecture 4, and anything else is marked ',
+          ' › Problem Set 4 and ask for help. Answers come only from Lecture 4, and anything else is marked ',
           i('Not from your notes'),
+          '.',
         ],
-        [false, 'Add your own class with ', b('New class'), ' on the ', b('Classes'), ' page. Notes and homework made there stay with it'],
+        [false, 'Add your own class with ', b('New class'), ' on the ', b('Classes'), ' page. Notes and homework made there stay with it.'],
       ),
-      h(2, 'Make it pretty, fast'),
+      h(2, 'Typing'),
       ul(
         ['Type ', b('/'), ' for any block: headings, checklists, equations, callouts, handwriting areas.'],
         ['Markdown works as you type: ', b('#'), ' heading, ', b('-'), ' list, ', b('[]'), ' checklist, ', b('$x^2$'), ' math, ', b('$$'), ' equation.'],
-        ['Everything snaps to the same baseline grid, so typed text and handwriting always line up.'],
-        [b('Polish'), ', in the ⋯ menu, suggests cleanups: tidy spacing, harmonise ink colours, typeset handwritten math.'],
+        ['Typed text and handwriting share one baseline grid, so they always line up.'],
+        [b('Polish'), ', in the ⋯ menu, suggests cleanups: tidy spacing, harmonize ink colors, typeset handwritten math.'],
       ),
-      h(2, 'Your AI stays on your Mac'),
+      h(2, 'The local AI'),
       p(
-        'Nib talks to a model running locally through ',
+        'Answers come from a model running on your Mac through ',
         b('Ollama'),
         ', ',
         b('LM Studio'),
-        ' or any OpenAI-compatible server. For the best experience, pull a model that can see images so it can read your handwriting:',
+        ' or any OpenAI-compatible server. Reading handwriting needs a model that can see images. ',
+        b('Settings → Local AI'),
+        ' (⌘,) lists a few to install, and ',
+        i('Detect'),
+        ' finds a server that is running.',
       ),
-      code('ollama pull qwen2.5vl:7b        # reads handwriting & diagrams\nollama pull nomic-embed-text     # semantic search across your notes'),
-      p('Then open ', b('Settings → Local AI'), ' (⌘,) and press ', i('Detect'), '.'),
     ),
     0,
     { pinned: true, color: '#2160e8' },

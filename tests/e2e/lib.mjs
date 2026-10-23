@@ -65,9 +65,21 @@ export async function openClassNote(page, cls, title) {
   await showSidebar(page);
   await page.click(`.sidebar .nav-class:has-text("${cls}")`);
   await page.waitForSelector('.class-view');
-  const row = page.locator(`.class-view .note-row:has-text("${title}")`).first();
+  let row = page.locator(`.class-view .note-row:has-text("${title}")`).first();
+  await row.waitFor({ state: 'visible', timeout: 1500 }).catch(() => undefined);
+  // A note filed in one of the class's folders is listed on that folder's page, not on the class page.
+  if (!(await row.count())) {
+    for (const name of await page.locator('.class-view .folder-row .folder-row-name').allTextContents()) {
+      await page.click(`.class-view .folder-row:has-text("${name}")`);
+      await page.waitForSelector('.notes-view');
+      row = page.locator(`.notes-view .note-row:has-text("${title}")`).first();
+      if (await row.count()) break;
+      await page.click('.notes-view .list-back');
+      await page.waitForSelector('.class-view');
+    }
+  }
   await row.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {
-    throw new Error(`The ${cls} class page doesn't list “${title}”`);
+    throw new Error(`Neither the ${cls} class page nor its folders list “${title}”`);
   });
   await row.click();
   await page.waitForSelector(`.note-view:not(.is-hidden) .page-title`);

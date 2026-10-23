@@ -192,7 +192,7 @@ await shot(page, 'ai-07-citation-jump');
 
 // 7. Study tools: flashcards and quiz, each opening beside the conversation.
 await page.click('.nav-item:has-text("Ask your notes")');
-await page.click('.library button[title="New conversation"]');
+await page.click('.mainbar button[title="New conversation"]');
 check(/What do you want to know/.test(await page.textContent('.library')), 'a new conversation starts from the greeting');
 await page.click('.study-tool:has-text("Flashcards")');
 await page.waitForSelector('.lib-artifact .flashcards', { timeout: 20000 });
@@ -208,7 +208,7 @@ await page.waitForTimeout(300);
 await waitIdle();
 await page.waitForSelector('.lib-artifact .flashcards', { timeout: 20000 });
 check(closedForRetry && (await page.locator('.library .art-card.is-open').count()) === 1, 'Retry on a study card makes it again and opens the new cards when they’re done');
-await page.click('.library button[title="New conversation"]');
+await page.click('.mainbar button[title="New conversation"]');
 check(!(await page.locator('.lib-artifact').count()), 'a new conversation closes the open output');
 await page.fill('.library-composer textarea', 'limits');
 await page.click('.study-tool:has-text("Quiz")');
@@ -220,12 +220,12 @@ check(await page.locator('.quiz-choice.is-right').count(), 'quiz marks answers')
 await shot(page, 'ai-09-quiz');
 
 // History: earlier conversations come back, and the one they replace goes into History.
-await page.click('.library button[title="History"]');
+await page.click('.mainbar button[title="History"]');
 const earlier = await page.locator('.history-menu .menu-item').allTextContents();
 check(earlier.some((t) => /squeeze theorem/i.test(t)) && earlier.some((t) => /Flashcards/.test(t)), `History lists the earlier conversations (${earlier.length})`);
 await page.click('.history-menu .menu-item:has-text("Flashcards")');
 check(await page.locator('.library .art-card').count(), '…and opens one again, its flashcards with it');
-await page.click('.library button[title="History"]');
+await page.click('.mainbar button[title="History"]');
 check(await page.locator('.history-menu .menu-item:has-text("Quiz me: limits")').count(), '…while the quiz moves into History');
 
 // Deleting: an earlier conversation from History (with Undo), and the one on the page from its title.
@@ -235,11 +235,11 @@ await quizRow.hover();
 await quizRow.locator('.history-delete').click();
 check((await page.locator('.history-menu .history-row').count()) === pastCount - 1, 'an earlier conversation can be deleted from History');
 await page.click('.toast-action:has-text("Undo")');
-await page.click('.library button[title="History"]').catch(() => undefined);
+await page.click('.mainbar button[title="History"]').catch(() => undefined);
 await page.waitForSelector('.history-menu');
 check(await page.locator('.history-menu .menu-item:has-text("Quiz me: limits")').count(), '…and Undo brings it back');
 await page.keyboard.press('Escape');
-await page.click('.library .lib-head-conv');
+await page.click('.mainbar .lib-head-conv');
 await page.click('.menu-item:has-text("Delete conversation")');
 check(/What do you want to know/.test(await page.textContent('.library')), 'deleting the conversation on the page goes back to the greeting');
 await page.click('.toast-action:has-text("Undo")');
@@ -250,10 +250,10 @@ check(await page.locator('.library .art-card').count(), '…and Undo brings it b
   const state = () =>
     page.evaluate(() => ({
       chip: document.querySelector('.library .scope-chip-label')?.textContent ?? '',
-      head: document.querySelector('.library .library-title h1')?.textContent ?? '',
+      head: document.querySelector('.mainbar .library-title h1')?.textContent ?? '',
       asked: document.querySelector('.library .msg.is-user .msg-bubble')?.textContent ?? '',
     }));
-  await page.click('.library button[title="New conversation"]');
+  await page.click('.mainbar button[title="New conversation"]');
   await page.click('.library .scope-chip');
   await page.click('.scope-menu .menu-item:has-text("Calculus I")');
   await page.fill('.library-composer textarea', 'What is a limit?');
@@ -287,7 +287,7 @@ check(await page.locator('.library .art-card').count(), '…and Undo brings it b
 
   // A narrow page: the output covers the conversation and takes the keyboard; Escape gives it back.
   await page.setViewportSize({ width: 1000, height: 760 });
-  await page.click('.library button[title="New conversation"]');
+  await page.click('.mainbar button[title="New conversation"]');
   await page.click('.study-tool:has-text("Flashcards")');
   await page.waitForSelector('.lib-artifact.is-overlay .flashcards', { timeout: 20000 });
   await page.waitForTimeout(200);

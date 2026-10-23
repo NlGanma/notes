@@ -51,33 +51,58 @@ export function rowDate(t: number, now = Date.now()): string {
 
 const snippets = new WeakMap<NoteDoc, string>();
 
+const SYMBOLS: Record<string, string> = {
+  le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', to: '→', infty: '∞', cdot: '·', times: '×', pm: '±', sqrt: '√',
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', Delta: 'Δ', epsilon: 'ε', varepsilon: 'ε', theta: 'θ', lambda: 'λ', mu: 'μ', pi: 'π', sigma: 'σ', omega: 'ω',
+};
+const wrap = (s: string) => (/[+-]/.test(s.trim()) ? `(${s.trim()})` : s.trim());
+
+/** Inline math as plain text for a one-line preview: `\lim_{x \to a} f(x) = L` reads "lim x → a f(x) = L". */
+export function plainMath(latex: string): string {
+  return latex
+    .replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a: string, b: string) => `${wrap(a)}/${wrap(b)}`)
+    .replace(/\^\{?2\}?/g, '²')
+    .replace(/\^\{?3\}?/g, '³')
+    .replace(/\\([a-zA-Z]+)/g, (_, m: string) => SYMBOLS[m] ?? m)
+    .replace(/\\[,;! ]|[{}_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** The first words of a note after its name, for the second line of its row. */
 export function noteSnippet(n: NoteDoc): string {
   const hit = snippets.get(n);
   if (hit !== undefined) return hit;
-  const lines: string[] = [];
+  const lines: { text: string; heading: boolean }[] = [];
+  let line = '';
+  let size = 0;
   const walk = (nodes: JSONContent[] | undefined) => {
     for (const b of nodes ?? []) {
-      if (lines.join(' ').length > 160) return;
-      if (b.type === 'text') lines.push(b.text ?? '');
-      // Math, handwriting and pictures don't read as a line of text; the row shows the words around them.
-      else if (b.type === 'mathInline' || b.type === 'inkInline') lines.push('…');
+      if (size > 160) return;
+      if (b.type === 'text') line += b.text ?? '';
+      else if (b.type === 'mathInline') line += plainMath(String(b.attrs?.latex ?? ''));
+      // Handwriting and pictures don't read as a line of text; the row shows the words around them.
+      else if (b.type === 'inkInline') line += ' … ';
       else if (b.type === 'mathBlock' || b.type === 'inkBlock' || b.type === 'image' || b.type === 'codeBlock') continue;
       else {
         walk(b.content);
-        if (b.type === 'paragraph' || b.type === 'heading') lines.push('\n');
+        if (b.type === 'paragraph' || b.type === 'heading') {
+          for (const l of line.split('\n')) lines.push({ text: l.replace(/\s+/g, ' ').trim(), heading: b.type === 'heading' });
+          size += line.length;
+          line = '';
+        }
       }
     }
   };
   walk(n.content.content);
   const name = displayTitle(n);
-  const text = lines
+  const kept = lines
+    .filter((l, i) => l.text && !(i < 3 && (l.text === name || (name.endsWith('…') && l.text.startsWith(name.slice(0, -1))))))
+    .filter((l) => !(n.meta.homework && l.text === 'My work'));
+  // A heading is set off with " · " so it doesn't run into the sentences around it.
+  const text = kept
+    .map((l, i) => (i === 0 ? '' : l.heading || kept[i - 1].heading ? ' · ' : ' ') + l.text)
     .join('')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l, i) => l && !(i < 3 && (l === name || (name.endsWith('…') && l.startsWith(name.slice(0, -1))))))
-    .filter((l) => !(n.meta.homework && l === 'My work'))
-    .join(' ')
     .replace(/(\s*…\s*)+/g, ' … ')
     .trim()
     .slice(0, 140);
@@ -146,20 +171,35 @@ export function NoteRow({ note, place, trash }: { note: NoteDoc; place?: 'class'
           <span className="note-row-snippet">{noteSnippet(note)}</span>
         </span>
       </span>
-      {trash && (
-        <button
-          className="btn is-ghost is-quiet note-row-restore"
-          onClick={(e) => {
-            e.stopPropagation();
-            useVault.getState().restoreNote(note.meta.id);
-          }}
-        >
-          <RotateCcw size={14} strokeWidth={1.5} /> Restore
+      {trash ? (
+        <>
+          <button
+            className="btn is-ghost is-quiet note-row-restore"
+            onClick={(e) => {
+              e.stopPropagation();
+              useVault.getState().restoreNote(note.meta.id);
+            }}
+          >
+            <RotateCcw size={14} strokeWidth={1.5} /> Restore
+          </button>
+          {/* The row's other action, so it has one control for each and no ⋯ repeating Restore. */}
+          <button
+            className="icon-btn is-tiny row-more note-row-delete"
+            aria-label="Delete forever…"
+            title="Delete forever…"
+            onClick={(e) => {
+              e.stopPropagation();
+              void deleteForever(note);
+            }}
+          >
+            <Trash2 size={16} strokeWidth={1.5} />
+          </button>
+        </>
+      ) : (
+        <button className="icon-btn is-tiny row-more" aria-label="More" onClick={(e) => menuAt(e, items)}>
+          <MoreHorizontal size={16} strokeWidth={1.5} />
         </button>
       )}
-      <button className="icon-btn is-tiny row-more" aria-label="More" onClick={(e) => menuAt(e, items)}>
-        <MoreHorizontal size={16} strokeWidth={1.5} />
-      </button>
     </div>
   );
 }
@@ -191,26 +231,24 @@ export function FolderRow({ path, count }: { path: string; count: number }) {
   );
 }
 
+async function deleteForever(n: NoteDoc) {
+  if (
+    await confirmDialog({
+      title: `Delete ${short(displayTitle(n))} forever?`,
+      message: 'It can’t be brought back afterwards.',
+      confirm: 'Delete forever',
+      danger: true,
+    })
+  )
+    void useVault.getState().deleteForever(n.meta.id);
+}
+
+/** A trashed note's right-click menu (the row itself shows Restore and a Delete forever button). */
 function trashMenu(n: NoteDoc): MenuItem[] {
   return [
     { label: 'Restore', icon: <RotateCcw size={16} strokeWidth={1.5} />, run: () => useVault.getState().restoreNote(n.meta.id) },
     { separator: true },
-    {
-      label: 'Delete forever…',
-      icon: <Trash2 size={16} strokeWidth={1.5} />,
-      danger: true,
-      run: async () => {
-        if (
-          await confirmDialog({
-            title: `Delete ${short(displayTitle(n))} forever?`,
-            message: 'It can’t be brought back afterwards.',
-            confirm: 'Delete forever',
-            danger: true,
-          })
-        )
-          void useVault.getState().deleteForever(n.meta.id);
-      },
-    },
+    { label: 'Delete forever…', icon: <Trash2 size={16} strokeWidth={1.5} />, danger: true, run: () => void deleteForever(n) },
   ];
 }
 
@@ -319,7 +357,7 @@ export function NotesPage({ view }: { view: View }) {
               <span className="grow" />
               {view.kind === 'home' && (
                 <>
-                  <SortMenu />
+                  {list.length > 0 && <SortMenu />}
                   <button className="btn is-ghost is-quiet trash-link" onClick={() => useUI.getState().setView({ kind: 'trash' })}>
                     <Trash2 size={14} strokeWidth={1.5} />
                     Trash{trashed.length ? ` (${trashed.length})` : ''}
@@ -336,7 +374,7 @@ export function NotesPage({ view }: { view: View }) {
                       <FolderPlus size={14} strokeWidth={1.5} /> New folder
                     </button>
                   )}
-                  <button className="icon-btn" aria-label="Folder menu" onClick={(e) => menuAt(e, folderMenu(folderPath))}>
+                  <button className="icon-btn" aria-label="Folder menu" onClick={(e) => menuAt(e, folderMenu(folderPath, { onPage: true }))}>
                     <MoreHorizontal size={18} strokeWidth={1.5} />
                   </button>
                 </>
@@ -347,16 +385,16 @@ export function NotesPage({ view }: { view: View }) {
                   onClick={async () => {
                     if (
                       await confirmDialog({
-                        title: 'Empty Trash?',
+                        title: 'Empty trash?',
                         message: `${plural(list.length, 'note')} will be deleted for good.`,
-                        confirm: 'Empty Trash',
+                        confirm: 'Empty trash',
                         danger: true,
                       })
                     )
                       void useVault.getState().emptyTrash();
                   }}
                 >
-                  Empty Trash
+                  Empty trash
                 </button>
               )}
             </div>

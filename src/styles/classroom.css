@@ -91,32 +91,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* An empty page: one serif line, at most one muted line, at most one button. */
-.page-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 72px 16px;
-  text-align: center;
-}
-.page-empty-title {
-  max-width: 100%;
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 28px;
-  color: var(--text-2);
-  overflow-wrap: anywhere;
-}
-.page-empty-sub {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-3);
-}
-.page-empty .btn {
-  margin-top: 14px;
-}
-
 /* ------------------------------------------------------------------ Classes page */
 
 .classes-col {
@@ -210,15 +184,10 @@
   inset: 0;
   pointer-events: none;
 }
-.class-art-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(20, 20, 19, 0.14);
-}
 .class-art-icon {
   position: absolute;
   display: grid;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.45);
 }
 .class-art-icon svg {
   stroke-width: 1.5;
@@ -266,7 +235,8 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--class);
+  /* A grey ring, as on every unticked homework check; the class colour is for the ticked fill. */
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
   flex: none;
 }
 .class-card-glyph {
@@ -498,6 +468,10 @@
 .class-review .badge-count {
   margin-left: 2px;
 }
+/* A quiet text button at the column's edge: its text lines up with the edge, its hover fill bleeds past it. */
+.btn.class-new-folder {
+  margin-right: -10px;
+}
 
 .class-section {
   margin-top: 32px;
@@ -508,7 +482,7 @@
 }
 .class-section-head {
   margin: 0 0 4px;
-  padding: 0 10px;
+  padding: 0;
   font-size: 15px;
   line-height: 28px;
   font-weight: 600;
@@ -518,7 +492,7 @@
   margin-bottom: 0;
 }
 .class-section-empty {
-  padding: 6px 10px;
+  padding: 6px 0;
   font-size: 13px;
   color: var(--text-3);
 }

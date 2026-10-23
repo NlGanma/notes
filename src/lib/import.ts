@@ -157,7 +157,9 @@ export async function importFiles(files?: InFile[], folder = currentFolder()) {
       last = await importOne(f, folder);
       ok++;
     } catch (e) {
-      toast.error(`Couldn’t import ${f.name}`, String((e as Error).message ?? e));
+      // The plain sentence for the student; what went wrong for whoever looks at the console.
+      console.warn(`Importing ${f.name} failed`, e);
+      toast.error(`Couldn’t import ${f.name}`, 'It may be damaged, or not a PDF, Markdown file or image.');
     }
   }
   if (last) useUI.getState().openNote(last, { newTab: true });

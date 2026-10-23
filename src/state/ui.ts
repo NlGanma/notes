@@ -19,7 +19,8 @@ export type View =
 
 /** Modal dialogs that several places can open. */
 export type Dialog =
-  | { kind: 'class'; path: string | null }
+  /** New class (no path), Edit class, or `make`: a plain folder that becomes a class only when saved. */
+  | { kind: 'class'; path: string | null; make?: boolean }
   | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
   | { kind: 'linkNotes'; noteId: string };
 
@@ -58,6 +59,8 @@ export interface UIState {
   openDialog(d: Dialog | null): void;
   openNote(id: string, opts?: { newTab?: boolean; focusTitle?: boolean; blockId?: string }): void;
   closeTab(id: string): void;
+  /** Puts a closed tab back where it was, without switching to it (Undo of Move to Trash). */
+  reopenTab(id: string, at: number): void;
   setView(v: View): void;
   toggleSidebar(): void;
   setAssistant(open: boolean): void;
@@ -160,6 +163,10 @@ export const useUI = create<UIState>()(
           const neighbour = next[i] ?? next[i - 1];
           set({ tabs: next, view: neighbour ? { kind: 'note', id: neighbour } : lastPage });
         } else set({ tabs: next });
+      },
+      reopenTab: (id, at) => {
+        const { tabs } = get();
+        if (!tabs.includes(id)) set({ tabs: [...tabs.slice(0, at), id, ...tabs.slice(at)].slice(-MAX_TABS) });
       },
       setView: (v) => set({ view: v }),
       // Showing or hiding it by hand is a choice, except over a narrow window, where it only floats.

@@ -50,9 +50,26 @@ const STATUS_TEXT: Record<Exclude<Availability, 'online'>, string> = {
 function AskComposer({ cls }: { cls: ClassInfo }) {
   const availability = useAI((s): Availability => (s.status === 'online' ? (s.chatModel ? 'online' : 'nomodel') : s.status === 'offline' ? 'offline' : 'loading'));
   const [text, setText] = useState('');
-  // Once used, it stays open: shrinking on blur would move the buttons under a click that is landing.
   const [opened, setOpened] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const pressing = useRef(false);
+  useEffect(() => {
+    const down = () => (pressing.current = true);
+    const up = () => (pressing.current = false);
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', up, true);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', up, true);
+    };
+  }, []);
+  // Left empty, it goes back to one line. After a click elsewhere, only once that click has landed: shrinking
+  // at once would move the buttons under it.
+  const shrink = () => {
+    const done = () => document.activeElement !== ref.current && !ref.current?.value.trim() && setOpened(false);
+    if (!pressing.current) return done();
+    window.addEventListener('pointerup', () => setTimeout(done, 0), { once: true });
+  };
   // While the model is only starting, a question just waits for it.
   const answerable = availability === 'online' || availability === 'loading';
 
@@ -100,6 +117,7 @@ function AskComposer({ cls }: { cls: ClassInfo }) {
           spellCheck={false}
           onChange={(e) => setText(e.target.value)}
           onFocus={() => setOpened(true)}
+          onBlur={shrink}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -139,16 +157,17 @@ export function ClassView({ path }: { path: string }) {
   const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
   const subfolders = folders.filter((f) => f.startsWith(path + '/') && !f.slice(path.length + 1).includes('/') && f !== hwDir);
   const countIn = (f: string) => lecture.filter((n) => n.meta.folder === f || n.meta.folder.startsWith(f + '/')).length;
+  // A folder's notes are listed on its own page, not again here (the counts, Ask and Review still take them all).
   const groups = useMemo(() => {
     const out: { label: string; notes: NoteDoc[] }[] = [];
-    for (const n of lecture) {
+    for (const n of lecture.filter((n) => n.meta.folder === path)) {
       const label = dateGroup(n.meta.updated);
       const last = out[out.length - 1];
       if (last?.label === label) last.notes.push(n);
       else out.push({ label, notes: [n] });
     }
     return out;
-  }, [lecture]);
+  }, [lecture, path]);
   const line = countLine(classCounts(path, notes));
   const empty = !homework.length && !lecture.length && !subfolders.length;
 

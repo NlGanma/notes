@@ -130,14 +130,15 @@ export function NewHomeworkDialog() {
       useVault.getState().updateMeta(doc.meta.id, { homework: { ...hw, due, sources: sel.sources, folders: sel.folders } });
       // A scan without a text layer is read by the vision model, so the helper knows the questions.
       if (pages.length && useAI.getState().status === 'online' && visionModel()) {
-        toast.info('Reading your homework…', 'So the assistant can see the questions');
+        toast.info('Reading the worksheet…', 'So the homework helper can see the questions.');
         readScannedPages(doc.meta.id, { priority: 'background' })
-          .then((n) => n && toast.success('Homework read', `${plural(n, 'page')} — ask the assistant about any problem`))
+          .then((n) => n && toast.success('Pages read', `${plural(n, 'page')}. The homework helper can see the questions now.`))
           .catch(() => undefined);
       }
       close();
     } catch (e) {
-      toast.error('Couldn’t create the homework', String((e as Error).message ?? e));
+      console.warn('Creating the homework failed', e);
+      toast.error('Couldn’t create the homework', 'It couldn’t be saved. Try again.');
       busyRef.current = false;
       setBusy(false);
     }
@@ -176,7 +177,7 @@ export function NewHomeworkDialog() {
         }}
       >
         <div className="hw-new-body">
-          <div className="hw-new-kicker">New homework</div>
+          <h2 className="dialog-title hw-new-title">New homework</h2>
           <input
             ref={titleRef}
             className="hw-title-input"

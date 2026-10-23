@@ -12,6 +12,7 @@ import { cx } from '../../lib/util';
 import { toast } from '../common/toast';
 import { SELF_GRADES, sessionKey } from './sessionKeys';
 import { Key } from './parts';
+import { MainbarSlot } from '../MainBar';
 
 /** Enter that ends a line, not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
 const isEnter = (e: ReactKeyboardEvent<HTMLElement>) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
@@ -44,7 +45,7 @@ function useSourceName(src: { noteId: string; title: string }) {
 }
 
 /**
- * One question at a time on a quiet white card, with a thin progress line along the top bar. The answer
+ * One question at a time on a quiet white card, with a thin progress line along the main bar. The answer
  * is marked in place and the notes' own words follow it on the card.
  */
 export function ReviewSession() {
@@ -106,30 +107,31 @@ export function ReviewSession() {
 
   return (
     <div className="screen review-view rv-session">
-      <div className="rv-topbar">
-        <div className="rv-topbar-inner">
-          <div className="rv-topbar-label" title={label}>
+      <MainbarSlot>
+        <div className="rv-mainbar no-drag">
+          <span className="rv-topbar-label" title={label}>
             {label}
-          </div>
+          </span>
           <span className="rv-count" aria-hidden>
             {questionNumber(session, current)} / {total}
           </span>
           <button className="icon-btn rv-close" onClick={() => useReview.getState().end()} title="End the session (Esc)" aria-label="End the session">
-            <X size={18} />
+            <X size={18} strokeWidth={1.5} />
           </button>
+          {/* Along the main bar's bottom edge. */}
+          <div
+            className="rv-progress"
+            role="progressbar"
+            aria-label="Questions answered"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={done}
+            title={`${done} of ${total} answered · ${right} right`}
+          >
+            <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
+          </div>
         </div>
-        <div
-          className="rv-progress"
-          role="progressbar"
-          aria-label="Questions answered"
-          aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={done}
-          title={`${done} of ${total} answered · ${right} right`}
-        >
-          <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
-        </div>
-      </div>
+      </MainbarSlot>
 
       <div className="rv-stage" ref={stage}>
         <div className="rv-column">
@@ -539,13 +541,16 @@ function Feedback({ current }: { current: Current }) {
   const idk = !!current.dontKnow;
   const canRetry = canRetryOf(current);
   const retry = current.retry;
-  // A second try that landed turns the red down: the first answer still counts, but the news is good.
-  const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || (retry?.s !== undefined && retry.s >= 0.8) ? 'neutral' : fb.verdict;
+  // A second try that landed turns the red down and heads the card: the first answer still counts, but the news is good.
+  const rightOnRetry = !current.overridden && retry?.s !== undefined && retry.s >= 0.8;
+  const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || rightOnRetry ? 'neutral' : fb.verdict;
   const title = idk
     ? 'Here’s the answer'
     : current.overridden
       ? 'Counted as right'
-      : fb.verdict === 'right'
+      : rightOnRetry
+        ? 'Right on the second try'
+        : fb.verdict === 'right'
         ? missedBefore > 0
           ? 'Right this time'
           : 'Right'
@@ -560,7 +565,7 @@ function Feedback({ current }: { current: Current }) {
         <span className="rv-feedback-icon" aria-hidden>
           {idk || fb.verdict === 'partial' ? (
             <BookOpen size={14} />
-          ) : fb.verdict === 'right' || current.overridden ? (
+          ) : fb.verdict === 'right' || current.overridden || rightOnRetry ? (
             <Check size={14} strokeWidth={2.75} />
           ) : (
             <X size={14} strokeWidth={2.75} />
@@ -569,7 +574,7 @@ function Feedback({ current }: { current: Current }) {
         <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
         {fb.note && <div className="rv-grade-note">{fb.note}</div>}
       </div>
-      {fb.hypercorrect && <div className="rv-hyper">You were sure about this one. Confident mix-ups are the easiest to fix now.</div>}
+      {fb.hypercorrect && <div className="rv-hyper">You marked this Sure.</div>}
       {fb.lucky && <div className="rv-hyper">Right, though you were guessing.</div>}
 
       {canRetry && (
@@ -590,10 +595,8 @@ function Feedback({ current }: { current: Current }) {
         </div>
       ) : retry && retry.s === undefined ? (
         <div className="rv-retry-result">Compare it with what your notes say.</div>
-      ) : retry && retry.s !== undefined ? (
-        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>
-          {retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet. Here’s what your notes say.'}
-        </div>
+      ) : retry && retry.s !== undefined && !rightOnRetry ? (
+        <div className="rv-retry-result is-wrong">Not yet. Here’s what your notes say.</div>
       ) : null}
 
       {(current.revealed || (!canRetry && !retry?.checking)) && (

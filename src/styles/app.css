@@ -110,14 +110,18 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   padding-right: 64px;
 }
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   height: 28px;
   min-width: 96px;
-  max-width: 200px;
-  flex: 0 1 200px;
-  padding: 0 4px 0 10px;
+  /* Sized to the name, so a short one doesn't hold a wide empty slot that reads like a heading. When the strip
+     is full, every tab grows from nothing at the same rate and stops at its name: short names stay whole and
+     the long ones share what is left. */
+  flex: 1 1 0;
+  max-width: max-content;
+  padding: 0 4px 0 8px;
   border-radius: 7px;
   color: var(--text-3);
   font-size: 13px;
@@ -134,9 +138,28 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   background: var(--bg-active);
   color: var(--text);
 }
+.tab-icon {
+  flex: none;
+  color: var(--text-4);
+}
+.tab.is-active .tab-icon {
+  color: var(--text-3);
+}
+/* A hairline between two quiet tabs, so a row of them reads as tabs and not as loose text. */
+.tab:not(.is-active):not(:hover) + .tab:not(.is-active):not(:hover)::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 7px;
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
 .tab-title {
   flex: 1;
   min-width: 0;
+  /* A tab is 200px at most. */
+  max-width: 142px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -159,9 +182,50 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   background: var(--bg-active);
   color: var(--text);
 }
+/* A full strip: an inactive tab gives its name the close button's room; on hover the name fades out under the button. */
+.tabs.is-tight .tab:not(.is-active) {
+  padding-right: 4px;
+}
+.tabs.is-tight .tab:not(.is-active) .tab-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.tabs.is-tight .tab:not(.is-active):hover .tab-title {
+  mask-image: linear-gradient(to left, transparent 20px, #000 30px);
+}
 .tab-more {
   width: 28px;
   height: 28px;
+}
+
+/* A page's own controls (Ask your notes, a Review session) at the right end of the bar. */
+.mainbar-slot {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 60%;
+}
+.mainbar-slot:empty {
+  display: none;
+}
+.mainbar-slot > * {
+  min-width: 0;
+}
+/* Ask your notes: what's being asked and the conversation, then History and New conversation. */
+.lib-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.lib-bar .library-title h1 {
+  max-width: 200px;
+}
+.lib-bar .lib-head-conv {
+  max-width: 280px;
 }
 
 /* The Assistant toggle: a quiet button, pressed while the panel is open. */
@@ -601,6 +665,10 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   gap: 8px;
   min-height: 36px;
 }
+/* An icon button at the end of a header lines its glyph up with the column's edge. */
+.list-head-row > .icon-btn:last-child {
+  margin-right: -6px;
+}
 .list-title {
   margin: 0;
   min-width: 0;
@@ -622,33 +690,66 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 }
 .list-caption {
   margin: 0 0 4px;
-  padding: 0 10px;
+  padding: 0;
   font-size: 12px;
   line-height: 24px;
   font-weight: 500;
   color: var(--text-3);
 }
-.list-empty {
-  padding: 56px 0;
+/* An empty page, alike on every page (All notes, Trash, Classes, Homework, Review): one serif line, at most one
+   muted line and one button, the same distance under the page's header. */
+.list-empty,
+.page-empty,
+.rv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 96px;
+  padding: 0 16px;
   text-align: center;
+}
+.list-empty,
+.page-empty-title,
+.rv-empty-title {
+  max-width: 100%;
   font-family: var(--font-display);
   font-size: 22px;
   line-height: 28px;
+  font-weight: 400;
   color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.page-empty-sub,
+.rv-empty-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-3);
+}
+:is(.page-empty, .rv-empty) .btn {
+  margin-top: 16px;
 }
 
-/* A note: its paper, its name over "date  first words", and ⋯ on hover. */
+/*
+ * A note: its paper, its name over "date  first words", and ⋯ on hover. A row's content sits on the column's
+ * edges, with the hover fill bleeding 10px outside them; the ⋯ takes the place of the row's end on hover.
+ */
 .note-row,
 .folder-row {
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 52px;
-  padding: 6px 6px 6px 10px;
+  margin: 0 -10px;
+  padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--text);
   cursor: default;
   position: relative;
+}
+/* Room for the ⋯ (nothing else ends a note row). */
+.note-row {
+  padding-right: 40px;
 }
 .note-row + .note-row::before,
 .folder-row + .folder-row::before {
@@ -733,6 +834,15 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 }
 .row-more {
   opacity: 0;
+}
+:is(.note-row, .folder-row, .hw-row-item) > .row-more {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.folder-row:is(:hover, :focus-within) .folder-row-count {
+  visibility: hidden;
 }
 .note-row:hover .row-more,
 .folder-row:hover .row-more,

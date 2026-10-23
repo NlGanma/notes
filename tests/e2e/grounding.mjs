@@ -102,7 +102,7 @@ await page.click('.assistant .msg.is-bot >> nth=-3 >> .msg-act:has-text("Insert 
 // ---------------------------------------------------------------- Ask your notes
 await page.click('.nav-item:has-text("Ask your notes")');
 await page.waitForSelector('.library');
-await page.click('.library button[title="New conversation"]').catch(() => undefined);
+await page.click('.mainbar button[title="New conversation"]').catch(() => undefined);
 const libBot = () => page.locator('.library .msg.is-bot').last();
 const libAsk = async (q) => {
   await page.fill('.library-composer textarea', q);

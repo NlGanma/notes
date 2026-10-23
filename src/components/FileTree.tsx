@@ -41,8 +41,10 @@ export const short = (s: string) => (s.length > 40 ? `${s.slice(0, 39).trimEnd()
 const ICON = { size: 16, strokeWidth: 1.5 };
 
 /**
- * The menu for a class, a plain folder or a folder inside a class. On the class page itself (`onPage`) the
- * class menu leaves out New note, New homework and Review: the page has its own buttons for them.
+ * The menu for a class, a plain folder or a folder inside a class. On the class or folder page itself
+ * (`onPage`) it leaves out what the page already does: New note, New homework and Review on a class page
+ * (its own buttons), New note here and New folder inside on a folder page (sidebar New note files into
+ * the open folder, and the page has a New folder button).
  */
 export function folderMenu(path: string, { onPage = false } = {}): MenuItem[] {
   const { folderMeta, notes: all, folders } = useVault.getState();
@@ -83,8 +85,12 @@ export function folderMenu(path: string, { onPage = false } = {}): MenuItem[] {
   const inClass = classForFolder(path, folderMeta);
   const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   return [
-    { label: 'New note here', icon: <FilePlus {...ICON} />, run: () => newNote(path) },
-    { label: 'New folder inside', icon: <FolderPlus {...ICON} />, run: () => void newFolder(path) },
+    ...(onPage
+      ? []
+      : [
+          { label: 'New note here', icon: <FilePlus {...ICON} />, run: () => newNote(path) },
+          { label: 'New folder inside', icon: <FolderPlus {...ICON} />, run: () => void newFolder(path) },
+        ]),
     {
       label: 'Rename…',
       icon: <Pencil {...ICON} />,
@@ -106,7 +112,7 @@ export function folderMenu(path: string, { onPage = false } = {}): MenuItem[] {
       },
     },
     ...(!path.includes('/') && !inClass
-      ? [{ label: 'Make this a class', icon: <GraduationCap {...ICON} />, run: () => (useVault.getState().setIsClass(path, true), editClass(path)) }]
+      ? [{ label: 'Make this a class', icon: <GraduationCap {...ICON} />, run: () => useUI.getState().openDialog({ kind: 'class', path, make: true }) }]
       : []),
     ...reveal,
     { separator: true },
@@ -193,7 +199,18 @@ export async function moveNoteTo(n: NoteDoc) {
   if (target !== n.meta.folder) useVault.getState().moveNote(n.meta.id, target);
 }
 
+/** Move to Trash, from a row, a tab or the editor's ⋯ menu, with Undo (which puts its tab back, and reopens it if it was on screen). */
 export function trashNote(id: string) {
+  const ui = useUI.getState();
+  const wasOpen = ui.view.kind === 'note' && ui.view.id === id;
+  const tabAt = ui.tabs.indexOf(id);
+  const n = useVault.getState().notes[id];
   useVault.getState().trashNote(id);
-  useUI.getState().closeTab(id);
+  ui.closeTab(id);
+  const undo = () => {
+    useVault.getState().restoreNote(id);
+    if (tabAt >= 0) useUI.getState().reopenTab(id, tabAt);
+    if (wasOpen) useUI.getState().openNote(id, { newTab: true });
+  };
+  toast.info(n ? `Moved ${short(displayTitle(n))} to Trash` : 'Moved to Trash', undefined, { label: 'Undo', run: undo }, 8000);
 }

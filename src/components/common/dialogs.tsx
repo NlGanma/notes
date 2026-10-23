@@ -75,7 +75,11 @@ export function DialogHost() {
   const hidden = (f: string) => !!dialog.exclude?.some((x) => f === x || f.startsWith(x + '/'));
   const list = (dialog.only ?? folders).filter((f) => !hidden(f));
   return (
-    <Modal open onClose={() => finish(null)} width={420} title={dialog.title} className="dialog">
+    <Modal open onClose={() => finish(null)} width={420} bare className="dialog">
+      {/* Like every small dialog: a title, the choice, Cancel and the action (Esc closes it too), no ×. */}
+      <div className="dialog-body folder-pick-head">
+        <div className="dialog-title">{dialog.title}</div>
+      </div>
       <div className="folder-pick">
         {!dialog.only && (
           <button className={cx('folder-pick-row', sel === '' && 'is-active')} onClick={() => setSel('')} onDoubleClick={() => finish('')}>

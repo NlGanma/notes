@@ -109,7 +109,8 @@ check(await page.locator('.rv-check:has-text("Mix classes") input:not([disabled]
 check(await page.locator('.rv-check:has-text("Ask how sure") input').count(), '…and so is asking how sure (setup is the one place for both)');
 const statsText = (await page.locator('.rv-panel-stats').textContent()) ?? '';
 check(/\d+ ideas?/.test(statsText), `the panel counts the ideas in the notes (${statsText.trim()})`);
-check(await page.locator('.rv-warn').count(), 'untranscribed handwriting is called out as not reviewable');
+check(/Worked example/.test((await page.locator('.rv-unread .rv-unread-link').first().textContent().catch(() => '')) ?? ''), 'untranscribed handwriting is listed as not reviewable, by note and section');
+check(await page.locator('.rv-unread .rv-read-now').count(), '…with a way to read it from here');
 
 // The Mastery Engine reads passages the rules found little in; its slips are rejected.
 await page.waitForTimeout(2200);
@@ -192,8 +193,11 @@ for (let turn = 0; turn < 40; turn++) {
     check(!(await page.locator('.rv-notes-say').count()), '…and the answer stays hidden until the retry');
     await page.fill('.rv-retry .rv-input', item.expected ?? '');
     await page.keyboard.press('Enter');
-    await page.waitForSelector('.rv-retry-result');
-    check(/second try/.test((await page.locator('.rv-retry-result').textContent()) ?? ''), 'the retry is checked');
+    await page.waitForSelector('.rv-verdict:has-text("second try"), .rv-retry-result');
+    check(
+      /Right on the second try/.test((await page.locator('.rv-verdict').textContent()) ?? '') && !(await page.locator('.rv-retry-result').count()),
+      'the retry is checked, and a right one heads the card (with no second line saying so)',
+    );
     check(await page.locator('.rv-notes-say').count(), '…and then the notes’ line is shown');
     await shot(page, 'review-04-retry');
     wrongChecked = true;
@@ -322,6 +326,19 @@ await page.click('.nav-item:has-text("Review")');
 await page.waitForSelector('.rv-tree');
 await page.click('.rv-row.is-group:has-text("Calculus I")');
 check(await page.locator('.rv-row.is-note .rv-mastery').count(), 'the picker shows how well each reviewed note is known');
+
+// Read it now reads the handwriting Review couldn't ask about, says so, and the note can be reviewed.
+await page.evaluate(() => {
+  const id = Object.values(window.__nib.vault.getState().notes).find((n) => /^Lecture 4/.test(n.meta.title)).meta.id;
+  window.__nib.review.getState().setSelection([id]);
+});
+await page.waitForSelector('.rv-unread .rv-read-now');
+await page.click('.rv-unread .rv-read-now');
+await page.waitForSelector('.rv-unread', { state: 'detached', timeout: 30000 }).catch(() => undefined);
+check(
+  !(await page.locator('.rv-unread').count()) && (await page.locator('.toast:has-text("Handwriting read")').count()),
+  'Read it now reads the unread handwriting, says so, and the warning goes',
+);
 
 // ---------------------------------------------------------------- entry points
 await page.click('.tree-row:has-text("Calculus I")', { button: 'right' });

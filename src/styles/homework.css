@@ -11,7 +11,9 @@
   align-items: center;
   gap: 12px;
   min-height: 44px;
-  padding: 0 6px 0 10px;
+  /* On the column's edges, the hover fill bleeding outside them (as note rows). */
+  margin: 0 -10px;
+  padding: 0 10px;
   border-radius: var(--radius);
   color: var(--text);
   cursor: default;
@@ -74,6 +76,7 @@
   gap: 6px;
   max-width: 140px;
   flex: none;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-3);
 }
@@ -92,8 +95,12 @@
 .hw-row-due.is-overdue {
   color: var(--danger);
 }
-/* On the Homework page the dates sit in one column, so the class tags beside them end at one edge. 96px
+/* On the Homework page the class tags start at one edge and the dates sit in one column after them. 96px
    fits the longest label ("Wed, 11:30 PM", "Dec 31, 2025"). */
+.homework-view .hw-row-class {
+  width: 120px;
+  justify-content: flex-start;
+}
 .homework-view .hw-row-due {
   width: 96px;
   text-align: right;
@@ -105,6 +112,10 @@
 .hw-row-item:focus-within .row-more {
   opacity: 1;
 }
+/* The ⋯ shows where the due date was. */
+.hw-row-item:is(:hover, :focus-within) .hw-row-due {
+  visibility: hidden;
+}
 
 /* "Done (5)" */
 .hw-done-list {
@@ -115,7 +126,7 @@
   align-items: center;
   gap: 4px;
   height: 28px;
-  margin-left: 2px;
+  margin-left: -4px;
   padding: 0 8px 0 4px;
   border-radius: 7px;
   font-size: 13px;
@@ -216,19 +227,16 @@ button.hw-chip:hover,
 .hw-chip.is-overdue > svg {
   color: var(--danger);
 }
-.hw-chip.is-warn,
-.hw-chip.is-warn > svg {
-  color: var(--warning);
-}
 .hw-add svg {
   color: var(--text-3);
 }
+/* Pressed, it's a quiet ink button with a green tick; class colour stays on cards, dots and checkboxes. */
 .btn.hw-done.is-on {
-  background: var(--class-light, var(--bg-active));
-  color: var(--class-dark, var(--text));
+  background: var(--bg-active);
+  color: var(--text);
 }
 .btn.hw-done.is-on svg {
-  color: var(--class, var(--text));
+  color: var(--success);
 }
 
 .hw-sources {
@@ -289,6 +297,16 @@ button.hw-chip:hover,
   background: var(--bg-active);
   color: var(--text);
 }
+/* At the end of the sources: Change… (or Link notes when there are none), quiet like the other text buttons. */
+.btn.hw-link-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.btn.hw-link-btn svg {
+  color: var(--text-3);
+}
 .hw-sheet-group {
   display: inline-flex;
   align-items: center;
@@ -341,9 +359,6 @@ button.hw-chip:hover,
   font-size: 12px;
   line-height: 16px;
   color: var(--text-3);
-}
-.hw-work-note.hw-no-sources {
-  color: var(--warning);
 }
 
 /* ------------------------------------------------------------------ due date */
@@ -420,22 +435,19 @@ button.hw-chip:hover,
 .hw-new-body {
   padding: 20px 24px 6px;
 }
-.hw-new-kicker {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text-3);
+.hw-new-title {
+  margin: 0 0 12px;
 }
 .hw-title-input {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 0;
   padding: 2px 0;
   border: 0;
   outline: none;
   background: transparent;
   font-size: 20px;
   line-height: 28px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   user-select: text;
 }
@@ -500,7 +512,6 @@ button.hw-chip:hover,
 }
 .btn.hw-uses-change {
   margin-left: -4px;
-  color: var(--link);
 }
 .hw-sheet {
   display: inline-flex;
@@ -514,8 +525,8 @@ button.hw-chip:hover,
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .hw-sheet-thumb {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 26px;
   flex: none;
   display: grid;
   place-items: center;
@@ -524,10 +535,16 @@ button.hw-chip:hover,
   background: var(--bg-subtle);
   color: var(--text-3);
 }
+/* A white page on white: a hairline ring shows its edge, as the Assistant's attachment thumbnails do. */
 .hw-sheet-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top center;
+  background: #fff;
+  border-radius: inherit;
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
 }
 .hw-sheet-thumb .spinner {
   width: 12px;
@@ -671,13 +688,14 @@ button.hw-chip:hover,
   color: #fff;
   box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.25);
 }
+/* Square checkboxes fill with the focus blue everywhere (Review's picker too). */
 .link-row.is-on .link-box {
-  background: var(--accent);
+  background: var(--focus);
   box-shadow: none;
 }
-/* A note already in a chosen folder: ticked, in a lighter ink. */
+/* A note already in a chosen folder: ticked, in a lighter blue. */
 .link-row.is-included .link-box {
-  background: rgba(20, 20, 19, 0.35);
+  background: rgba(42, 120, 214, 0.45);
 }
 .link-folder {
   width: 18px;
