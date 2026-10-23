@@ -265,12 +265,14 @@ const group = (s: string) => (/^[\w.]+$/.test(s.trim()) ? s.trim() : `(${s.trim(
 /** TeX as plain text for a one-line preview: "$\lim_{x \to a} f(x) = L$" → "lim x → a f(x) = L". */
 export function plainMath(s: string): string {
   return s
+    // Only a dollar pair that wraps math goes, as in pandoc: "$x^2$" yes, "costs $5 or $10" no.
+    .replace(/\$\$([\s\S]+?)\$\$|\$(?=\S)([^$\n]*?\S)\$(?!\d)/g, (_, d?: string, i?: string) => d ?? i ?? '')
     .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, (_, a: string, b: string) => `${group(a)}/${group(b)}`)
     .replace(/\\(?:left|right|displaystyle|mathrm|mathbf|mathit|text|operatorname)(?![a-zA-Z])/g, '')
     .replace(/\\[,;:! ]/g, ' ')
     .replace(/\\([a-zA-Z]+)/g, (_, c: string) => (TEX_OP[c] ? ` ${TEX_OP[c]} ` : (TEX_SYMBOL[c] ?? c)))
     .replace(/_\{/g, ' {')
-    .replace(/[{}$]/g, '');
+    .replace(/[{}]/g, '');
 }
 
 /** Short snippet around the best-matching words, for search results: plain text, no Markdown or TeX. */

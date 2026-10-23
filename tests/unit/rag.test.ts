@@ -112,4 +112,8 @@ test('a search snippet shows math as plain text, not TeX', async () => {
   // A long passage is cut around the match, never inside a formula.
   const long = `${'Intro words here. '.repeat(12)}Then $\\frac{a+b}{c}$ and the squeeze theorem.`;
   assert.ok(!/frac|[{}$\\]/.test(snippet(long, 'squeeze', 60)), snippet(long, 'squeeze', 60));
+  // Money is not math: a lone dollar sign, or two prices, keep theirs.
+  assert.equal(snippet('The fee is $20.', 'fee'), 'The fee is $20.');
+  assert.equal(snippet('It costs $5 or $10 a week', 'costs'), 'It costs $5 or $10 a week');
+  assert.equal(snippet('Area: $$\\pi r^2$$ for $3', 'area'), 'Area: π r^2 for $3');
 });
