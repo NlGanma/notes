@@ -1,21 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import {
-  ArrowUp,
-  BookOpenCheck,
-  Compass,
-  FileText,
-  GraduationCap,
-  Lightbulb,
-  ListChecks,
-  ListOrdered,
-  Plus,
-  Quote,
-  SearchCheck,
-  Square,
-  SquarePen,
-  Target,
-  X,
-} from 'lucide-react';
+import { ArrowUp, FileText, GraduationCap, Plus, Square, SquarePen, X } from 'lucide-react';
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { JSONContent } from '@tiptap/core';
@@ -39,27 +23,22 @@ import { displayTitle } from '../../lib/displayTitle';
 import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
-type Starter = { icon: React.ReactNode; label: string; prompt?: string; mode?: 'explain' | 'tutor' | 'check' | 'solve'; review?: boolean };
+type Starter = { label: string; prompt?: string; mode?: 'explain' | 'tutor' | 'check' | 'solve'; review?: boolean };
 
-const EXPLAIN: Starter = { icon: <Lightbulb size={16} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain };
-const QUIZ: Starter = { icon: <ListChecks size={16} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz };
-const EXAM: Starter = { icon: <BookOpenCheck size={16} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam };
-const BULLETS: Starter = { icon: <Quote size={16} />, label: 'Summarize in 5 bullets', prompt: NOTE_STARTERS.bullets };
-const REVIEW: Starter = { icon: <Target size={16} />, label: 'Review this note', review: true };
+const EXPLAIN: Starter = { label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain };
+const QUIZ: Starter = { label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz };
+const EXAM: Starter = { label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam };
+const BULLETS: Starter = { label: 'Summarize in 5 bullets', prompt: NOTE_STARTERS.bullets };
+const REVIEW: Starter = { label: 'Review this note', review: true };
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
 
 /** Homework quick actions — each one answers strictly from the linked notes. */
 const HOMEWORK_STARTERS: Starter[] = [
-  {
-    icon: <Compass size={16} />,
-    label: 'How do I approach this?',
-    mode: 'explain',
-    prompt: 'How should I approach this problem, using the method from my notes?',
-  },
-  { icon: <Lightbulb size={16} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
-  { icon: <SearchCheck size={16} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
-  { icon: <ListOrdered size={16} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
+  { label: 'How do I approach this?', mode: 'explain', prompt: 'How should I approach this problem, using the method from my notes?' },
+  { label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
+  { label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
+  { label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
 ];
 
 /** Nothing typed, drawn or pasted yet: there's nothing to ask about. */
@@ -286,15 +265,16 @@ export function AssistantPanel() {
         {!messages.length && note && (
           <div className={cx('assistant-empty', isHomework && 'is-homework')}>
             <div className="assistant-empty-title">{isHomework ? 'Get help with this homework' : 'Ask about this note'}</div>
-            <div className="assistant-empty-sub">
-              {blank
-                ? 'Write or draw something, then ask about it.'
-                : isHomework
-                  ? 'Click into a problem or select it on the page, then pick one.'
+            {/* Homework says where answers come from in the header already. */}
+            {(blank || !isHomework) && (
+              <div className="assistant-empty-sub">
+                {blank
+                  ? 'Write or draw something, then ask about it.'
                   : outsideKnowledge === 'never'
                     ? 'Answers come only from your notes.'
                     : 'Answers come from your notes. Anything else is marked.'}
-            </div>
+              </div>
+            )}
             {!blank && (
               <div className="starters">
                 {starters.map((s) => (
@@ -305,8 +285,7 @@ export function AssistantPanel() {
                     disabled={!s.review && !answerable}
                     title={s.review ? 'Practice this note with questions from it' : undefined}
                   >
-                    {s.icon}
-                    <span>{s.label}</span>
+                    {s.label}
                   </button>
                 ))}
               </div>
@@ -377,7 +356,7 @@ export function AssistantPanel() {
           rows={1}
           value={draft.text}
           disabled={!noteId}
-          placeholder={!noteId ? 'Open a note to start' : tutorOn ? 'Tell me where you’re stuck' : isHomework ? 'Ask about a problem' : 'Ask about this note'}
+          placeholder={!noteId ? 'Open a note to start' : tutorOn ? 'Tell me where you’re stuck' : isHomework ? 'Ask about a problem' : 'Ask a question'}
           onChange={(e) => useAssistant.getState().setDraft(key, { text: e.target.value })}
           onPaste={(e) => {
             const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));

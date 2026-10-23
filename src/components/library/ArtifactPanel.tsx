@@ -5,7 +5,6 @@ import type { StudyTool } from '../../lib/ai/prompts';
 import { copyText, MessageView } from '../ai/Message';
 import { openSource } from '../ai/Citations';
 import { Flashcards, Quiz, parseStudyJSON, type QuizQ } from './StudyTools';
-import { TOOL_LOOK } from './notebook';
 import { cx, plural } from '../../lib/util';
 
 export const TOOL_ICON: Record<StudyTool | 'review', typeof Target> = {
@@ -20,11 +19,6 @@ export const TOOL_ICON: Record<StudyTool | 'review', typeof Target> = {
 export function ToolIcon({ tool, size = 16 }: { tool: StudyTool | 'review'; size?: number }) {
   const I = TOOL_ICON[tool];
   return <I size={size} />;
-}
-
-export function toolStyle(tool: StudyTool | 'review') {
-  const t = TOOL_LOOK[tool];
-  return { ['--tool-bg' as string]: t.bg, ['--tool-ink' as string]: t.ink };
 }
 
 /** A study tool's result (made from a tool reply in the conversation). */
@@ -82,13 +76,14 @@ export function ArtifactPanel({
 }) {
   const [order, setOrder] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { msg, tool, parsed } = output;
   const sources = msg.sources ?? [];
   const json = tool === 'flashcards' || tool === 'quiz';
   const ready = !!parsed || (msg.status === 'done' && !output.failed);
   return (
     <section className={cx('lib-artifact', overlay && 'is-overlay')} aria-label={output.title} tabIndex={-1}>
-      <header className="art-head">
+      <header className={cx('art-head', scrolled && 'is-scrolled')}>
         <span className="art-icon">
           <ToolIcon tool={tool} />
         </span>
@@ -131,7 +126,7 @@ export function ArtifactPanel({
           <X size={16} />
         </button>
       </header>
-      <div className="art-body">
+      <div className="art-body" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}>
         <div className="art-column">
           {parsed?.kind === 'flashcards' && (
             <Flashcards cards={parsed.cards} sources={sources} order={order} onOpen={openSource} onExplain={(front) => onExplain(`Explain: ${front}`)} />
@@ -154,7 +149,7 @@ export function ArtifactPanel({
             <div className="art-prose" {...citeHover(sources)}>
               {json && msg.status === 'done' && msg.dropped ? (
                 <div className="msg-added">
-                  None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+                  None of what the AI wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
                 </div>
               ) : (
                 <MessageView

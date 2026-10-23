@@ -95,35 +95,40 @@
   line-height: 18px;
   margin: 6px 0 20px;
 }
+/* Starters: plain text rows (no icons, no outlines), their text in line with the greeting. */
+.assistant-empty-title + .starters {
+  margin-top: 14px;
+}
 .starters {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  margin: 0 -10px;
 }
 .starter {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 7px 12px 7px 10px;
+  display: block;
+  min-height: 34px;
+  padding: 7px 10px;
   border-radius: var(--radius);
   font-size: 14px;
   line-height: 20px;
   text-align: left;
   color: var(--text-2);
-  box-shadow: inset 0 0 0 1px var(--border);
   transition:
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
 }
-.starter svg {
-  flex: none;
-  color: var(--text-3);
+/* A hairline between rows makes them read as a list of choices; it gives way to the hovered row's fill. */
+.starter + .starter {
+  box-shadow: inset 0 1px 0 var(--hairline);
 }
 .starter:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text);
+}
+.starter:hover:not(:disabled),
+.starter:hover:not(:disabled) + .starter {
+  box-shadow: none;
 }
 .starter:disabled {
   opacity: 0.45;
@@ -382,6 +387,8 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  /* A text chip next to a picture keeps its own height. */
+  align-items: flex-start;
   gap: 6px;
   max-width: 85%;
 }
@@ -897,7 +904,7 @@
 
 /* ------------------------------------------------------------------ what the notes-only check found
  * One system: the amber box (with its label) is the AI's own knowledge; "not in your notes" tags and
- * the pills use the same amber; the banner above an answer is a calm line with an amber dot. */
+ * the count under the answer use the same amber; the banner above an answer is a calm line with an amber dot. */
 
 /* The AI's own knowledge, boxed and labelled by the app. */
 .md .outside-notes {
@@ -929,10 +936,11 @@
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E")
     center / contain no-repeat;
 }
-.md .outside-notes > :last-child {
+.md .outside-notes > :last-child,
+:is(.library, .assistant) .msg.is-bot > .md .outside-notes > :last-child {
   margin-bottom: 0;
 }
-/* Sentences Nib moved out of the answer itself ("Not found in your notes"): the same box. */
+/* Sentences the check moved out of the answer itself ("Not found in your notes"): the same box. */
 .md .outside-notes.is-auto {
   background: var(--warning-soft);
 }
@@ -982,47 +990,40 @@
   background: rgba(250, 178, 25, 0.3);
 }
 
-/* The pills under an answer: how much came from the notes, and what didn't. */
+/* Under an answer, one quiet line: how much came from the notes, and how much didn't (amber words, no fills:
+   the boxes and tags above already carry the warning). */
 .grounding {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-.grounding-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
+  align-items: baseline;
+  margin-top: 10px;
   font-family: var(--font-ui);
   font-size: 12px;
-  font-weight: 500;
-  line-height: 22px;
+  line-height: 18px;
+  color: var(--text-3);
+}
+.grounding-item {
   white-space: nowrap;
 }
-.grounding-item svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-.grounding-item.is-cited {
-  background: var(--success-soft);
-  color: var(--success);
+.grounding-item + .grounding-item::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--text-4);
+  text-decoration: none;
+  display: inline-block;
 }
 .grounding-item.is-outside {
-  background: var(--warning-soft);
   color: var(--warning);
 }
 .grounding-item.is-uncited {
+  font: inherit;
   color: var(--warning);
-  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.5);
   cursor: pointer;
 }
 .grounding-item.is-uncited:hover,
 .grounding-item.is-uncited.is-on {
-  background: var(--warning-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 /* The double-check's own lines ("Every sentence is checked…", "Double-checking…"). */
 .msg-checking {
@@ -1177,6 +1178,9 @@
 .polish-all {
   margin-right: -2px;
 }
+.polish-head .polish-all {
+  margin: -4px -8px -4px auto;
+}
 .polish-row {
   display: flex;
   align-items: center;
@@ -1203,6 +1207,11 @@
 .polish-text {
   flex: 1;
   min-width: 0;
+}
+/* A row with no detail line: its icon sits level with the one line of text. */
+.polish-row:not(:has(.polish-row-detail)) .polish-icon {
+  align-self: center;
+  margin-top: 0;
 }
 .polish-row-title {
   font-size: 14px;

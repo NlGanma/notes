@@ -62,7 +62,7 @@ export function modeQuestion(mode: AskMode, label: string): string {
     case 'solve':
       return 'Please solve this step by step.';
     case 'summarize':
-      return 'Summarise this.';
+      return 'Summarize this.';
     default:
       return 'What does this mean?';
   }
@@ -77,7 +77,7 @@ export const NOTE_STARTERS: Record<string, string> = {
   explain: 'Explain the key ideas in this note, in plain language.',
   quiz: 'Quiz me on this note: ask me 3 short questions, one at a time, and wait for my answer.',
   exam: 'Based on this note, what are the most important things to review before an exam? Be specific.',
-  bullets: 'Summarise this note in 5 bullet points.',
+  bullets: 'Summarize this note in 5 bullet points.',
   summary: 'Summarize this note in a few bullet points.',
 };
 

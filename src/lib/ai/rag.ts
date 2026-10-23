@@ -99,6 +99,13 @@ const STOP = new Set(
   ).split(' '),
 );
 
+/** The words the app wraps handwriting in (see blockToText): never something the student wrote. */
+const INK_WRAPPER = /\[Handwritten notes — not transcribed yet\]|\[Handwritten: /g;
+/** TeX commands that only lay math out ("\frac", "\left"); "\lim" or "\sin" stay words. */
+const TEX_LAYOUT = new Set(
+  'frac dfrac tfrac left right cdot cdots ldots dots mathrm mathbf mathit mathcal text textbf textit operatorname displaystyle quad qquad begin end'.split(' '),
+);
+
 /**
  * Words for matching: lowercased, accents folded ("niño" → "nino", "está" →
  * "esta") so typed answers and notes match with or without them, any
@@ -107,10 +114,11 @@ const STOP = new Set(
 export function tokenize(text: string): string[] {
   const out: string[] = [];
   for (let w of text
+    .replace(INK_WRAPPER, ' ')
     .normalize('NFD')
     .replace(/\p{M}+/gu, '')
     .toLowerCase()
-    .replace(/\\([a-z]+)/g, ' $1 ')
+    .replace(/\\([a-z]+)/g, (_, c: string) => (TEX_LAYOUT.has(c) ? ' ' : ` ${c} `))
     .split(/[^\p{L}\p{N}]+/u)) {
     if (!w || STOP.has(w) || (w.length < 2 && !/\d/.test(w))) continue;
     // Light stemming so "limits" matches "limit" and "derivatives" matches "derivative".
@@ -233,30 +241,59 @@ function rankOf(scores: number[]): number[] {
   return rank;
 }
 
-export function formatExcerpts(hits: Hit[], start = 1): string {
+/** The numbered excerpts of a prompt. `nameOf` gives each note the name the student sees (chunks keep the stored title). */
+export function formatExcerpts(hits: Hit[], start = 1, nameOf: (c: Chunk) => string = (c) => c.title): string {
   return hits
     .map((h, i) => {
-      const where = [h.chunk.folder, `"${h.chunk.title}"`, h.chunk.section].filter(Boolean).join(' › ');
+      const where = [h.chunk.folder, `"${nameOf(h.chunk)}"`, h.chunk.section].filter(Boolean).join(' › ');
       return `[${i + start}] (${where})\n${h.chunk.text.trim()}`;
     })
     .join('\n\n');
 }
 
-/** Short snippet around the best-matching words, for search results. */
+const TEX_SYMBOL: Record<string, string> = Object.fromEntries(
+  'pi:π theta:θ alpha:α beta:β gamma:γ delta:δ Delta:Δ epsilon:ε varepsilon:ε lambda:λ mu:μ sigma:σ infty:∞ sum:Σ int:∫ sqrt:√'
+    .split(' ')
+    .map((p) => p.split(':')),
+);
+/** Relations and operators, spaced as they read ("x → a"). */
+const TEX_OP: Record<string, string> = Object.fromEntries(
+  'le:≤ leq:≤ ge:≥ geq:≥ ne:≠ neq:≠ to:→ rightarrow:→ Rightarrow:⇒ implies:⇒ cdot:· times:× pm:± approx:≈ in:∈'.split(' ').map((p) => p.split(':')),
+);
+const group = (s: string) => (/^[\w.]+$/.test(s.trim()) ? s.trim() : `(${s.trim()})`);
+
+/** TeX as plain text for a one-line preview: "$\lim_{x \to a} f(x) = L$" → "lim x → a f(x) = L". */
+export function plainMath(s: string): string {
+  return s
+    // Only a dollar pair that wraps math goes, as in pandoc: "$x^2$" yes, "costs $5 or $10" no.
+    .replace(/\$\$([\s\S]+?)\$\$|\$(?=\S)([^$\n]*?\S)\$(?!\d)/g, (_, d?: string, i?: string) => d ?? i ?? '')
+    .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, (_, a: string, b: string) => `${group(a)}/${group(b)}`)
+    .replace(/\\(?:left|right|displaystyle|mathrm|mathbf|mathit|text|operatorname)(?![a-zA-Z])/g, '')
+    .replace(/\\[,;:! ]/g, ' ')
+    .replace(/\\([a-zA-Z]+)/g, (_, c: string) => (TEX_OP[c] ? ` ${TEX_OP[c]} ` : (TEX_SYMBOL[c] ?? c)))
+    .replace(/_\{/g, ' {')
+    .replace(/[{}]/g, '');
+}
+
+/** Short snippet around the best-matching words, for search results: plain text, no Markdown or TeX. */
 export function snippet(text: string, query: string, len = 160): string {
-  const q = tokenize(query);
-  const lower = text.toLowerCase();
+  // Made plain first, so the cut never lands inside a formula.
+  const plain = plainMath(
+    text
+      .replace(/\[Handwritten notes — not transcribed yet\]/g, '')
+      .replace(/\[Handwritten: ([^\]]*)\]?/g, '$1')
+      .replace(/\*\*|==|[*`]/g, '')
+      .replace(/^[ \t]*(?:#{1,6}|>)[ \t]*/gm, ''),
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+  const lower = plain.toLowerCase();
   let at = -1;
-  for (const t of q) {
+  for (const t of tokenize(query)) {
     const i = lower.indexOf(t);
     if (i >= 0 && (at < 0 || i < at)) at = i;
   }
-  const clean = (s: string) =>
-    s
-      .replace(/[*=`#>]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  if (at < 0) return clean(text.slice(0, len));
+  if (at < 0) return plain.slice(0, len).trim();
   const start = Math.max(0, at - len / 3);
-  return (start > 0 ? '…' : '') + clean(text.slice(start, start + len)) + (start + len < text.length ? '…' : '');
+  return (start > 0 ? '…' : '') + plain.slice(start, start + len).trim() + (start + len < plain.length ? '…' : '');
 }

@@ -32,6 +32,10 @@ import { useAI, visionModel, type AIStatus } from './ai';
 import { useVault } from './vault';
 import { editors } from '../editor/registry';
 import { uid } from '../lib/util';
+import { displayTitle } from '../lib/displayTitle';
+import { friendlyError } from '../lib/ai/errors';
+
+export { friendlyError };
 import { sampleLibrary, searchLibrary, semanticCalib, vaultStats } from './library';
 
 export interface Attachment {
@@ -699,7 +703,8 @@ export const useAssistant = create<AssistantState>()(
           const focus = attachments.find((a) => a.kind === 'text')?.text ?? caret;
           const classPath = classOfNote(note, folderMeta);
           const className = classPath ? classInfo(classPath, folderMeta[classPath]).name : undefined;
-          const title = note?.meta.title || 'Untitled';
+          // The name the student sees (an untitled note goes by its first line or date), so a reply never names a note they can't find.
+          const title = note ? displayTitle(note) : 'Untitled';
           const transform = !homework && isTransformPrompt(question);
           // What the student wrote or pointed at: restating it needs no source, and its numbers may appear in answers.
           const studentText = [question, ...attachments.map((a) => a.text ?? ''), caret ?? ''].filter(Boolean).join('\n');
@@ -748,7 +753,7 @@ export const useAssistant = create<AssistantState>()(
             const ownContent = withoutAssistant({ ...content, content: content?.content ?? [] });
             const hwText = fitToBudget(docToText(ownContent), Math.floor(ctx * 0.18), focus);
             hits = await homeworkExcerpts(linked, [question, focus ?? '', hwText.slice(0, 1600)].join('\n'), Math.floor(ctx * 0.42));
-            system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits), className);
+            system = homeworkSystemPrompt(title, hwText, formatExcerpts(hits, 1, noteName), className);
             instructions = HOMEWORK_MODES[mode];
             gateHits = hits.length ? rankChunks(hits.map((h) => h.chunk), [question, focus ?? ''].join(' '), { k: 5 }) : [];
           } else {
@@ -760,10 +765,10 @@ export const useAssistant = create<AssistantState>()(
               .map((a) => a.text)
               .join('\n');
             if (picture) hits = [...hits, { chunk: pictureChunk(pictureText), score: 0, keyword: 0, semantic: null }];
-            system = noteSystemPrompt(title, formatExcerpts(hits.slice(0, ex.own)), { own: ex.own, hasImage: useImages, visionAvailable: !!vm, className });
+            system = noteSystemPrompt(title, formatExcerpts(hits.slice(0, ex.own), 1, noteName), { own: ex.own, hasImage: useImages, visionAvailable: !!vm, className });
             // Everything that changes per question goes in the student's message, after the note.
             if (hits.length > ex.own)
-              moreExcerpts = `MORE EXCERPTS (${className ? `other ${className} notes` : 'other notes'}${picture ? ', and the picture you attached' : ''}):\n${formatExcerpts(hits.slice(ex.own), ex.own + 1)}\n\nEND OF EXCERPTS`;
+              moreExcerpts = `MORE EXCERPTS (${className ? `other ${className} notes` : 'other notes'}${picture ? ', and the picture you attached' : ''}):\n${formatExcerpts(hits.slice(ex.own), ex.own + 1, noteName)}\n\nEND OF EXCERPTS`;
             instructions = MODE_INSTRUCTIONS[mode];
             gateHits = ex.gate;
           }
@@ -867,12 +872,12 @@ export const useAssistant = create<AssistantState>()(
               insufficient: true,
               // Nothing was read to make it, so the reply cites nothing.
               sources: [],
-              content: 'There isn’t enough in these notes to make this yet — write a little more, then try again.',
+              content: 'There isn’t enough in these notes to make this yet. Write a little more, then try again.',
             });
             return;
           }
 
-          const system = librarySystemPrompt(formatExcerpts(hits), scopeLabel);
+          const system = librarySystemPrompt(formatExcerpts(hits, 1, noteName), scopeLabel);
           const prior = (get().threads[key]?.messages ?? []).filter((m) => m.id !== userMsg.id && m.id !== botMsg.id && m.status === 'done' && !m.tool);
           const history = trimHistory(
             prior.slice(-6).map((m) => ({ role: m.role, content: m.role === 'user' ? m.content : modelHistory(m) })),
@@ -1186,6 +1191,12 @@ function currentBlockId(noteId: string): string | undefined {
   return (node?.attrs.id as string | undefined) ?? undefined;
 }
 
+/** A note as the student knows it (an untitled one by its first line or date), for the model's excerpt headers. */
+function noteName(c: Chunk): string {
+  const note = useVault.getState().notes[c.noteId];
+  return note ? displayTitle(note) : c.title;
+}
+
 function withAttachmentText(question: string, attachments?: Attachment[]): string {
   const parts: string[] = [];
   for (const a of attachments ?? []) {
@@ -1194,32 +1205,3 @@ function withAttachmentText(question: string, attachments?: Attachment[]): strin
   return parts.length ? `THE STUDENT'S WORK (you may refer to it; it is not a source of facts):\n${parts.join('\n\n')}\n\n${question}` : question;
 }
 
-export function friendlyError(e: unknown): string {
-  const msg = String((e as Error)?.message ?? e);
-  if (/model .* not found|not found, try pulling/i.test(msg)) return `${msg}. Pull it with Ollama or pick another model in Settings → Local AI.`;
-  if (/does not support (images|vision)|image input/i.test(msg))
-    return 'This model can’t read images. Choose a vision model (e.g. qwen2.5vl, gemma3, llama3.2-vision) in Settings → Local AI.';
-  if (/ECONNREFUSED|Failed to fetch|fetch failed|NetworkError|HTTP 0/i.test(msg))
-    return 'Couldn’t reach your local model server. Is Ollama / LM Studio running?';
-  if (/context|too long|num_ctx/i.test(msg)) return `${msg} — try a shorter question or raise the context size in Settings → Local AI.`;
-  // The status and the server's own words, never its raw reply ('{"error":…}').
-  const code = (e as { status?: number })?.status ?? 0;
-  const status = /HTTP (5\d\d)/.exec(msg)?.[1] ?? (code >= 500 && code < 600 ? String(code) : undefined);
-  if (status) {
-    const why = serverReason(msg);
-    return `The model server had a problem (HTTP ${status}${why ? `: ${why}` : ''}). It was retried automatically; try again in a moment.`;
-  }
-  return msg;
-}
-
-/** The reason in a JSON error reply ('{"error":"server busy"}' → "server busy"), or ''. */
-function serverReason(msg: string): string {
-  if (!msg.includes('{')) return '';
-  try {
-    const j = JSON.parse(msg.slice(msg.indexOf('{'))) as { error?: unknown };
-    const why = typeof j.error === 'object' && j.error ? (j.error as { message?: unknown }).message : j.error;
-    return typeof why === 'string' ? why.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
-  } catch {
-    return '';
-  }
-}

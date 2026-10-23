@@ -315,8 +315,9 @@ export function LibraryView() {
   };
 
   // ---------------------------------------------------------------- render
+  // With no notes the greeting says so already; the (disabled) box keeps its usual words.
   const placeholder = !count
-    ? 'No notes to ask about yet'
+    ? 'Ask anything about your notes'
     : scope.kind === 'folder'
       ? `Ask about your ${name} notes`
       : scope.kind === 'all'
@@ -397,6 +398,14 @@ export function LibraryView() {
     if (!main) return;
     if (openId && overlay) main.setAttribute('inert', '');
     else main.removeAttribute('inert');
+  }, [openId, overlay]);
+  // …and a click on the part of it left showing closes the output (inert, it lets the click through to the page).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !openId || !overlay) return;
+    const close = (e: PointerEvent) => e.target === root && setArtifact(null);
+    root.addEventListener('pointerdown', close);
+    return () => root.removeEventListener('pointerdown', close);
   }, [openId, overlay]);
   // An output that opens takes the keyboard, so Space flips its first card; closing it gives the keyboard back to the composer.
   const shownId = useRef<string | null>(null);
@@ -671,7 +680,7 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
     return (
       <div className="msg is-bot lib-tool-turn">
         <div className="msg-added">
-          None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+          None of what the AI wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
         </div>
         {onRetry && <RetryRow onRetry={onRetry} />}
       </div>

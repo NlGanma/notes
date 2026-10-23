@@ -158,7 +158,7 @@ const OUTSIDE_OPEN = /^\s*:{3,}\s*(?:outside|general(?:[- ]knowledge)?|own(?:[- 
 
 /** Labels the app prints itself (the model never writes them). */
 export const OWN_HEAD = 'Not from your notes · the AI’s own knowledge — proceed with caution';
-export const AUTO_HEAD = 'Not found in your notes · treat this as the AI’s own knowledge — proceed with caution';
+export const AUTO_HEAD = 'Not found in your notes · the AI’s own knowledge — proceed with caution';
 export const OWN_TAG = 'not in your notes';
 
 // Inline markers the notes-only check puts around statements in lists, quotes
@@ -198,6 +198,28 @@ export function normalizeOutside(src: string): string {
     }
   }
   return open ? `${lines.join('\n')}\n:::` : lines.join('\n');
+}
+
+const BOX = /^:::outside( auto)?\n([\s\S]*?)\n:::[ \t]*$/gm;
+
+/**
+ * Boxes with nothing but blank lines between them become one box under one label (marked as the
+ * check's own if any part was). Only for showing, copying and inserting: the check counts the boxes the model wrote.
+ */
+export function mergeBoxes(md: string): string {
+  const boxes = [...md.matchAll(BOX)];
+  if (boxes.length < 2) return md;
+  const end = (m: RegExpMatchArray) => m.index! + m[0].length;
+  let out = '';
+  let at = 0;
+  for (let i = 0; i < boxes.length; i++) {
+    const run = [boxes[i]];
+    while (i + 1 < boxes.length && !md.slice(end(boxes[i]), boxes[i + 1].index).trim()) run.push(boxes[++i]);
+    const auto = run.some((m) => m[1]) ? ' auto' : '';
+    out += `${md.slice(at, run[0].index)}:::outside${auto}\n${run.map((m) => m[2]).join('\n\n')}\n:::`;
+    at = end(run[run.length - 1]);
+  }
+  return out + md.slice(at);
 }
 
 /** Block rule for `:::outside … :::` containers. */
@@ -338,7 +360,7 @@ function openMathAt(s: string): number {
  * `maxCite` (the number of excerpts) so only real excerpt numbers do.
  */
 export function renderMarkdown(src: string, opts: { citations?: boolean; maxCite?: number } = {}): string {
-  return inlineMarkers((opts.citations ? cited : plain).render(normalizeOutside(src), { maxCite: opts.maxCite }));
+  return inlineMarkers((opts.citations ? cited : plain).render(mergeBoxes(normalizeOutside(src)), { maxCite: opts.maxCite }));
 }
 
 /** Statements the notes-only check marked inside lists, quotes and tables. */
@@ -348,7 +370,7 @@ function inlineMarkers(html: string): string {
     .replace(/\uE000/g, `<span class="own-inline" title="${OWN_HEAD}">`)
     .replace(/\uE001/g, `</span><span class="own-tag" title="${OWN_HEAD}">${OWN_TAG}</span>`)
     .replace(/\uE004/g, '</span>')
-    .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note — check it">')
+    .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note. Check it.">')
     .replace(/\uE003/g, '</span>');
 }
 
@@ -387,8 +409,8 @@ export function markdownToEditorHTML(src: string, opts: { stripCitations?: boole
   if (opts.stripCitations) md.inline.ruler.before('link', 'citation_strip', stripCitations);
   // Inline own-knowledge marks stay visible in the note as words (once per table row).
   return md
-    .render(normalizeOutside(src), { maxCite: opts.maxCite })
+    .render(mergeBoxes(normalizeOutside(src)), { maxCite: opts.maxCite })
     .replace(/[\uE000\uE004]/g, '')
-    .replace(/\uE001/g, ' <em>(not from your notes — the AI’s own knowledge)</em>')
+    .replace(/\uE001/g, ` <em>(${OWN_TAG} · the AI’s own knowledge)</em>`)
     .replace(/[\uE002\uE003]/g, '');
 }

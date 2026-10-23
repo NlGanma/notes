@@ -158,3 +158,27 @@ test('a study tool with nothing in the notes to make it from says so, marked, wi
   assert.deepEqual(reply.sources, [], 'it cites nothing');
   assert.equal(script.requests.length, 0);
 });
+
+test('an untitled note is named to the model as the app names it, never “Untitled”', async () => {
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell membranes are lipid bilayers.' }] }] };
+  const meta = { ...lecture.meta, id: 'untitled1', title: '' };
+  useVault.setState({ notes: { ...useVault.getState().notes, untitled1: { ...lecture, meta, content: doc } as never } });
+  await useAssistant.getState().ask('untitled1', { prompt: NOTE_STARTERS.explain });
+  const system = script.requests[0][0].content;
+  assert.match(system, /Cell membranes are lipid bilayers/);
+  assert.ok(!/Untitled/.test(system), system.slice(0, 300));
+});
+
+test('a failure is said in one plain sentence; a program’s own words are not shown', () => {
+  assert.equal(friendlyError(new Error('model "qwen3:8b" not found, try pulling it first')), 'The model qwen3:8b isn’t installed. Pull it with Ollama or pick another in Settings → Local AI.');
+  assert.match(friendlyError(new TypeError('Failed to fetch')), /Couldn’t reach your local model server/);
+  assert.match(friendlyError(new Error('The operation timed out.')), /took too long/);
+  const error = console.error;
+  console.error = () => undefined;
+  try {
+    assert.equal(friendlyError(new TypeError("Cannot read properties of undefined (reading 'content')")), 'Something went wrong. Try again.');
+  } finally {
+    console.error = error;
+  }
+  assert.equal(friendlyError(new Error('This file has no pages.')), 'This file has no pages.', 'plain words pass through');
+});

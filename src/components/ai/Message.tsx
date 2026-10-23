@@ -1,26 +1,11 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Copy,
-  CornerDownLeft,
-  Globe,
-  Link2,
-  FilePlus2,
-  PlayCircle,
-  RefreshCw,
-  Search,
-  Settings,
-  ShieldCheck,
-  TriangleAlert,
-} from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, Copy, CornerDownLeft, Link2, FilePlus2, PlayCircle, RefreshCw, Search, Settings, TriangleAlert } from 'lucide-react';
 import type { ChatMsg, MsgPhase, SourceRef } from '../../state/assistant';
-import { citedInAnswer, renderMarkdown, withoutOpenMath } from '../../lib/ai/markdown';
+import { citedInAnswer, normalizeOutside, OWN_OPEN, renderMarkdown, withoutOpenMath } from '../../lib/ai/markdown';
 import { applyGrounding, type GroundingReport } from '../../lib/ai/grounding';
 import { shownOf, type CheckSummary } from '../../lib/ai/answer';
 import { LABELS } from '../../lib/ai/policy';
-import { markersToText } from '../../lib/ai/verify';
+import { markersToText, splitSentences } from '../../lib/ai/verify';
 import { openSource, sourceTitle } from './Citations';
 import { useUI } from '../../state/ui';
 import { cx, plural } from '../../lib/util';
@@ -30,9 +15,9 @@ function phaseLabel(phase: MsgPhase, msg: ChatMsg): string {
     case 'reading':
       return msg.grounding === 'homework' ? 'Reading your linked notes…' : 'Searching your notes…';
     case 'loading':
-      return 'Loading the model into memory — the first answer takes a moment…';
+      return 'Loading the model. The first answer takes a moment…';
     case 'retrying':
-      return 'The model server is busy — retrying…';
+      return 'The model server is busy. Retrying…';
     case 'repairing':
       return 'Tidying up the format…';
     case 'general':
@@ -64,7 +49,14 @@ export function needsLegacyCheck(msg: ChatMsg, citations?: boolean): boolean {
 /** "Your notes don't cover this…" — written by the app, above the answer. */
 function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): void; onLink?(): void }) {
   const b = msg.banner;
-  if (!b) return null;
+  // Tagged items have no box header of their own, so the line above the answer says what the tag means.
+  const tagged = msg.role === 'assistant' && shownMarkdown(msg).includes(OWN_OPEN) ? LABELS.tagged : '';
+  if (!b)
+    return tagged ? (
+      <div className="coverage-banner is-partial">
+        <div className="coverage-text">{tagged}</div>
+      </div>
+    ) : null;
   const text = {
     none: LABELS.noneBody,
     noneOff: LABELS.noneOff(msg.grounding === 'library'),
@@ -80,7 +72,7 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
     <div className={cx('coverage-banner', none ? 'is-none' : 'is-partial')}>
       {(b === 'none' || b === 'noneOff') && <div className="coverage-title">{LABELS.noneTitle}</div>}
       {b === 'noExample' && <div className="coverage-title">{LABELS.exampleNone}</div>}
-      <div className="coverage-text">{text}</div>
+      <div className="coverage-text">{[text, tagged].filter(Boolean).join(' ')}</div>
       {msg.gaps && msg.gaps.length > 0 && (
         <ul className="coverage-gaps">
           {msg.gaps.map((g) => (
@@ -277,7 +269,7 @@ export const MessageView = memo(function MessageView({
         </div>
       )}
       {msg.check && msg.status === 'done' && !msg.ownOnly && (
-        <CheckBar check={msg.check} general={!!msg.shown?.includes(':::outside\n')} showWeak={showUncited} onToggle={() => setShowUncited((v) => !v)} />
+        <CheckBar check={msg.check} own={ownSentences(md)} showWeak={showUncited} onToggle={() => setShowUncited((v) => !v)} />
       )}
       {report && (
         <GroundingBar
@@ -290,7 +282,7 @@ export const MessageView = memo(function MessageView({
       )}
       {msg.truncated && !streaming && onContinue && (
         <button className="msg-continue" onClick={onContinue}>
-          <PlayCircle size={14} /> The answer was cut off — continue
+          <PlayCircle size={14} /> The answer was cut off. Continue
         </button>
       )}
       {children}
@@ -330,34 +322,43 @@ export const MessageView = memo(function MessageView({
   );
 });
 
-/** What the notes-only check found: backed statements, moved ones, the model's own parts. */
-function CheckBar({ check, general, showWeak, onToggle }: { check: CheckSummary; general: boolean; showWeak: boolean; onToggle(): void }) {
-  const own = check.outside + (general ? 1 : 0);
-  if (!check.supported && !check.weak && !check.contained && !own) return null;
-  const clean = !check.contained && !check.weak && !own;
+/** Sentences in the boxes of the AI's own knowledge (the sentences the check boxed itself are `contained`). */
+function ownSentences(md: string): number {
+  let n = 0;
+  for (const m of normalizeOutside(md).matchAll(/^:::outside\n([\s\S]*?)\n:::[ \t]*$/gm))
+    n += Math.max(1, splitSentences(m[1]).filter((x) => /\p{L}/u.test(x)).length);
+  return n;
+}
+
+/**
+ * What the notes-only check found, as one quiet line: sentences backed by the notes, and how many are not
+ * (each of those is in a labelled box or tagged on screen already).
+ */
+function CheckBar({ check, own, showWeak, onToggle }: { check: CheckSummary; own: number; showWeak: boolean; onToggle(): void }) {
+  const notFound = check.contained + own;
+  if (!check.supported && !check.weak && !notFound) return null;
   return (
-    <div className={cx('grounding', clean ? 'is-clean' : 'is-warn')}>
+    <div className={cx('grounding', notFound || check.weak ? 'is-warn' : 'is-clean')}>
       {check.supported > 0 && (
         <span
           className="grounding-item is-cited"
-          title={`Each one was checked against the passage it cites${check.repaired ? ` (Nib added or corrected ${plural(check.repaired, 'citation')} after checking)` : ''}`}
+          title={`Each one was checked against the passage it cites${check.repaired ? ` (${plural(check.repaired, 'citation')} added or corrected after checking)` : ''}`}
         >
-          <ShieldCheck size={13} /> {plural(check.supported, 'statement')} from your notes
+          {plural(check.supported, 'sentence')} from your notes
         </span>
       )}
-      {check.contained > 0 && (
-        <span className="grounding-item is-outside" title="No passage of your notes backs these, so they are boxed as the AI’s own knowledge">
-          <Globe size={13} /> {check.contained === 1 ? '1 sentence' : `${check.contained} sentences`} not found in your notes
-        </span>
-      )}
-      {own > 0 && (
-        <span className="grounding-item is-outside" title="The AI’s own knowledge — your notes don’t cover this">
-          <Globe size={13} /> {LABELS.ownParts(own)}
+      {notFound > 0 && (
+        <span className="grounding-item is-outside" title="No passage of your notes backs these, so they are boxed or tagged as the AI’s own knowledge">
+          {notFound} not found in your notes
         </span>
       )}
       {check.weak > 0 && (
-        <button className={cx('grounding-item is-uncited', showWeak && 'is-on')} onClick={onToggle} title="Related to the cited note, but not clearly the same — check these">
-          <CircleAlert size={13} /> {check.weak} loosely matched — {showWeak ? 'hide' : 'show'}
+        <button
+          className={cx('grounding-item is-uncited', showWeak && 'is-on')}
+          onClick={onToggle}
+          title="Related to the cited note, but not clearly the same. Check these."
+        >
+          {check.weak} loosely matched · {showWeak ? 'Hide' : 'Show'}
         </button>
       )}
     </div>
@@ -382,22 +383,21 @@ function GroundingBar({
   return (
     <div className={cx('grounding', clean ? 'is-clean' : 'is-warn')}>
       {report.cited > 0 && (
-        <span className="grounding-item is-cited" title={homework ? 'Statements backed by the notes you linked' : 'Statements backed by your notes'}>
-          <ShieldCheck size={13} /> {plural(report.cited, 'statement')} from your notes
+        <span className="grounding-item is-cited" title={homework ? 'Sentences backed by the notes you linked' : 'Sentences backed by your notes'}>
+          {plural(report.cited, 'sentence')} from your notes
         </span>
       )}
       {report.outside > 0 && (
-        <span className="grounding-item is-outside" title="The AI’s own knowledge — your notes don’t cover this">
-          <Globe size={13} /> {LABELS.ownParts(report.outside)}
+        <span className="grounding-item is-outside" title="Your notes don’t cover this">
+          {LABELS.ownParts(report.outside)}
         </span>
       )}
       {(report.uncited > 0 || report.weak > 0) && (
         <button className={cx('grounding-item is-uncited', showUncited && 'is-on')} onClick={onToggle} title="Highlight what isn’t clearly backed by a note">
-          <CircleAlert size={13} />
           {[report.uncited ? `${report.uncited} uncited` : '', report.weak ? `${report.weak} weak ${report.weak === 1 ? 'citation' : 'citations'}` : '']
             .filter(Boolean)
-            .join(' · ')}{' '}
-          — {showUncited ? 'hide' : 'show'}
+            .join(', ')}{' '}
+          · {showUncited ? 'Hide' : 'Show'}
         </button>
       )}
       {homework && sources === 0 && <span className="grounding-item is-outside">No notes linked</span>}

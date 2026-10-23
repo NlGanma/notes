@@ -45,42 +45,52 @@ test('the student’s bubble shows the menu action they picked, not the prompt t
   assert.match(render(msg({ role: 'user', content: 'What is a limit?' })), /What is a limit\?/);
 });
 
-test('an answer from the AI’s own knowledge carries its banner and box — and no third warning', () => {
+test('an answer from the AI’s own knowledge says “proceed with caution” once: in its box’s header, not the banner too', () => {
   const m = msg({ ownOnly: true, coverage: 'none', banner: 'none', shown: OWN });
   assert.equal(needsLegacyCheck(m, true), false, 'no legacy check bar for it');
   assert.equal(needsLegacyCheck(msg({ content: 'Old answer [1].' }), true), true, 'older answers without the check still get one');
   const html = render(m, { onForce: noop });
-  assert.match(html, /proceed with caution and check it against your class materials/, 'the banner says it is the AI’s own knowledge');
+  assert.match(html, /Your notes don’t cover this/, 'the banner says the notes don’t cover it');
+  assert.match(html, /Check the answer below against your class materials/);
   assert.match(html, /class="outside-head"[^>]*>.*Not from your notes · the AI’s own knowledge — proceed with caution/, 'the box keeps its header');
-  assert.ok(!/grounding-item/.test(html), 'no pill repeating it');
+  assert.equal(count(text(html), /proceed with caution/), 1, 'said once');
+  assert.ok(!/grounding-item/.test(html), 'no count line repeating it');
 });
 
 test('no example in the notes: the banner says the example below is the AI’s own (and says nothing more with own knowledge off)', () => {
   const given = render(msg({ ownOnly: true, coverage: 'none', banner: 'noExample', shown: ':::outside\nFor example, the Golgi packs proteins.\n:::' }));
   assert.match(given, /don’t include an example of this/);
-  assert.match(given, /the answer below is from the AI’s own general knowledge, not your notes — proceed with caution/);
+  assert.match(given, /Check the answer below against your class materials/);
+  assert.match(given, /class="outside-head"[^>]*>.*proceed with caution/, 'the example is boxed and labelled');
   const off = render(msg({ ownOnly: true, coverage: 'none', banner: 'noExample' }));
   assert.match(off, /don’t include an example of this/);
   assert.ok(!/answer below/.test(off), 'no answer below to speak of');
 });
 
-test('“sources added by Nib” is the green pill’s tooltip, not a pill of its own', () => {
+test('citations the check added are mentioned in the count’s tooltip, not a count of their own', () => {
   const html = render(msg({ content: 'x', shown: 'Sum: $\\lim(f+g) = \\lim f + \\lim g$ [1].', check: { claims: 1, supported: 1, weak: 0, contained: 0, outside: 0, repaired: 1 } }));
-  assert.ok(!/added by Nib/.test(text(html)), 'no pill');
-  assert.match(html, /class="grounding-item is-cited" title="[^"]*Nib added or corrected 1 citation/);
+  assert.ok(!/added or corrected/.test(text(html)), 'not in the line itself');
+  assert.match(html, /class="grounding-item is-cited" title="[^"]*1 citation added or corrected after checking/);
 });
 
-test('one pill wording for parts from the AI’s own knowledge', () => {
+test('the line under an answer counts sentences: from your notes, and not found in them (boxed ones included)', () => {
+  const two = ':::outside\nThe capital of Peru is Lima. It sits on the coast.\n:::';
+  const html = render(msg({ content: 'x', shown: `Sum [1]. Product [1].\n\n:::outside auto\nArchimedes proved it.\n:::\n\n${two}`, check: { claims: 3, supported: 2, weak: 1, contained: 1, outside: 0, repaired: 0 } }));
+  // (The " · " between them is drawn by CSS.)
+  assert.match(text(html), /2 sentences from your notes 3 not found in your notes 1 loosely matched · Show/);
+  assert.ok(!/part|own knowledge/.test(text(html).split('proceed with caution').pop()!), 'no separate count of the AI’s parts');
+  assert.ok(!/<svg/.test(html.slice(html.indexOf('class="grounding'), html.indexOf('class="msg-actions'))), 'words only, no icons');
+  // Two boxes in a row read as one, under one label (the check’s own if either is).
+  assert.equal(count(html, /class="outside-notes/), 1);
+  assert.match(html, /class="outside-notes is-auto"/);
+  // The legacy citation check keeps its wording for the AI's parts.
   assert.equal(LABELS.ownParts(1), '1 part from the AI’s own knowledge');
-  const html = render(msg({ content: 'x', shown: `Sum [1].\n\n${OWN}`, check: { claims: 1, supported: 1, weak: 0, contained: 0, outside: 0, repaired: 0 } }));
-  assert.match(text(html), /1 part from the AI’s own knowledge/);
-  assert.ok(!/part not from your notes/.test(text(html)));
 });
 
 test('“worked with your notes’ method” is said only when some of the answer is from the notes', () => {
   const derived = { claims: 2, weak: 0, outside: 0, repaired: 0, derived: 1 };
   const collapsed = render(msg({ content: 'x', banner: 'collapsed', shown: ':::outside auto\nAll of it.\n:::', check: { ...derived, supported: 0, contained: 2 } }));
-  assert.match(collapsed, /couldn’t match this answer to your notes/);
+  assert.match(collapsed, /Couldn’t match this answer to your notes/);
   assert.ok(!collapsed.includes(LABELS.computed), 'not under a banner saying none of it matched');
   assert.ok(!render(msg({ content: 'x', shown: '$3+3=6$', check: { ...derived, supported: 0, contained: 0 } })).includes(LABELS.computed));
   assert.ok(render(msg({ content: 'x', shown: 'Use the sum law [1].\n\n$3+3=6$', check: { ...derived, supported: 1, contained: 0 } })).includes(LABELS.computed));
@@ -126,10 +136,18 @@ test('“Search my notes anyway” only while the notes haven’t been searched 
   assert.match(unlinked, /haven’t linked any notes/);
 });
 
-test('the banners point at the boxes and the switch as they really are', () => {
-  assert.ok(!/“Not from your notes” box/.test(LABELS.partial), 'contained sentences are boxed under “Not found in your notes”');
-  assert.match(LABELS.partial, /amber box/);
-  assert.match(LABELS.partial, /proceed with caution/);
+test('the banners point at the boxes, tags and the switch as they really are', () => {
+  // Boxes carry their own label: the banner over them just says the notes cover part of it.
+  const boxed = text(render(msg({ content: 'x', banner: 'partial', shown: `Sum [1].\n\n${OWN}`, check: { claims: 1, supported: 1, weak: 0, contained: 0, outside: 0, repaired: 0 } })));
+  assert.match(boxed, /Your notes only cover part of this\. Sum/);
+  assert.equal(count(boxed, /proceed with caution/), 1);
+  // A tagged list item has no box header, so the banner says what the tag means.
+  const tagged = text(render(msg({ content: 'x', banner: 'partial', shown: '- Sum [1].\n- \uE000Archimedes proved it.\uE001', check: { claims: 2, supported: 1, weak: 0, contained: 1, outside: 0, repaired: 0 } })));
+  assert.match(tagged, /Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution/);
+  assert.match(tagged, /Archimedes proved it\. not in your notes/);
+  // Tags with no banner at all still get the line that says what they mean.
+  const bare = text(render(msg({ content: 'x', shown: '- Sum [1].\n- \uE000Archimedes proved it.\uE001', check: { claims: 2, supported: 1, weak: 0, contained: 1, outside: 0, repaired: 0 } })));
+  assert.match(bare, /Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution/);
   const off = (grounding: Msg['grounding']) => text(render(msg({ grounding, ownOnly: true, banner: 'noneOff', coverage: 'none' })));
   // One switch for both: Ask your notes has no chat settings of its own.
   assert.match(off('library'), /answer only from your notes.*Settings → Local AI/);

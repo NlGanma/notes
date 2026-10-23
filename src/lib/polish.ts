@@ -283,9 +283,9 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
     out.push({
       id: 'colors',
       icon: 'colors',
-      title: 'Harmonise ink colours',
-      detail: `${colorCounts.size} different ink colours — snap them to a consistent palette`,
-      action: 'Harmonise',
+      title: 'Harmonize ink colors',
+      detail: `${colorCounts.size} different ink colors`,
+      action: 'Harmonize',
       apply(editor) {
         const tr = editor.state.tr;
         editor.state.doc.forEach((n, pos) => {
@@ -310,7 +310,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       id: 'read',
       icon: 'read',
       title: 'Make handwriting searchable',
-      detail: `Let your local model read ${unread.length} handwriting area${unread.length === 1 ? '' : 's'} so search and the assistant can use ${unread.length === 1 ? 'it' : 'them'}`,
+      detail: `${unread.length} handwriting area${unread.length === 1 ? '' : 's'} not read yet`,
       action: 'Read',
       ai: 'vision',
       async apply(editor) {
@@ -329,7 +329,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       id: 'math',
       icon: 'math',
       title: 'Typeset handwritten math',
-      detail: `Add a clean, typeset copy under ${mathInk.length} handwritten equation${mathInk.length === 1 ? '' : 's'}`,
+      detail: `${mathInk.length} handwritten equation${mathInk.length === 1 ? '' : 's'}`,
       action: 'Typeset',
       apply(editor) {
         for (const b of [...mathInk].reverse()) {
@@ -356,7 +356,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       id: 'bullets',
       icon: 'bullets',
       title: 'Break up a wall of text',
-      detail: `“${textOf(longPara).slice(0, 60)}…” → a scannable bullet list`,
+      detail: `“${textOf(longPara).slice(0, 60)}…”`,
       action: 'Rewrite',
       ai: 'chat',
       async apply(editor) {
@@ -381,7 +381,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       id: 'summary',
       icon: 'summary',
       title: 'Add a summary at the top',
-      detail: 'A 2–3 sentence overview makes the note easy to review',
+      detail: '',
       action: 'Write',
       ai: 'chat',
       async apply(editor) {

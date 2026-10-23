@@ -93,3 +93,27 @@ test('notes written by the AI are never retrieved as class material unless picke
   assert.ok(!chunkVault([...v.list, cards], { kind: 'folder', path: 'Calculus I' }).some((c) => c.title === 'Flashcards'));
   assert.ok(chunkVault([cards], { kind: 'note', id: cards.meta.id }).length > 0);
 });
+
+test('search words leave out what the app wrote around handwriting and TeX that only lays math out', () => {
+  assert.deepEqual(tokenize('[Handwritten notes — not transcribed yet]'), []);
+  assert.deepEqual(tokenize('[Handwritten: find $\\frac{dy}{dx}$ where I got stuck]'), ['find', 'dy', 'dx', 'got', 'stuck']);
+  assert.deepEqual(tokenize('$\\left( \\lim_{x \\to a} \\sin x \\right)$'), ['lim', 'sin']);
+  // The words themselves still count when a student types them.
+  assert.ok(tokenize('My handwritten notes on fractions').includes('handwritten'));
+});
+
+test('a search snippet shows math as plain text, not TeX', async () => {
+  const { snippet } = await import('../../src/lib/ai/rag');
+  assert.equal(snippet('- Sum: $\\lim (f+g) = \\lim f + \\lim g$', 'lim'), '- Sum: lim (f+g) = lim f + lim g');
+  assert.equal(snippet('**Definition.** $\\lim_{x \\to a} f(x) = L$ when ==close==', 'lim'), 'Definition. lim x → a f(x) = L when close');
+  assert.equal(snippet('Quotient: $\\frac{f}{g} \\le 1$', 'quotient'), 'Quotient: f/g ≤ 1');
+  assert.equal(snippet('[Handwritten: x^2 + 1]', 'x'), 'x^2 + 1');
+  assert.equal(snippet('Ex. Find $\\lim_{x\\to 3} \\frac{x^2 - 9}{x - 3}$', 'find'), 'Ex. Find lim x → 3 (x^2 - 9)/(x - 3)');
+  // A long passage is cut around the match, never inside a formula.
+  const long = `${'Intro words here. '.repeat(12)}Then $\\frac{a+b}{c}$ and the squeeze theorem.`;
+  assert.ok(!/frac|[{}$\\]/.test(snippet(long, 'squeeze', 60)), snippet(long, 'squeeze', 60));
+  // Money is not math: a lone dollar sign, or two prices, keep theirs.
+  assert.equal(snippet('The fee is $20.', 'fee'), 'The fee is $20.');
+  assert.equal(snippet('It costs $5 or $10 a week', 'costs'), 'It costs $5 or $10 a week');
+  assert.equal(snippet('Area: $$\\pi r^2$$ for $3', 'area'), 'Area: π r^2 for $3');
+});

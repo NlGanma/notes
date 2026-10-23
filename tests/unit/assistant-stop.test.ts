@@ -127,7 +127,7 @@ test('set to answer only from the notes, the AI’s own sentences are left out e
   await useAssistant.getState().askLibrary({ prompt: 'What does the squeeze theorem say?', scope: { kind: 'all' } });
   const md = shownOf(bot());
   assert.ok(!/Archimedes|Newton/.test(md), md);
-  assert.match(md, /Left out — not in your notes/);
+  assert.match(md, /Left out, not in your notes/);
 });
 
 test('asked while the model server is still being found, a question waits for it instead of failing', async () => {
