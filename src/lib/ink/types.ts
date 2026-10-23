@@ -36,8 +36,11 @@ export interface Bounds {
   maxY: number;
 }
 
-export type InkTool = 'pen' | 'highlighter' | 'eraser' | 'lasso' | 'shapes' | 'ask';
+/** 'pen' is the felt marker and 'lasso' the Select rectangle; the ids are what older notes and settings saved. */
+export type InkTool = 'pen' | 'highlighter' | 'eraser' | 'lasso';
 export type Tool = 'text' | InkTool;
+/** Tools that are gone (the Shapes tool, Ask about an area); setTool still takes them from older callers. */
+export type LegacyTool = 'shapes' | 'ask';
 
 export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle';
 export type EraserMode = 'stroke' | 'precise';

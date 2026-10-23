@@ -105,8 +105,6 @@ export const BRUSHES: Record<Brush, BrushDef> = {
   },
 };
 
-export const PEN_BRUSHES: Brush[] = ['fountain', 'ballpoint', 'brush', 'pencil', 'marker'];
-
 export interface Swatch {
   name: string;
   value: string;
@@ -157,6 +155,10 @@ export const TEXT_HIGHLIGHTS: Swatch[] = [
   { name: 'Purple', value: '#ece4ff' },
 ];
 
-export const PEN_SIZES = [1.4, 2.2, 3.2, 4.6, 6.4];
+/** The three size slots each tool starts with (Fine, Medium, Bold). Marker and highlighter slots can be retuned. */
+export const MARKER_SIZES = [1.1, 1.6, 2.5];
 export const HIGHLIGHTER_SIZES = [10, 16, 24];
 export const ERASER_SIZES = [8, 18, 36];
+/** How far a retuned slot may go. */
+export const MARKER_RANGE = { min: 0.8, max: 8 };
+export const HIGHLIGHTER_RANGE = { min: 6, max: 40 };
