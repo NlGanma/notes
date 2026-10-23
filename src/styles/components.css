@@ -653,55 +653,6 @@ textarea.input {
   color: var(--text);
 }
 
-/* A labelled text field (dialogs being rebuilt still use it): the name above, the input under it. */
-.gfield {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.gfield-box {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 6px;
-}
-.gfield-box label {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.gfield-box :is(input, textarea) {
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 12px;
-  border: 0;
-  outline: none;
-  border-radius: var(--radius);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text);
-  resize: vertical;
-  user-select: text;
-}
-.gfield-box :is(input, textarea):hover {
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.gfield-box :is(input, textarea):focus {
-  box-shadow:
-    0 0 0 1px var(--focus),
-    0 0 6px 1px var(--focus-glow);
-}
-.gfield-help {
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text-3);
-}
-.gfield.is-error .gfield-help {
-  color: var(--danger);
-}
-
 /* ------------------------------------------------------------------ toasts */
 
 /* Bottom-centre, dark, one line and an underlined action; they leave on their own. */

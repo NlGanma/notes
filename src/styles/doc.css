@@ -216,14 +216,15 @@
   box-shadow: 0 0 0 1px var(--border, rgba(20, 20, 19, 0.1));
 }
 
-/* callouts: Notion's flat tinted boxes, no border. The text keeps the page's line grid. */
+/* callouts: flat boxes in the app's warm subtle fill, no border. The text keeps the page's line grid. Amber is
+   kept for the AI's own knowledge, so a note's own callouts never look like that warning. */
 :is(.nib-editor, .doc-body, .thumb-body) .callout {
   display: flex;
   gap: 8px;
   padding: calc(var(--line) / 4) 16px calc(var(--line) / 4) 12px;
   border-radius: 4px;
-  background: #f1f1ef;
-  --callout-icon: #787774;
+  background: var(--bg-subtle, #f0eee6);
+  --callout-icon: var(--text-3, #6b6a64);
   /* The box already covers the ruled lines: equations inside keep its tint. */
   --math-bg: transparent;
 }
@@ -254,17 +255,14 @@
 .callout-icon:hover {
   background: rgba(55, 53, 47, 0.08);
 }
-.callout[data-variant='tip'] {
-  background: #e7f3f8;
-  --callout-icon: #337ea9;
-}
-.callout[data-variant='important'] {
-  background: #fbf3db;
-  --callout-icon: #cb912f;
-}
+.callout[data-variant='tip'],
 .callout[data-variant='question'] {
-  background: #fdebec;
-  --callout-icon: #d44c47;
+  --callout-icon: var(--text-2, #3d3d3a);
+}
+/* Important: an ink rule down its left edge rather than a warning colour. */
+.callout[data-variant='important'] {
+  box-shadow: inset 2px 0 0 var(--text, #141413);
+  --callout-icon: var(--text, #141413);
 }
 /* From the assistant: the same grey callout as a plain note, with the assistant's icon. */
 .callout[data-variant='ai'] .callout-icon,
