@@ -447,8 +447,11 @@ function Hint({ text }: { text: string }) {
   );
 }
 
-/** The notes' own words, with the part of the note they come from (it opens there). */
-function NotesSay({ current, label = 'Your notes say', points }: { current: Current; label?: string; points?: string[] }) {
+/**
+ * The notes' own words, with the part of the note they come from (it opens there): the line, or `points`
+ * in its place, and then any `extra` points the same part of the note makes.
+ */
+function NotesSay({ current, label = 'Your notes say', points, extra }: { current: Current; label?: string; points?: string[]; extra?: string[] }) {
   const src = current.item.source;
   const name = useSourceName(src);
   return (
@@ -476,6 +479,13 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
       ) : (
         <div className="md rv-notes-say-text" dangerouslySetInnerHTML={{ __html: md(current.item.fact) }} />
       )}
+      {!points?.length && extra?.length ? (
+        <ul className="rv-points">
+          {extra.map((p, i) => (
+            <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -501,14 +511,7 @@ function SelfGrade({ current }: { current: Current }) {
           <div className="rv-answered is-plain">{current.answer}</div>
         </div>
       )}
-      <NotesSay current={current} />
-      {points.length > 0 && (
-        <ul className="rv-points">
-          {points.map((p, i) => (
-            <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
-          ))}
-        </ul>
-      )}
+      <NotesSay current={current} extra={points} />
       <div className="rv-answer-head">
         <span className="rv-answer-label">How did you do?</span>
       </div>
