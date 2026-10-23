@@ -98,6 +98,10 @@
   white-space: nowrap;
   min-width: 0;
 }
+/* The class reads a touch stronger than its folders and the date. */
+.page-meta .crumb.is-class {
+  font-weight: 500;
+}
 .page-meta .crumb:hover {
   color: var(--text);
   text-decoration: underline;
