@@ -270,7 +270,8 @@ console.log(errors.join('\n') || 'no page errors');
   await slow.fill('.library-composer textarea', 'What is the squeeze theorem?');
   await slow.keyboard.press('Enter');
   await slow.waitForSelector('.library .msg.is-bot');
-  await slow.waitForTimeout(1500);
+  // Long enough for an instant error to show, well inside the app's own 5s wait for /api/tags.
+  await slow.waitForTimeout(600);
   const waiting = await slow.evaluate(() => ({
     error: document.querySelector('.library .msg-error')?.textContent ?? '',
     streaming: !!document.querySelector('.library .msg.is-bot.is-streaming'),
