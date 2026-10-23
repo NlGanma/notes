@@ -3,7 +3,7 @@ import type { FolderMeta, NoteDoc } from '../../lib/vault/types';
 import type { Scope } from '../../lib/ai/rag';
 import type { StudyTool } from '../../lib/ai/prompts';
 import type { SourceSelection } from '../homework/sources';
-import { classInfo, type ClassInfo } from '../../lib/classes';
+import { classInfo } from '../../lib/classes';
 import { displayTitle } from '../../lib/displayTitle';
 import { plural } from '../../lib/util';
 import { useVault } from '../../state/vault';
@@ -27,10 +27,6 @@ export function notebookNotes(notes: Record<string, NoteDoc>, nb: Notebook): Not
   return Object.values(notes)
     .filter((n) => inNotebook(n, nb))
     .sort((a, b) => a.meta.folder.localeCompare(b.meta.folder) || displayTitle(a).localeCompare(displayTitle(b), undefined, { numeric: true }));
-}
-
-export function notebookClass(nb: Notebook, folderMeta: Record<string, FolderMeta>): ClassInfo | null {
-  return nb.kind === 'folder' && folderMeta[nb.path]?.kind === 'class' ? classInfo(nb.path, folderMeta[nb.path]) : null;
 }
 
 /** The notes a scope reads from (a picked note that's gone since no longer counts). */

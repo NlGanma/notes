@@ -155,6 +155,11 @@ export function AssistantPanel() {
   // Follows the reply as it streams unless the student scrolled up; a new question (from here or the page) always shows,
   // and the list stays at the bottom while the composer grows under it.
   const seen = useRef(messages.length);
+  // Another note's conversation starts at its newest reply.
+  useLayoutEffect(() => {
+    stick.current = true;
+    lastTop.current = 0;
+  }, [noteId]);
   useLayoutEffect(() => {
     if (messages.length > seen.current) stick.current = true;
     seen.current = messages.length;

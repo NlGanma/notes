@@ -18,7 +18,7 @@ import { NotePicker } from '../homework/NotePicker';
 import { parseStudyJSON, saveFlashcards } from './StudyTools';
 import { ArtifactPanel, ToolIcon, outputMeta, type Output } from './ArtifactPanel';
 import { conversationTitle, pastConversations, reopenConversation, startConversation } from './history';
-import { TOOL_LOOK, notebookClass, notebookNotes, saveMarkdownNote, scopeFromPick, scopeName, scopeNotes, selectionFor } from './notebook';
+import { TOOL_LOOK, notebookNotes, saveMarkdownNote, scopeFromPick, scopeName, scopeNotes, selectionFor } from './notebook';
 
 /** The study chips under the composer, in the order a student reaches for them. */
 const TOOLS: { tool: StudyTool; label: string }[] = [
@@ -86,8 +86,9 @@ export function LibraryView() {
   const count = inScope.length;
   const anyNotes = useMemo(() => notebookNotes(notes, { kind: 'all' }).length > 0, [notes]);
   const name = scopeName(scope, notes, folderMeta);
-  const cls = scope.kind === 'folder' ? notebookClass(scope, folderMeta) : null;
   const classes = useMemo(() => listClasses(folders, folderMeta), [folders, folderMeta]);
+  // From the class list, so a class without a colour of its own has the one the sidebar gives it.
+  const cls = scope.kind === 'folder' ? (classes.find((c) => c.path === scope.path) ?? null) : null;
   // What the model is told the notes are for ("your notes for Calculus I"): a folder, one note, or the one class a list sits in.
   const modelLabel = useMemo(() => {
     if (scope.kind === 'folder') return name;
