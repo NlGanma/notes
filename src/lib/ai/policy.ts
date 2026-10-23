@@ -39,9 +39,8 @@ export function gapFillSystem(gaps: string[], className?: string) {
 export const LABELS = {
   noneTitle: 'Your notes don’t cover this',
   noneBody: 'So the answer below is from the AI’s own general knowledge, not your notes — proceed with caution and check it against your class materials.',
-  /** Under "Your notes don't cover this"; says where the switch is (Ask your notes has its own, “Only my notes” in Configure chat). */
-  noneOff: (library: boolean) =>
-    `Nib is set to answer only from your notes, so the AI’s own knowledge isn’t used (${library ? '“Only my notes” in Configure chat' : 'Settings → Local AI'}).`,
+  /** Under "Your notes don't cover this"; says where the one switch is, for the Assistant and Ask your notes alike. */
+  noneOff: (_library: boolean) => 'Nib is set to answer only from your notes, so the AI’s own knowledge isn’t used (Settings → Local AI).',
   noLinked: 'You haven’t linked any notes to this homework, so nothing here can come from your class notes. The answer below is the AI’s own general knowledge — proceed with caution.',
   // The boxes say "Not from your notes" or "Not found in your notes", list items and table rows "not in your notes".
   partial: 'Your notes only cover part of this. Anything in an amber box, or marked “not in your notes”, is the AI’s own knowledge — proceed with caution.',

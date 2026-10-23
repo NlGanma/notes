@@ -5,7 +5,7 @@ import { useUI } from '../state/ui';
 import { useAI } from '../state/ai';
 import { folderMenu } from './FileTree';
 import { NewNotePopover } from './NewNoteMenu';
-import { openClass, openReview } from '../lib/commands';
+import { openClass, openLibrary, openReview } from '../lib/commands';
 import { dueCount, useReview } from '../state/review';
 import { classForFolder, listClasses, themeVars, type ClassInfo } from '../lib/classes';
 import { openContextMenu } from './common/ContextMenu';
@@ -218,7 +218,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             icon={<MessagesSquare size={18} strokeWidth={1.5} />}
             label="Ask your notes"
             here={isHere(place, 'library')}
-            onClick={() => useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'all' } })}
+            onClick={() => openLibrary()}
           />
           <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="All notes" here={isHere(place, 'notes')} onClick={() => useUI.getState().setView({ kind: 'home' })} />
 

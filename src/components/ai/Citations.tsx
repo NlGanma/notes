@@ -37,8 +37,8 @@ export function trimExcerpt(text: string): string {
 }
 
 /**
- * A [n] chip → a card with exactly what the note says (NotebookLM's citation
- * popover: the section, the passage, then the note it's from, which opens it).
+ * A [n] chip → a card with exactly what the note says: the section, the
+ * passage, then the note it's from, which opens it.
  * Clicking a chip pins the card; `hover` also shows it while the pointer rests
  * on a chip or the card.
  */

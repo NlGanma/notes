@@ -7,7 +7,7 @@ import {
   CornerDownLeft,
   Globe,
   Link2,
-  Pin,
+  FilePlus2,
   PlayCircle,
   RefreshCw,
   Search,
@@ -136,7 +136,7 @@ export const MessageView = memo(function MessageView({
   onForce?(): void;
   /** Homework with no notes linked: link some. */
   onLink?(): void;
-  /** "Save to note" (NotebookLM's pill at the start of the action row). */
+  /** "Save as note": keeps an answer from Ask your notes as a note of its own. */
   onSave?(): void;
   saved?: boolean;
   /** Copy and Retry as icon buttons (with tooltips) instead of labelled ones. */
@@ -181,7 +181,8 @@ export const MessageView = memo(function MessageView({
               ) : (
                 <span key={a.id} className="msg-att-chip" title={a.text}>
                   {a.label}
-                  {a.text ? `: ${a.text.slice(0, 60)}${a.text.length > 60 ? '…' : ''}` : ''}
+                  {/* A snippet of plain text helps; raw TeX or Markdown doesn't (the tooltip has it all). */}
+                  {a.text && !/[$\\]/.test(a.text) ? `: ${a.text.slice(0, 60)}${a.text.length > 60 ? '…' : ''}` : ''}
                 </span>
               ),
             )}
@@ -295,17 +296,6 @@ export const MessageView = memo(function MessageView({
       {children}
       {!streaming && md && (
         <div className="msg-actions">
-          {onSave && (
-            <button className="msg-save" onClick={onSave} disabled={saved}>
-              {saved ? <Check size={18} /> : <Pin size={18} />} {saved ? 'Saved to note' : 'Save to note'}
-            </button>
-          )}
-          {/* With icon actions, inserting is the one labelled action (like NotebookLM's "Save to note"). */}
-          {onInsert && iconActions && (
-            <button className="msg-act msg-save" onClick={onInsert}>
-              <CornerDownLeft size={18} /> Insert into note
-            </button>
-          )}
           <button
             className={cx('msg-act', iconActions && 'is-icon')}
             title={iconActions ? (copied ? 'Copied' : 'Copy') : undefined}
@@ -316,16 +306,22 @@ export const MessageView = memo(function MessageView({
               setTimeout(() => setCopied(false), 1400);
             }}
           >
-            {iconActions ? copied ? <Check size={20} /> : <Copy size={20} /> : <>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</>}
+            {iconActions ? copied ? <Check size={16} /> : <Copy size={16} /> : <>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</>}
           </button>
-          {onInsert && !iconActions && (
-            <button className="msg-act" onClick={onInsert}>
-              <CornerDownLeft size={13} /> Insert into note
-            </button>
-          )}
           {onRegenerate && (
             <button className={cx('msg-act', iconActions && 'is-icon')} onClick={onRegenerate} title={iconActions ? 'Retry' : undefined} aria-label={iconActions ? 'Retry' : undefined}>
-              {iconActions ? <RefreshCw size={20} /> : <><RefreshCw size={13} /> Retry</>}
+              {iconActions ? <RefreshCw size={16} /> : <><RefreshCw size={13} /> Retry</>}
+            </button>
+          )}
+          {/* One labelled action after the icons: put the answer to use. */}
+          {onInsert && (
+            <button className="msg-act msg-save" onClick={onInsert}>
+              <CornerDownLeft size={16} /> Insert into note
+            </button>
+          )}
+          {onSave && (
+            <button className="msg-act msg-save" onClick={onSave} disabled={saved}>
+              {saved ? <Check size={16} /> : <FilePlus2 size={16} />} {saved ? 'Saved as a note' : 'Save as note'}
             </button>
           )}
         </div>

@@ -8,6 +8,7 @@ import { editors } from '../editor/registry';
 import { bridge, isElectron } from './platform';
 import { toast } from '../components/common/toast';
 import { promptDialog } from '../components/common/dialogs';
+import { conversationFor } from '../components/library/history';
 import { classForFolder, homeworkFolderFor } from './classes';
 import { isReviewable } from './review/tree';
 import type { Scope } from './ai/rag';
@@ -134,7 +135,9 @@ export function toggleAssistant(force?: boolean) {
   if (next) useAssistant.getState().focus();
 }
 
-export function openLibrary(scope?: Scope) {
+/** Opens Ask your notes, on `scope` if given. A conversation there about other notes (or any, when `fresh`) moves to History. */
+export function openLibrary(scope?: Scope, opts: { fresh?: boolean } = {}) {
+  conversationFor(scope, opts.fresh);
   const ui = useUI.getState();
   ui.set({ view: { kind: 'library' }, ...(scope ? { libraryScope: scope } : {}) });
 }

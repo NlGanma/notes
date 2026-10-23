@@ -28,7 +28,7 @@ import { boxBody } from '../lib/ai/markdown';
 import type { NoteDoc } from '../lib/vault/types';
 import { homeworkSources } from '../lib/homework';
 import { classInfo, classOfNote } from '../lib/classes';
-import { useAI, visionModel } from './ai';
+import { useAI, visionModel, type AIStatus } from './ai';
 import { useVault } from './vault';
 import { editors } from '../editor/registry';
 import { uid } from '../lib/util';
@@ -76,7 +76,7 @@ export interface ChatMsg {
   sources?: SourceRef[];
   /** Block the question was about — replies are inserted right after it. */
   anchor?: string;
-  /** Homework: the problem text the question was about (kept so follow-ups and Retry stay on it). */
+  /** Homework: the problem text the question was about (kept so follow-ups and Retry stay on it). Study tools: their topic. */
   focus?: string;
   /** The reply hit the token limit; it can be continued. */
   truncated?: boolean;
@@ -102,6 +102,8 @@ export interface ChatMsg {
   added?: string[];
   /** Study tools: items dropped because no excerpt backed them. */
   dropped?: number;
+  /** Study tools: the notes had too little to make anything from (the reply says so instead). */
+  insufficient?: boolean;
   /** Search the notes even though the coverage check said they don't cover this. */
   forced?: boolean;
   /** The question this answers (rewrites: which action). */
@@ -215,6 +217,11 @@ const emptyDraft = (): Draft => ({ attachments: [], text: '', mode: 'chat' });
 export const LIBRARY_KEY = 'library';
 
 const OFFLINE = 'Your local model server isn’t reachable. Start Ollama or LM Studio, then press Detect in Settings → Local AI.';
+const NO_MODEL = 'Choose a model in Settings → Local AI.';
+const STILL_STARTING = 'The local model is taking a long time to start. Try again in a moment, or check Settings → Local AI.';
+/** How long a question asked while the model server is still being found waits for it. */
+const MODEL_WAIT_MS = 20000;
+const starting = (status: AIStatus) => status === 'unknown' || status === 'checking';
 
 export const useAssistant = create<AssistantState>()(
   persist(
@@ -233,6 +240,52 @@ export const useAssistant = create<AssistantState>()(
       const push = (key: string, ...msgs: ChatMsg[]) => {
         const t = get().threads[key] ?? { key, messages: [] };
         set({ threads: { ...get().threads, [key]: { ...t, messages: [...t.messages, ...msgs] } } });
+      };
+
+      /**
+       * Whether the local model can answer the question just pushed. While the server is still being
+       * found, the question waits for it (the reply shows its typing dots, and Stop works) rather than
+       * failing at once. When it can't be answered, the reply already says why.
+       */
+      const modelReady = async (key: string, msgId: string): Promise<boolean> => {
+        if (starting(useAI.getState().status)) {
+          controller?.abort();
+          const ctrl = new AbortController();
+          controller = ctrl;
+          set({ streaming: key });
+          patchMsg(key, msgId, { phase: undefined });
+          await new Promise<void>((resolve) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            let unsub = () => {};
+            const done = () => {
+              clearTimeout(timer);
+              unsub();
+              ctrl.signal.removeEventListener('abort', done);
+              resolve();
+            };
+            timer = setTimeout(done, MODEL_WAIT_MS);
+            unsub = useAI.subscribe((s) => void (starting(s.status) || done()));
+            ctrl.signal.addEventListener('abort', done);
+          });
+          if (controller === ctrl) controller = null;
+          if (get().streaming === key) set({ streaming: null });
+          // Stopped, or the conversation moved on (New conversation, Retry) while it waited.
+          const m = get().threads[key]?.messages.find((x) => x.id === msgId);
+          if (m?.status !== 'streaming') return false;
+          if (ctrl.signal.aborted) {
+            patchMsg(key, msgId, { status: 'stopped' });
+            return false;
+          }
+          patchMsg(key, msgId, { phase: 'reading' });
+        }
+        const ai = useAI.getState();
+        if (ai.status === 'online' && ai.chatModel) return true;
+        patchMsg(key, msgId, {
+          status: 'error',
+          phase: undefined,
+          error: ai.status === 'online' ? NO_MODEL : starting(ai.status) ? STILL_STARTING : OFFLINE,
+        });
+        return false;
       };
 
       /**
@@ -578,7 +631,6 @@ export const useAssistant = create<AssistantState>()(
         },
 
         async ask(noteId, opts) {
-          const ai = useAI.getState();
           const key = noteId;
           const draft = get().draft(key);
           const attachments = opts.attachments ?? draft.attachments;
@@ -632,15 +684,8 @@ export const useAssistant = create<AssistantState>()(
             at: Date.now(),
           };
           push(key, userMsg, botMsg);
-
-          if (ai.status !== 'online' || !ai.chatModel) {
-            patchMsg(key, botMsg.id, {
-              status: 'error',
-              phase: undefined,
-              error: ai.status === 'offline' ? OFFLINE : 'Choose a model in Settings → Local AI.',
-            });
-            return;
-          }
+          if (!(await modelReady(key, botMsg.id))) return;
+          const ai = useAI.getState();
 
           const ed = editors.get(noteId);
           const content = ed && !ed.isDestroyed ? ed.getJSON() : note?.content;
@@ -771,10 +816,11 @@ export const useAssistant = create<AssistantState>()(
         },
 
         async askLibrary({ prompt, scope, scopeLabel, tool, force }) {
-          const ai = useAI.getState();
           const key = LIBRARY_KEY;
           const question = tool ? STUDY_TOOLS[tool].label : prompt.trim();
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, scope, scopeLabel, forced: force, at: Date.now() };
+          // A study tool's topic (what was typed when its chip was picked) stays with the request, for its name and Retry.
+          const focus = tool && prompt.trim() ? prompt.trim() : undefined;
+          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, focus, scope, scopeLabel, forced: force, at: Date.now() };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -788,10 +834,8 @@ export const useAssistant = create<AssistantState>()(
             at: Date.now(),
           };
           push(key, userMsg, botMsg);
-          if (ai.status !== 'online' || !ai.chatModel) {
-            patchMsg(key, botMsg.id, { status: 'error', phase: undefined, error: OFFLINE });
-            return;
-          }
+          if (!(await modelReady(key, botMsg.id))) return;
+          const ai = useAI.getState();
           let hits: Hit[] = [];
           try {
             // Study tools without a topic cover the whole scope; otherwise retrieve.
@@ -818,6 +862,9 @@ export const useAssistant = create<AssistantState>()(
           if (tool && !hits.some((h) => h.chunk.text.length > 60)) {
             patchMsg(key, botMsg.id, {
               status: 'done',
+              insufficient: true,
+              // Nothing was read to make it, so the reply cites nothing.
+              sources: [],
               content: 'There isn’t enough in these notes to make this yet — write a little more, then try again.',
             });
             return;
@@ -905,7 +952,7 @@ export const useAssistant = create<AssistantState>()(
           set({ threads: { ...get().threads, [key]: { ...t, messages: t.messages.slice(0, idx) } } });
           if (key === LIBRARY_KEY)
             void get().askLibrary({
-              prompt: lastUser.tool ? '' : lastUser.content,
+              prompt: lastUser.tool ? (lastUser.focus ?? '') : lastUser.content,
               scope: lastUser.scope ?? { kind: 'all' },
               scopeLabel: lastUser.scopeLabel,
               tool: lastUser.tool,

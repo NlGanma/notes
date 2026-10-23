@@ -129,3 +129,41 @@ test('set to answer only from the notes, the AI’s own sentences are left out e
   assert.ok(!/Archimedes|Newton/.test(md), md);
   assert.match(md, /Left out — not in your notes/);
 });
+
+test('asked while the model server is still being found, a question waits for it instead of failing', async () => {
+  useAI.setState({ status: 'checking' } as never);
+  const asking = useAssistant.getState().askLibrary({ prompt: 'What does the squeeze theorem say?', scope: { kind: 'all' } });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(bot().status, 'streaming', 'still waiting, no error');
+  assert.equal(bot().phase, undefined, 'the typing dots show, not "Searching your notes"');
+  assert.equal(useAssistant.getState().streaming, LIBRARY_KEY, 'Stop shows while it waits');
+  useAI.setState({ status: 'online' } as never);
+  await asking;
+  assert.equal(bot().status, 'done');
+  assert.match(bot().content, /near/);
+});
+
+test('…and says the server isn’t reachable only once that is known', async () => {
+  useAI.setState({ status: 'checking' } as never);
+  const asking = useAssistant.getState().askLibrary({ prompt: 'What does the squeeze theorem say?', scope: { kind: 'all' } });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(bot().status, 'streaming');
+  useAI.setState({ status: 'offline' } as never);
+  await asking;
+  assert.equal(bot().status, 'error');
+  assert.match(bot().error ?? '', /isn’t reachable/);
+  assert.equal(useAssistant.getState().streaming, null);
+});
+
+test('…and Stop while it waits stops it', async () => {
+  useAI.setState({ status: 'unknown' } as never);
+  const asking = useAssistant.getState().askLibrary({ prompt: 'What does the squeeze theorem say?', scope: { kind: 'all' } });
+  await new Promise((r) => setTimeout(r, 30));
+  useAssistant.getState().stop();
+  await asking;
+  assert.equal(bot().status, 'stopped');
+  assert.equal(useAssistant.getState().streaming, null);
+  useAI.setState({ status: 'online' } as never);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(bot().status, 'stopped', 'the model coming up later doesn’t revive it');
+});

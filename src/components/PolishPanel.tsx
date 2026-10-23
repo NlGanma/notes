@@ -1,20 +1,8 @@
 import { useMemo, useState } from 'react';
-import {
-  AlignLeft,
-  GraduationCap,
-  Check,
-  FoldVertical,
-  Heading,
-  List,
-  Loader2,
-  Palette,
-  Pilcrow,
-  ScanText,
-  Sigma,
-  Text,
-} from 'lucide-react';
+import { AlignLeft, GraduationCap, Check, FoldVertical, Heading, List, Loader2, Palette, Pilcrow, ScanText, Sigma, Text } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useAI, visionModel } from '../state/ai';
+import { useUI } from '../state/ui';
 import { useSettings, LINE_PX } from '../state/settings';
 import { analyzeNote, type Suggestion } from '../lib/polish';
 import { editors } from '../editor/registry';
@@ -22,37 +10,32 @@ import { toast } from './common/toast';
 import { cx } from '../lib/util';
 
 const ICONS: Record<Suggestion['icon'], React.ReactNode> = {
-  space: <FoldVertical size={20} />,
-  lines: <Pilcrow size={20} />,
-  list: <List size={20} />,
-  colors: <Palette size={20} />,
-  read: <ScanText size={20} />,
-  math: <Sigma size={20} />,
-  bullets: <Text size={20} />,
-  summary: <AlignLeft size={20} />,
-  headings: <Heading size={20} />,
-  class: <GraduationCap size={20} />,
+  space: <FoldVertical size={16} />,
+  lines: <Pilcrow size={16} />,
+  list: <List size={16} />,
+  colors: <Palette size={16} />,
+  read: <ScanText size={16} />,
+  math: <Sigma size={16} />,
+  bullets: <Text size={16} />,
+  summary: <AlignLeft size={16} />,
+  headings: <Heading size={16} />,
+  class: <GraduationCap size={16} />,
 };
 
-function useSuggestions(noteId: string | null) {
-  const note = useVault((s) => (noteId ? s.notes[noteId] : undefined));
+function useSuggestions(noteId: string) {
+  const note = useVault((s) => s.notes[noteId]);
   const ai = useAI((s) => s.status === 'online' && !!s.chatModel);
   const hasVision = useAI((s) => !!visionModel(s));
   const line = LINE_PX[useSettings((s) => s.lineSpacing)];
   return useMemo(() => (note ? analyzeNote(note, { line, ai, vision: hasVision }) : []), [note, line, ai, hasVision]);
 }
 
-/** Number of instant (non-AI) suggestions — shown as a badge on the Polish button. */
-export function usePolishCount(noteId: string | null) {
-  const s = useSuggestions(noteId);
-  return s.filter((x) => !x.ai).length;
-}
-
+/** Polish, opened from the note's ⋯ menu: a short sheet of tidy-ups (edits undo with ⌘Z) and where the note belongs. */
 export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void }) {
   const suggestions = useSuggestions(noteId);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
-  const ai = useAI();
+  const online = useAI((s) => s.status === 'online' && !!s.chatModel);
 
   const apply = async (s: Suggestion) => {
     const editor = editors.get(noteId);
@@ -69,57 +52,76 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
     }
   };
 
-  const quick = suggestions.filter((s) => !s.ai);
+  // Filing the note in a class moves it on disk, so it stays a choice of its own: Apply all and ⌘Z are for edits.
+  const filing = suggestions.filter((s) => s.id === 'class');
+  const quick = suggestions.filter((s) => !s.ai && s.id !== 'class');
   const smart = suggestions.filter((s) => s.ai);
+  // An applied fix usually drops out of the list on its own; count what's still on offer.
+  const left = suggestions.filter((s) => !done.includes(s.id)).length;
 
   return (
     <div className="polish">
       <div className="polish-head">
-        <div className="polish-title">
-          Polish
-          {suggestions.length > 0 && <span className="polish-count">{suggestions.length - done.length}</span>}
-        </div>
-        <div className="polish-sub">Small changes for clean, consistent notes. Everything can be undone with ⌘Z.</div>
+        <span className="polish-title">Polish</span>
+        {left > 0 && <span className="badge-count">{left}</span>}
       </div>
       {!suggestions.length && (
         <div className="polish-empty">
-          <Check size={20} />
-          <div>Looking tidy. Nothing to suggest right now.</div>
+          <Check size={16} />
+          Nothing to tidy up.
+        </div>
+      )}
+      {filing.length > 0 && (
+        <div className="polish-group">
+          <div className="polish-group-label">Class</div>
+          {filing.map((s) => (
+            <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
+          ))}
         </div>
       )}
       {quick.length > 0 && (
         <div className="polish-group">
-          <div className="polish-group-label">Quick fixes</div>
+          <div className="polish-group-label">
+            Quick fixes
+            {quick.length > 1 && (
+              <button
+                className="btn is-ghost is-small polish-all"
+                disabled={!!busy || quick.every((s) => done.includes(s.id))}
+                onClick={async () => {
+                  for (const s of quick) if (!done.includes(s.id)) await apply(s);
+                  // Filing and the AI's suggestions are left for the student to choose: the sheet stays while any are.
+                  if ([...filing, ...smart].every((s) => done.includes(s.id))) onDone();
+                }}
+              >
+                Apply all
+              </button>
+            )}
+          </div>
           {quick.map((s) => (
             <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
           ))}
-          {quick.length > 1 && (
-            <button
-              className="btn is-ghost polish-all"
-              disabled={!!busy}
-              onClick={async () => {
-                for (const s of quick) await apply(s);
-                onDone();
-              }}
-            >
-              Apply all quick fixes
-            </button>
-          )}
         </div>
       )}
       {smart.length > 0 && (
         <div className="polish-group">
-          <div className="polish-group-label">Using your local model</div>
+          <div className="polish-group-label">With the local AI</div>
           {smart.map((s) => (
             <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
           ))}
         </div>
       )}
-      {ai.status !== 'online' && (
-        <div className="polish-foot">
-          Connect a local model in Settings → Local AI to unlock smart suggestions (titles, tags, summaries, reading handwriting).
-        </div>
-      )}
+      <div className="polish-foot">
+        {online ? (
+          'Undo any edit with ⌘Z.'
+        ) : (
+          <>
+            More suggestions, like reading handwriting, need the local AI.
+            <button className="polish-foot-link" onClick={() => (onDone(), useUI.getState().openSettings('ai'))}>
+              Open settings
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -132,8 +134,8 @@ function Row({ s, busy, done, onApply }: { s: Suggestion; busy: boolean; done: b
         <div className="polish-row-title">{s.title}</div>
         <div className="polish-row-detail">{s.detail}</div>
       </div>
-      <button className="btn is-ghost is-small" disabled={busy || done} onClick={onApply}>
-        {busy ? <Loader2 size={18} className="spin" /> : done ? <Check size={18} /> : s.action}
+      <button className="btn is-secondary is-small" disabled={busy || done} onClick={onApply}>
+        {busy ? <Loader2 size={16} className="spin" /> : done ? <Check size={16} /> : s.action}
       </button>
     </div>
   );
