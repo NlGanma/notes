@@ -49,3 +49,47 @@ test('due labels', () => {
   assert.equal(dueLabel(at(5), now)?.tone, 'later');
   assert.match(dueLabel(at(20), now)!.text, /^Due /);
 });
+
+test('the Homework list groups by days from today, whatever the weekday, and leaves done homework out', async () => {
+  const { dueGroup, dueInGroup, groupHomework } = await import('../../src/components/homework/sources');
+  const { note } = await import('./fixtures');
+  const DAY = 86_400_000;
+  // Every weekday: the groups must not depend on where the week starts (it once hid a deadline two days out).
+  for (let wd = 0; wd < 7; wd++) {
+    const now = new Date(2026, 9, 18 + wd, 10, 0).getTime();
+    const eod = (d: number) => new Date(2026, 9, 18 + wd + d, 23, 59).getTime();
+    assert.equal(dueGroup(eod(-1), now), 'overdue');
+    assert.equal(dueGroup(eod(0), now), 'today');
+    assert.equal(dueGroup(eod(1), now), 'tomorrow');
+    assert.equal(dueGroup(eod(2), now), 'week');
+    assert.equal(dueGroup(eod(6), now), 'week');
+    assert.equal(dueGroup(eod(7), now), 'later');
+    assert.equal(dueGroup(undefined, now), 'none');
+  }
+  const now = new Date(2026, 9, 22, 10, 0).getTime();
+  const hw = (title: string, due: number | undefined, done = false, created = 1) => note(title, 'Calculus I/Homework', [], { created, homework: { sources: [], folders: [], due, done } });
+  const groups = groupHomework(
+    [
+      hw('later', now + 20 * DAY),
+      hw('no date, older', undefined, false, 1),
+      hw('no date, newer', undefined, false, 2),
+      hw('overdue', now - 2 * DAY),
+      hw('done', now - 5 * DAY, true),
+      hw('in three days', now + 3 * DAY),
+    ],
+    now,
+  );
+  assert.deepEqual(
+    groups.map((g) => [g.label, g.items.map((n) => n.meta.title)]),
+    [
+      ['Overdue', ['overdue']],
+      ['Next 7 days', ['in three days']],
+      ['Later', ['later']],
+      ['No due date', ['no date, newer', 'no date, older']],
+    ],
+  );
+  // A row says only what its group doesn't: nothing for "today" at the end of the day, the date when overdue.
+  assert.equal(dueInGroup(new Date(2026, 9, 22, 23, 59).getTime(), now), null);
+  assert.equal(dueInGroup(new Date(2026, 9, 22, 15, 0).getTime(), now)?.text.replace(/\s/g, ' '), new Date(2026, 9, 22, 15, 0).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' '));
+  assert.equal(dueInGroup(now - 2 * DAY, now)?.overdue, true);
+});

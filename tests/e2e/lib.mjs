@@ -60,19 +60,12 @@ export async function showSidebar(page) {
   }
 }
 
-/**
- * Opens a note filed in a class: the class's row in the sidebar, then the note's row on the class page
- * (in its Classwork tab while the class page still has tabs). Fails if the class page doesn't list it.
- */
+/** Opens a note filed in a class: the class's row in the sidebar, then the note's row on the class page. */
 export async function openClassNote(page, cls, title) {
   await showSidebar(page);
   await page.click(`.sidebar .nav-class:has-text("${cls}")`);
   await page.waitForSelector('.class-view');
-  const row = page.locator(`.class-view :is(.note-row, .cw-row):has-text("${title}")`).first();
-  if (!(await row.isVisible().catch(() => false))) {
-    const classwork = page.locator('.class-view .gtab:has-text("Classwork")');
-    if (await classwork.count()) await classwork.click();
-  }
+  const row = page.locator(`.class-view .note-row:has-text("${title}")`).first();
   await row.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {
     throw new Error(`The ${cls} class page doesn't list “${title}”`);
   });
@@ -80,16 +73,12 @@ export async function openClassNote(page, cls, title) {
   await page.waitForSelector(`.note-view:not(.is-hidden) .page-title`);
 }
 
-/** Opens the New class dialog from the Classes page (its button at the top right). */
+/** Opens the New class dialog from the Classes page (its button at the top right, or the empty page's). */
 export async function createClassDialog(page) {
   await showSidebar(page);
   await page.click('.sidebar .nav-classes-label');
-  const button = page.locator('.content button:visible', { hasText: /^\s*(New class|Add class)\s*$/ }).first();
-  await button.click();
-  // Older layouts put "Create class" in a small menu under the button.
-  const create = page.locator('.menu-item:has-text("Create class")');
-  if (await create.isVisible().catch(() => false)) await create.click();
-  await page.waitForSelector('.class-name-input input, .class-dialog input');
+  await page.locator('.classes-view button:visible', { hasText: /^\s*New class\s*$/ }).first().click();
+  await page.waitForSelector('.class-dialog .class-name-input input');
 }
 
 /** Makes a note from the sidebar's New note menu, on one of the three papers. */
