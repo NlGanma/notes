@@ -474,6 +474,39 @@ await page.click('.modal .btn:has-text("Turn into folder")');
 await page.waitForSelector('.notes-view .list-title:has-text("Scratch")');
 check((await folderMeta()).Scratch?.kind !== 'class' && !(await page.locator('.sidebar .nav-class:has-text("Scratch")').count()), 'Turn into a plain folder makes the class a folder in All notes');
 
+// ---------------------------------------------------------------- Make this a class waits for the dialog's answer
+await page.click('.notes-view button[aria-label="Folder menu"]');
+check(
+  !(await page.locator('.context-menu .menu-item:has-text("New note here"), .context-menu .menu-item:has-text("New folder inside")').count()),
+  'the folder page’s ⋯ leaves out what the page already does (New note here, New folder inside)',
+);
+await page.click('.context-menu .menu-item:has-text("Make this a class")');
+await page.waitForSelector('.class-dialog');
+check(
+  /Make Scratch a class/.test(await page.textContent('.class-dialog .dialog-title')) && !(await page.locator('.class-dialog .class-to-folder').count()),
+  'Make this a class opens the class dialog titled for the folder',
+);
+await page.click('.class-dialog .btn:has-text("Cancel")');
+await page.waitForTimeout(250);
+check((await folderMeta()).Scratch?.kind !== 'class' && (await page.locator('.notes-view .list-title:has-text("Scratch")').count()), '…and Cancel leaves it a plain folder');
+await page.click('.notes-view button[aria-label="Folder menu"]');
+await page.click('.context-menu .menu-item:has-text("Make this a class")');
+await page.click('.class-dialog button[type="submit"]');
+await page.waitForSelector('.class-view .class-title:has-text("Scratch")');
+check((await folderMeta()).Scratch?.kind === 'class', '…while Make class makes it one');
+
+// ---------------------------------------------------------------- Move to Trash says so, with Undo
+const welcomeTrashed = () => page.evaluate(() => !!Object.values(window.__nib.vault.getState().notes).find((n) => n.meta.title === 'Welcome to Nib')?.meta.trashed);
+await showSidebar(page);
+await page.click('.nav-item:has-text("All notes")');
+await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').first().click({ button: 'right' });
+await page.click('.context-menu .menu-item:has-text("Move to Trash")');
+await page.waitForSelector('.toast:has-text("to Trash")', { timeout: 3000 }).catch(() => undefined);
+check((await welcomeTrashed()) && (await page.locator('.toast:has-text("to Trash")').count()), 'Move to Trash on a row trashes the note and says so');
+await page.click('.toast:has-text("to Trash") .toast-action:has-text("Undo")');
+await page.waitForTimeout(250);
+check(!(await welcomeTrashed()) && (await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').count()), '…and Undo brings it back');
+
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.
 console.log(errors.filter((e) => !/favicon|status of 503/.test(e)).join('\n') || 'no page errors');
