@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, History, RefreshCw, Square, SquarePen } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, History, RefreshCw, Square, SquarePen, Trash2, X } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
@@ -14,10 +14,11 @@ import { MessageView, shownMarkdown } from '../ai/Message';
 import { SourcesList, useCitePreview } from '../ai/Citations';
 import { ComposerStatus, useAvailability } from '../ai/ComposerStatus';
 import { Popover } from '../common/Popover';
+import { toast } from '../common/toast';
 import { NotePicker } from '../homework/NotePicker';
 import { parseStudyJSON, saveFlashcards } from './StudyTools';
 import { ArtifactPanel, LeftOut, ToolIcon, outputMeta, type Output } from './ArtifactPanel';
-import { conversationTitle, pastConversations, reopenConversation, startConversation } from './history';
+import { conversationTitle, deleteConversation, pastConversations, reopenConversation, startConversation } from './history';
 import { TOOL_LOOK, notebookNotes, saveMarkdownNote, scopeFromPick, scopeName, scopeNotes, selectionFor } from './notebook';
 
 /** The study chips under the composer, in the order a student reaches for them. */
@@ -104,6 +105,7 @@ export function LibraryView() {
   const [artifact, setArtifact] = useState<string | null>(null);
   const [scopeEl, setScopeEl] = useState<HTMLElement | null>(null);
   const [historyEl, setHistoryEl] = useState<HTMLElement | null>(null);
+  const [convEl, setConvEl] = useState<HTMLElement | null>(null);
   const [picking, setPicking] = useState(false);
   // A study tool started here (or before the page opened, e.g. from a class page) opens beside the chat when it's done.
   const [waitFor, setWaitFor] = useState<string | null>(() => {
@@ -171,11 +173,13 @@ export function LibraryView() {
     inputRef.current?.focus();
   }, [empty]);
 
-  // "Ask your notes: …" from the palette (and anything else that asks on the page's behalf).
+  // "Ask your notes: …" from the palette (and anything else that asks on the page's behalf): a new question, a new conversation.
   useEffect(() => {
     const on = (e: Event) => {
       const q = (e as CustomEvent<string>).detail;
-      if (q) void useAssistant.getState().askLibrary({ prompt: q, scope, scopeLabel: modelLabel });
+      if (!q) return;
+      if (useAssistant.getState().threads[LIBRARY_KEY]?.messages.length) newConversation();
+      void useAssistant.getState().askLibrary({ prompt: q, scope, scopeLabel: modelLabel });
     };
     window.addEventListener('nib:library-ask', on);
     return () => window.removeEventListener('nib:library-ask', on);
@@ -271,6 +275,14 @@ export function LibraryView() {
     setWaitFor(null);
     setText('');
     inputRef.current?.focus();
+  };
+  const remove = (key: string) => {
+    const undo = deleteConversation(key);
+    if (key === LIBRARY_KEY) {
+      setArtifact(null);
+      setWaitFor(null);
+    }
+    toast.info('Conversation deleted', undefined, { label: 'Undo', run: undo }, 8000);
   };
   const reopen = (key: string) => {
     setHistoryEl(null);
@@ -375,9 +387,15 @@ export function LibraryView() {
             )}
             {scoped && convTitle && <ChevronRight size={14} className="lib-head-sep" aria-hidden />}
             {convTitle && (
-              <span className={cx('lib-head-conv', !scoped && 'is-only')} title={convTitle}>
-                {convTitle}
-              </span>
+              <button
+                className={cx('lib-head-conv', !scoped && 'is-only', convEl && 'is-open')}
+                onClick={(e) => setConvEl(e.currentTarget)}
+                aria-haspopup="menu"
+                title={convTitle}
+              >
+                <span className="lib-head-conv-text">{convTitle}</span>
+                <ChevronDown size={14} />
+              </button>
             )}
           </div>
           <span className="grow" />
@@ -530,11 +548,40 @@ export function LibraryView() {
         <div className="menu history-menu" role="menu">
           <div className="menu-caption">Earlier conversations</div>
           {past.map((p) => (
-            <button key={p.key} className="menu-item" role="menuitem" onClick={() => reopen(p.key)} title={p.title}>
-              <span className="menu-label">{p.title}</span>
-              <span className="menu-hint">{formatRelativeTime(p.at)}</span>
-            </button>
+            <div key={p.key} className="history-row">
+              <button className="menu-item" role="menuitem" onClick={() => reopen(p.key)} title={p.title}>
+                <span className="menu-label">{p.title}</span>
+                <span className="menu-hint">{formatRelativeTime(p.at)}</span>
+              </button>
+              <button
+                className="history-delete"
+                onClick={() => {
+                  if (past.length === 1) setHistoryEl(null);
+                  remove(p.key);
+                }}
+                title="Delete"
+                aria-label={`Delete “${p.title}”`}
+              >
+                <X size={14} />
+              </button>
+            </div>
           ))}
+        </div>
+      </Popover>
+
+      <Popover anchor={convEl} open={!!convEl} onClose={() => setConvEl(null)} align="start" className="menu-pop">
+        <div className="menu" role="menu">
+          <button
+            className="menu-item is-danger"
+            role="menuitem"
+            onClick={() => {
+              setConvEl(null);
+              remove(LIBRARY_KEY);
+            }}
+          >
+            <Trash2 size={16} />
+            <span className="menu-label">Delete conversation</span>
+          </button>
         </div>
       </Popover>
 

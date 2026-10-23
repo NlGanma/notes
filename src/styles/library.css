@@ -46,24 +46,47 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 48px;
+  max-width: 480px;
 }
 .lib-head-sep {
   color: var(--text-4);
   flex: none;
 }
 .lib-head-conv {
-  min-width: 0;
+  /* Short of room, the conversation's title gives way before the class's name. */
+  flex: 0 8 auto;
+  min-width: 64px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 7px;
   font-size: 14px;
   line-height: 20px;
   color: var(--text-3);
+  transition: background var(--dur-fast) var(--ease);
+}
+.lib-head-conv-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.lib-head-conv svg {
+  flex: none;
+  color: var(--text-4);
+}
 .lib-head-conv.is-only {
   color: var(--text-2);
+}
+.lib-head-conv:hover,
+.lib-head-conv.is-open {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .scope-dot {
   width: 10px;
@@ -219,6 +242,33 @@
 }
 .history-menu .menu-hint {
   flex: none;
+}
+/* Each earlier conversation can be deleted: an × takes the place of its time on hover. */
+.history-row {
+  position: relative;
+}
+.history-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--text-3);
+  opacity: 0;
+}
+.history-row:hover .history-delete,
+.history-delete:focus-visible {
+  opacity: 1;
+}
+.history-row:hover .menu-hint {
+  visibility: hidden;
+}
+.history-delete:hover {
+  background: var(--bg-active);
+  color: var(--text);
 }
 
 /* The study chips: always there under the composer, quiet ringed buttons. */

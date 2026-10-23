@@ -13,7 +13,9 @@ Object.assign(globalThis, {
 });
 
 const { scopeFromPick, scopeName, scopeNotes, selectionFor } = await import('../../src/components/library/notebook');
-const { conversationTitle, pastConversations, reopenConversation, startConversation } = await import('../../src/components/library/history');
+const { conversationFor, conversationTitle, deleteConversation, pastConversations, reopenConversation, sameScope, startConversation } = await import(
+  '../../src/components/library/history'
+);
 const { LIBRARY_KEY, useAssistant } = await import('../../src/state/assistant');
 type Msg = import('../../src/state/assistant').ChatMsg;
 
@@ -107,4 +109,53 @@ test('History keeps the newest ten, and a reply cut short by New conversation re
   assert.ok(!past.some((x) => x.title === 'Question 0'), 'the oldest went');
   const parked = useAssistant.getState().threads[past[0].key].messages;
   assert.equal(parked[1].status, 'stopped');
+});
+
+test('Ask your notes opened on other notes moves the conversation there to History; the same notes keep it', () => {
+  const calc = { kind: 'folder' as const, path: 'Calculus I' };
+  const live = (messages: Msg[]) => useAssistant.setState({ threads: { [LIBRARY_KEY]: { key: LIBRARY_KEY, messages } }, streaming: null });
+  live(ask('a', 'What is a limit?', 10, { scope: calc }));
+  conversationFor({ kind: 'folder', path: 'Calculus I' });
+  assert.equal(useAssistant.getState().threads[LIBRARY_KEY].messages[0].content, 'What is a limit?', 'the same class keeps the conversation');
+  conversationFor(undefined);
+  assert.ok(useAssistant.getState().threads[LIBRARY_KEY], 'opening the page without a scope keeps it');
+  conversationFor({ kind: 'notes', ids: ['x', 'y'] });
+  assert.equal(useAssistant.getState().threads[LIBRARY_KEY], undefined, 'other notes: the page starts empty');
+  assert.ok(pastConversations(useAssistant.getState().threads).some((x) => x.title === 'What is a limit?'), '…and the conversation is in History');
+
+  live(ask('b', 'Which notes?', 20, { scope: { kind: 'notes', ids: ['y', 'x'] } }));
+  conversationFor({ kind: 'notes', ids: ['x', 'y'] });
+  assert.ok(useAssistant.getState().threads[LIBRARY_KEY], 'the same notes in another order are the same notes');
+  conversationFor({ kind: 'notes', ids: ['x', 'y'] }, true);
+  assert.equal(useAssistant.getState().threads[LIBRARY_KEY], undefined, 'asked to start fresh, it does');
+  assert.ok(sameScope({ kind: 'all' }, { kind: 'all' }) && !sameScope({ kind: 'all' }, calc));
+});
+
+test('a conversation can be deleted, live or from History, and Undo brings it back', () => {
+  useAssistant.setState({
+    threads: {
+      [LIBRARY_KEY]: { key: LIBRARY_KEY, messages: ask('a', 'What is ATP?', 10) },
+      [`${LIBRARY_KEY}:old`]: { key: `${LIBRARY_KEY}:old`, messages: ask('o', 'What is mitosis?', 5) },
+    },
+    streaming: null,
+  });
+  const undoOld = deleteConversation(`${LIBRARY_KEY}:old`);
+  assert.deepEqual(pastConversations(useAssistant.getState().threads), [], 'gone from History');
+  undoOld();
+  assert.deepEqual(
+    pastConversations(useAssistant.getState().threads).map((x) => x.title),
+    ['What is mitosis?'],
+  );
+
+  const undoLive = deleteConversation(LIBRARY_KEY);
+  assert.equal(useAssistant.getState().threads[LIBRARY_KEY], undefined, 'the page goes back to the greeting');
+  // A new question was asked before Undo: the deleted conversation comes back in History, not over it.
+  useAssistant.setState({ threads: { ...useAssistant.getState().threads, [LIBRARY_KEY]: { key: LIBRARY_KEY, messages: ask('n', 'What is RNA?', 30) } } });
+  undoLive();
+  const threads = useAssistant.getState().threads;
+  assert.equal(threads[LIBRARY_KEY].messages[0].content, 'What is RNA?');
+  assert.deepEqual(
+    pastConversations(threads).map((x) => x.title),
+    ['What is ATP?', 'What is mitosis?'],
+  );
 });

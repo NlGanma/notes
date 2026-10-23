@@ -61,6 +61,28 @@ export function startConversation() {
   useAssistant.setState({ threads });
 }
 
+/** The notes a conversation was last asked about. */
+export function scopeOf(messages: ChatMsg[]): Scope | undefined {
+  return [...messages].reverse().find((m) => m.role === 'user' && m.scope)?.scope;
+}
+
+export function sameScope(a: Scope | undefined, b: Scope | undefined): boolean {
+  if (!a || !b) return a === b;
+  const norm = (s: Scope) => (s.kind === 'notes' ? { kind: 'notes', ids: [...s.ids].sort() } : s);
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
+
+/**
+ * Before the Ask page opens on `scope` from somewhere else: a conversation about other notes (or any
+ * conversation, when `fresh`) moves to History, so a question asked from a class page or Review never
+ * lands in it, or sends it to the model.
+ */
+export function conversationFor(scope: Scope | undefined, fresh = false) {
+  const live = useAssistant.getState().threads[LIBRARY_KEY]?.messages;
+  if (!live?.length) return;
+  if (fresh || (scope && !sameScope(scopeOf(live), scope))) startConversation();
+}
+
 /** Brings a past conversation back (the current one takes its place in History). Returns the scope it was asked in. */
 export function reopenConversation(key: string): Scope | undefined {
   const s = useAssistant.getState();
@@ -72,5 +94,23 @@ export function reopenConversation(key: string): Scope | undefined {
   park(threads);
   threads[LIBRARY_KEY] = { key: LIBRARY_KEY, messages: past.messages };
   useAssistant.setState({ threads });
-  return [...past.messages].reverse().find((m) => m.role === 'user' && m.scope)?.scope;
+  return scopeOf(past.messages);
+}
+
+/** Deletes a conversation (the live one, or one in History). Returns what puts it back. */
+export function deleteConversation(key: string): () => void {
+  const s = useAssistant.getState();
+  const gone = s.threads[key];
+  if (!gone) return () => {};
+  if (key === LIBRARY_KEY && s.streaming === LIBRARY_KEY) s.stop();
+  const threads = { ...s.threads };
+  delete threads[key];
+  useAssistant.setState({ threads });
+  return () => {
+    const now = { ...useAssistant.getState().threads };
+    // The page may have a new conversation by now: the deleted one comes back in History instead.
+    const into = key === LIBRARY_KEY && now[LIBRARY_KEY]?.messages.length ? PREFIX + uid() : key;
+    now[into] = { key: into, messages: settled(gone.messages) };
+    useAssistant.setState({ threads: now });
+  };
 }

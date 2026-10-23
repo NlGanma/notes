@@ -153,7 +153,23 @@ await page.click('.history-menu .menu-item:has-text("Flashcards")');
 check(await page.locator('.library .art-card').count(), '…and opens one again, its flashcards with it');
 await page.click('.library button[title="History"]');
 check(await page.locator('.history-menu .menu-item:has-text("Quiz me: limits")').count(), '…while the quiz moves into History');
+
+// Deleting: an earlier conversation from History (with Undo), and the one on the page from its title.
+const pastCount = await page.locator('.history-menu .history-row').count();
+const quizRow = page.locator('.history-menu .history-row:has-text("Quiz me: limits")');
+await quizRow.hover();
+await quizRow.locator('.history-delete').click();
+check((await page.locator('.history-menu .history-row').count()) === pastCount - 1, 'an earlier conversation can be deleted from History');
+await page.click('.toast-action:has-text("Undo")');
+await page.click('.library button[title="History"]').catch(() => undefined);
+await page.waitForSelector('.history-menu');
+check(await page.locator('.history-menu .menu-item:has-text("Quiz me: limits")').count(), '…and Undo brings it back');
 await page.keyboard.press('Escape');
+await page.click('.library .lib-head-conv');
+await page.click('.menu-item:has-text("Delete conversation")');
+check(/What do you want to know/.test(await page.textContent('.library')), 'deleting the conversation on the page goes back to the greeting');
+await page.click('.toast-action:has-text("Undo")');
+check(await page.locator('.library .art-card').count(), '…and Undo brings it back');
 
 // 8. Polish → read handwriting in the background-transcription path.
 await page.click('.tab:has-text("Lecture 4")');
