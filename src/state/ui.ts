@@ -96,13 +96,14 @@ export const NARROW = '(max-width: 899px)';
 /**
  * A hidden sidebar is inert, and the button that shows it goes away once it is shown: either way the keyboard
  * focus would drop to the page. Called before the change, this hands focus that was in `from` to `to`, unless
- * something else (a click elsewhere) took it meanwhile.
+ * something else (a click elsewhere) took it meanwhile. (In the next frame the browser may not have moved focus
+ * off the inert sidebar yet, so focus still in `from` counts as lost too.)
  */
 function keepFocus(from: string, to: string) {
   if (typeof document === 'undefined' || !document.activeElement?.closest(from)) return;
   requestAnimationFrame(() => {
     const a = document.activeElement;
-    if (!a || a === document.body) document.querySelector<HTMLElement>(to)?.focus();
+    if (!a || a === document.body || a.closest(from)) document.querySelector<HTMLElement>(to)?.focus();
   });
 }
 
