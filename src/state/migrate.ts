@@ -63,9 +63,18 @@ export function migrateTools(persisted: unknown, version: number): Obj {
     }
     s.penSizes = [...PEN_SLOTS];
     delete s.shape;
-    if (s.lastInkTool === 'shapes') s.lastInkTool = 'pen';
-    if (s.lastInkTool === 'ask') s.lastInkTool = 'lasso';
   }
+  return settleTools(s);
+}
+
+/**
+ * nib.tools on every load, whatever its version: the Shapes and Ask tools are on their way out, so they never
+ * come back as the tool Esc returns to. (The toolbar still offers Shapes for now, so a v1 user can save it again.)
+ */
+export function settleTools(persisted: unknown): Obj {
+  const s: Obj = isObj(persisted) ? { ...persisted } : {};
+  if (s.lastInkTool === 'shapes') s.lastInkTool = 'pen';
+  if (s.lastInkTool === 'ask') s.lastInkTool = 'lasso';
   return s;
 }
 

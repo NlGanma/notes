@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Brush, EraserMode, InkTool, ShapeKind, Tool } from '../lib/ink/types';
-import { migrateTools, TOOLS_VERSION } from './migrate';
+import { migrateTools, settleTools, TOOLS_VERSION } from './migrate';
 
 export interface PenSettings {
   brush: Brush;
@@ -83,6 +83,7 @@ export const useTools = create<ToolState>()(
       name: 'nib.tools',
       version: TOOLS_VERSION,
       migrate: (s, v) => migrateTools(s, v) as unknown as ToolState,
+      merge: (saved, current) => ({ ...current, ...settleTools(saved) }),
       partialize: (s) => ({
         pen: s.pen,
         highlighter: s.highlighter,

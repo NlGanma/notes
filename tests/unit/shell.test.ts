@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePaper, PAPERS } from '../../src/lib/paper';
 import { dateTitle, displayTitle, isDateTitle } from '../../src/lib/displayTitle';
-import { markerSizeFor, migrateSettings, migrateTools, migrateUI } from '../../src/state/migrate';
+import { markerSizeFor, migrateSettings, migrateTools, migrateUI, settleTools } from '../../src/state/migrate';
 import { parseNoteFile, type NoteDoc } from '../../src/lib/vault/types';
 import { savedUI, useUI } from '../../src/state/ui';
 
@@ -122,6 +122,15 @@ test('old pens become the felt marker at the width they drew', () => {
   assert.equal((t.eraser as { highlighterOnly: boolean }).highlighterOnly, true, 'the eraser option is kept');
   assert.equal(migrateTools({ lastInkTool: 'ask' }, 0).lastInkTool, 'lasso');
   assert.deepEqual(migrateTools({ pen: { brush: 'marker', size: 2 } }, 1).pen, { brush: 'marker', size: 2 }, 'already current: untouched');
+});
+
+test('a Shapes or Ask tool saved after the update is settled on every load, not only on a version change', () => {
+  // nib.tools runs this from its persist merge, which zustand calls on every load.
+  assert.equal(settleTools({ lastInkTool: 'shapes', penSizes: [1, 2, 3] }).lastInkTool, 'pen');
+  assert.deepEqual(settleTools({ lastInkTool: 'shapes', penSizes: [1, 2, 3] }).penSizes, [1, 2, 3]);
+  assert.equal(settleTools({ lastInkTool: 'ask' }).lastInkTool, 'lasso');
+  assert.equal(settleTools({ lastInkTool: 'highlighter' }).lastInkTool, 'highlighter');
+  assert.deepEqual(settleTools(null), {});
 });
 
 test('old default papers become one of the three', () => {
