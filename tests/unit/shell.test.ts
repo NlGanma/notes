@@ -4,6 +4,7 @@ import { normalizePaper, PAPERS } from '../../src/lib/paper';
 import { dateTitle, displayTitle, isDateTitle } from '../../src/lib/displayTitle';
 import { markerSizeFor, migrateSettings, migrateTools, migrateUI } from '../../src/state/migrate';
 import { parseNoteFile, type NoteDoc } from '../../src/lib/vault/types';
+import { savedUI, useUI } from '../../src/state/ui';
 
 /** Paper, untitled-note names and the stored-state migrations behind the redesigned shell. */
 
@@ -122,4 +123,32 @@ test('old default papers become one of the three', () => {
   assert.equal(migrateSettings({ paper: 'dots' }, 0).paper, 'grid');
   assert.equal(migrateSettings({ paper: 'dots', font: 'serif' }, 0).font, 'serif');
   assert.ok(!('paper' in migrateSettings({}, 0)));
+});
+
+test('a sidebar put away for the window is saved as shown; one hidden by hand stays hidden', () => {
+  const saved = (p: { sidebar: boolean; sidebarAuto: boolean }) => savedUI({ ...useUI.getState(), ...p }).sidebar;
+  assert.equal(saved({ sidebar: false, sidebarAuto: true }), true, 'a narrow window or the assistant hid it');
+  assert.equal(saved({ sidebar: false, sidebarAuto: false }), false);
+  assert.equal(saved({ sidebar: true, sidebarAuto: false }), true);
+
+  const g = globalThis as { window?: unknown };
+  const had = 'window' in g;
+  const prev = g.window;
+  const at = (narrow: boolean) => (g.window = { matchMedia: () => ({ matches: narrow }) });
+  try {
+    // Shown or hidden by hand beside the assistant: a choice, so closing the assistant leaves it.
+    at(false);
+    useUI.setState({ sidebar: false, sidebarAuto: true });
+    useUI.getState().toggleSidebar();
+    assert.deepEqual([useUI.getState().sidebar, useUI.getState().sidebarAuto], [true, false]);
+    // Over a narrow window it only floats: widening still brings back the sidebar the user had.
+    at(true);
+    useUI.setState({ sidebar: false, sidebarAuto: true });
+    useUI.getState().toggleSidebar();
+    assert.deepEqual([useUI.getState().sidebar, useUI.getState().sidebarAuto], [true, true]);
+  } finally {
+    if (had) g.window = prev;
+    else delete g.window;
+    useUI.setState({ sidebar: true, sidebarAuto: false });
+  }
 });

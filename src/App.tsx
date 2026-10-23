@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MainBar } from './components/MainBar';
 import { NotesPage } from './components/NoteGrid';
@@ -19,7 +19,7 @@ import { Toasts, toast } from './components/common/toast';
 import { NoteEditor } from './editor/NoteEditor';
 import { SlashMenu } from './editor/ui/SlashMenu';
 import { useVault } from './state/vault';
-import { useUI } from './state/ui';
+import { NARROW, useUI } from './state/ui';
 import { useAI } from './state/ai';
 import { flushReview, useReview } from './state/review';
 import { bridge, isElectron, isMac } from './lib/platform';
@@ -53,7 +53,7 @@ export function App() {
   const [dropping, setDropping] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   // Under 900px the sidebar starts hidden and, when shown, floats over the page.
-  const narrow = useNarrow('(max-width: 899px)');
+  const narrow = useNarrow(NARROW);
 
   useEffect(() => {
     document.documentElement.classList.toggle('is-mac', isMac);
@@ -113,37 +113,25 @@ export function App() {
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
   }, [ready, notes, folderMeta, folders]);
 
-  // The assistant needs room: when it would leave the page under 760px, the sidebar steps aside, and
-  // comes back when the assistant closes (only if it was put away here).
-  const crowded = assistant && view.kind === 'note';
-  const autoHidden = useRef(false);
+  // A window that gets narrow puts the sidebar away; widening it again brings it back.
   useEffect(() => {
     const ui = useUI.getState();
-    if (crowded && ui.sidebar && !narrow) {
+    if (narrow && ui.sidebar) ui.set({ sidebar: false, sidebarAuto: true });
+    else if (!narrow && ui.sidebarAuto) ui.set({ sidebar: true, sidebarAuto: false });
+  }, [narrow]);
+
+  // The assistant needs room: when it would leave the page under 760px, the sidebar steps aside, and
+  // comes back when the assistant closes (only if it was put away for the room, not by hand).
+  const crowded = assistant && view.kind === 'note';
+  useEffect(() => {
+    const ui = useUI.getState();
+    if (!ready || narrow) return;
+    if (crowded && ui.sidebar) {
       const panel = document.querySelector('.assistant')?.getBoundingClientRect().width ?? 400;
       const sidebarW = document.querySelector('.sidebar')?.getBoundingClientRect().width ?? 272;
-      if (window.innerWidth - sidebarW - panel < 760) {
-        autoHidden.current = true;
-        ui.set({ sidebar: false });
-      }
-    } else if (!crowded && autoHidden.current) {
-      autoHidden.current = false;
-      ui.set({ sidebar: true });
-    }
-  }, [crowded, narrow]);
-
-  // A window that gets narrow puts the sidebar away; widening it again brings it back.
-  const narrowHidden = useRef(false);
-  useEffect(() => {
-    const ui = useUI.getState();
-    if (narrow && ui.sidebar) {
-      narrowHidden.current = true;
-      ui.set({ sidebar: false });
-    } else if (!narrow && narrowHidden.current) {
-      narrowHidden.current = false;
-      ui.set({ sidebar: true });
-    }
-  }, [narrow]);
+      if (window.innerWidth - sidebarW - panel < 760) ui.set({ sidebar: false, sidebarAuto: true });
+    } else if (!crowded && ui.sidebarAuto) ui.set({ sidebar: true, sidebarAuto: false });
+  }, [crowded, narrow, ready]);
 
   // The floating sidebar goes away on a click outside it, on Esc, and when a page is picked.
   const overlay = narrow && sidebar;
@@ -164,7 +152,7 @@ export function App() {
   }, [overlay]);
   const viewKey = JSON.stringify(view);
   useEffect(() => {
-    if (useUI.getState().sidebar && window.matchMedia('(max-width: 899px)').matches) useUI.getState().set({ sidebar: false });
+    if (useUI.getState().sidebar && window.matchMedia(NARROW).matches) useUI.getState().set({ sidebar: false });
     setScrolled(false);
   }, [viewKey]);
 

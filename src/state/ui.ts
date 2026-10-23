@@ -37,6 +37,11 @@ export interface UIState {
   /** The last page that wasn't a note: where closing the last tab goes back to. */
   lastPage: View;
   sidebar: boolean;
+  /**
+   * The sidebar was put away for the window's sake (a narrow window, or the assistant needing the room)
+   * and comes back when that passes. It is saved as shown, so a reload doesn't take it for a choice.
+   */
+  sidebarAuto: boolean;
   assistant: boolean;
   palette: boolean;
   settings: SettingsSection | null;
@@ -70,6 +75,24 @@ export interface UIState {
 
 const MAX_TABS = 12;
 
+/** What of the UI is kept across launches. */
+export function savedUI(s: UIState): Partial<UIState> & { sidebar: boolean } {
+  return {
+    view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'classes' } : s.view,
+    tabs: s.tabs,
+    lastTab: s.lastTab,
+    sidebar: s.sidebar || s.sidebarAuto,
+    assistant: s.assistant,
+    zoom: s.zoom,
+    expanded: s.expanded,
+    sort: s.sort,
+    libraryScope: s.libraryScope,
+  };
+}
+
+/** Below this the sidebar starts hidden and, when shown, floats over the page. */
+export const NARROW = '(max-width: 899px)';
+
 export const useUI = create<UIState>()(
   persist(
     (set, get) => ({
@@ -78,6 +101,7 @@ export const useUI = create<UIState>()(
       lastTab: null,
       lastPage: { kind: 'classes' },
       sidebar: true,
+      sidebarAuto: false,
       assistant: false,
       palette: false,
       settings: null,
@@ -122,7 +146,8 @@ export const useUI = create<UIState>()(
         } else set({ tabs: next });
       },
       setView: (v) => set({ view: v }),
-      toggleSidebar: () => set({ sidebar: !get().sidebar }),
+      // Showing or hiding it by hand is a choice, except over a narrow window, where it only floats.
+      toggleSidebar: () => set({ sidebar: !get().sidebar, sidebarAuto: get().sidebarAuto && window.matchMedia(NARROW).matches }),
       setAssistant: (open) => set({ assistant: open }),
       setPalette: (open) => set({ palette: open }),
       openSettings: (section) => {
@@ -138,17 +163,7 @@ export const useUI = create<UIState>()(
       name: 'nib.ui',
       version: UI_VERSION,
       migrate: (s, v) => migrateUI(s, v) as unknown as UIState,
-      partialize: (s) => ({
-        view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'classes' } : s.view,
-        tabs: s.tabs,
-        lastTab: s.lastTab,
-        sidebar: s.sidebar,
-        assistant: s.assistant,
-        zoom: s.zoom,
-        expanded: s.expanded,
-        sort: s.sort,
-        libraryScope: s.libraryScope,
-      }),
+      partialize: savedUI,
     },
   ),
 );

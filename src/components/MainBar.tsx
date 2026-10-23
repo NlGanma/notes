@@ -33,7 +33,8 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
     const el = strip.current;
     if (!el) return;
     const measure = () => {
-      const w = el.clientWidth;
+      // The strip's right padding is the window's drag room, never room for tabs.
+      const w = el.clientWidth - parseFloat(getComputedStyle(el).paddingRight);
       const all = Math.floor((w + TAB_GAP) / (TAB_MIN + TAB_GAP));
       setFit(all >= open.length ? open.length : Math.max(1, Math.floor((w - MORE_W + TAB_GAP) / (TAB_MIN + TAB_GAP))));
     };

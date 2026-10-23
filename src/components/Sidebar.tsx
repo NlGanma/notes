@@ -124,6 +124,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const newBtn = useRef<HTMLButtonElement>(null);
   const [newOpen, setNewOpen] = useState(false);
 
+  // Hidden, it is out of the tab order and out of reach of screen readers too.
+  const asideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (asideRef.current) asideRef.current.inert = !shown;
+  }, [shown]);
+
   // Ideas due for review: counted again when the review file or the notes change (a moment after typing
   // stops — it reads every note), and every minute, as reviews fall due.
   const reviewFile = useReview((s) => s.file);
@@ -162,7 +168,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
     aiState === 'online' ? `Settings  ${MOD},  ·  ${chatModel || 'no model chosen'}` : aiState === 'offline' ? 'Local AI isn’t running' : 'Starting the local model…';
 
   return (
-    <aside className={cx('sidebar', !shown && 'is-hidden', overlay && 'is-overlay')} aria-label="Navigation" aria-hidden={!shown || undefined}>
+    <aside ref={asideRef} className={cx('sidebar', !shown && 'is-hidden', overlay && 'is-overlay')} aria-label="Navigation">
       <div className="sidebar-head drag">
         <span className="grow" />
         <button className="icon-btn no-drag" onClick={() => useUI.getState().toggleSidebar()} aria-label="Hide sidebar" title={`Hide sidebar  ${MOD}\\`}>
