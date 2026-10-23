@@ -455,6 +455,10 @@
   top: 50%;
   margin-top: calc(var(--line, 32px) / -2);
 }
+/* Inside a quote, callout or list the margin holds the quote's bar or the bullet: the handle sits in the equation's own blank left edge. */
+:is(blockquote, li, .callout) .math-actions {
+  left: 0;
+}
 .ink-block-node:hover .ink-actions,
 .math-block-node:hover .math-actions,
 .ink-actions:has(.is-on),
