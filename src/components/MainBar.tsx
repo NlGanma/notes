@@ -15,6 +15,8 @@ import { MOD } from '../lib/platform';
 const TAB_MIN = 96;
 const TAB_GAP = 2;
 const MORE_W = 32;
+// Under this width an inactive tab stops keeping room for its close button.
+const TIGHT = 128;
 
 /* The right end of the bar, where a page that isn't a note puts its own controls (Ask your notes, a Review session). */
 const useSlot = create<{ el: HTMLElement | null }>(() => ({ el: null }));
@@ -39,6 +41,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
   const moreBtn = useRef<HTMLButtonElement>(null);
   const [fit, setFit] = useState(open.length);
   const [more, setMore] = useState(false);
+  const [tight, setTight] = useState(false);
 
   // As many tabs as fit at their narrowest; the rest go into a » menu at the end of the strip.
   useLayoutEffect(() => {
@@ -48,7 +51,9 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
       // The strip's right padding is the window's drag room, never room for tabs.
       const w = el.clientWidth - parseFloat(getComputedStyle(el).paddingRight);
       const all = Math.floor((w + TAB_GAP) / (TAB_MIN + TAB_GAP));
-      setFit(all >= open.length ? open.length : Math.max(1, Math.floor((w - MORE_W + TAB_GAP) / (TAB_MIN + TAB_GAP))));
+      const n = all >= open.length ? open.length : Math.max(1, Math.floor((w - MORE_W + TAB_GAP) / (TAB_MIN + TAB_GAP)));
+      setFit(n);
+      setTight(n > 0 && (w - (n < open.length ? MORE_W : 0) - TAB_GAP * (n - 1)) / n < TIGHT);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -75,7 +80,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
           <PanelLeft size={18} strokeWidth={1.5} />
         </button>
       )}
-      <div className="tabs" ref={strip} role="tablist" aria-label="Open notes">
+      <div className={cx('tabs', tight && 'is-tight')} ref={strip} role="tablist" aria-label="Open notes">
         {shown.map((id) => {
           const n = notes[id];
           const { label, full } = labels.get(id)!;
