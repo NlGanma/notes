@@ -88,11 +88,6 @@
   min-width: 0;
   flex: 0 1 auto;
 }
-/* Fitting the page to the window scales it down; these controls keep their size on screen. */
-.page-meta,
-.paper-strip {
-  zoom: calc(1 / var(--page-fit, 1));
-}
 /* A long class or folder name shortens; the date never does. */
 .page-meta .crumb {
   font-size: 13px;

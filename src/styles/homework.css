@@ -181,8 +181,6 @@
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 18px;
-  /* Fitting the page to the window scales it down; the bar (and the notes-only line in it) keeps its size on screen. */
-  zoom: calc(1 / var(--page-fit, 1));
 }
 .hw-meta-row {
   display: flex;
