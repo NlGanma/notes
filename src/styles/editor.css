@@ -60,7 +60,7 @@
 
 /* --------------------------------------------------------------- page header */
 
-/* Apple Notes: a centred date line, the title, then hashtags. The band is unruled, like real paper's top margin. */
+/* Apple Notes: a centred date line, then the title. The band is unruled, like real paper's top margin. */
 .page-header {
   padding: 32px var(--page-pad-x) 16px;
   font-family: var(--font-ui);
@@ -89,7 +89,7 @@
   line-height: 40px;
   color: var(--class-dark, var(--text));
 }
-.hw-bar > :is(.hw-meta, .hw-meta-row, .page-tags) {
+.hw-bar > :is(.hw-meta, .hw-meta-row) {
   margin-left: 56px;
 }
 .page-meta {
@@ -194,102 +194,6 @@
 }
 .paper-picker.is-strip .paper-opt.is-active .paper-thumb {
   outline: none;
-}
-
-/* Hashtags are text (Apple Notes), not pills; "+ Add tag" shows while the header is hovered. */
-.page-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  min-height: 32px;
-  margin-top: 4px;
-}
-.tag {
-  height: 24px;
-  padding: 0 3px;
-  margin: 0 -3px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--accent);
-}
-.tag:hover {
-  background: var(--accent-tint);
-}
-.tag-add {
-  height: 24px;
-  padding: 0 4px;
-  margin-left: -4px;
-  border-radius: 4px;
-  font-size: 14px;
-  color: var(--text-3);
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.page-tags:not(.is-empty) .tag-add {
-  margin-left: 0;
-}
-.page-header:hover .tag-add,
-.hw-bar:hover .tag-add,
-.tag-add:focus-visible {
-  opacity: 1;
-}
-.tag-add:hover {
-  background: var(--bg-hover);
-  color: var(--text-2);
-}
-.tag-input-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  color: var(--accent);
-}
-.tag-input {
-  border: 0;
-  outline: none;
-  width: 140px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--accent);
-  background: transparent;
-  padding: 0 0 0 1px;
-}
-.tag-input::placeholder {
-  color: var(--text-4);
-  font-weight: 400;
-}
-.tag-suggest {
-  position: absolute;
-  left: -8px;
-  top: 30px;
-  background: var(--bg);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  padding: 4px 0;
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  z-index: 40;
-}
-.tag-suggest button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  margin: 0 4px;
-  padding: 0 10px;
-  border-radius: 4px;
-  font-size: 14px;
-  color: var(--text);
-  text-align: left;
-}
-.tag-suggest button svg {
-  color: var(--text-2);
-}
-.tag-suggest button.is-active {
-  background: var(--bg-hover);
 }
 
 /* --------------------------------------------------------------- surface & editor */

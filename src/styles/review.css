@@ -13,10 +13,10 @@
   /* Inline-size containment otherwise lets the page grow past the pane (and the docked sheet with it). */
   min-height: 0;
   --rv-right: var(--success);
-  --rv-right-bg: #e6f4ea;
-  --rv-right-fill: #2f7613;
+  --rv-right-bg: var(--success-soft);
+  --rv-right-fill: var(--success);
   --rv-wrong: var(--danger);
-  --rv-wrong-bg: #fce8e6;
+  --rv-wrong-bg: var(--danger-soft);
   --rv-learn: var(--warning);
   --rv-learn-bg: var(--warning-soft);
   --rv-learn-fill: var(--warning-line);

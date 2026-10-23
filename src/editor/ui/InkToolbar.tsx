@@ -44,7 +44,7 @@ import { BG_COLORS } from './palette';
 const TOOLS: { id: Tool; label: string; icon: (color?: string) => ReactNode; key?: string }[] = [
   { id: 'text', label: 'Type', icon: () => <Type size={20} />, key: 'T' },
   // The active pen is painted in its ink (GoodNotes), so the colour reads without looking at the dots.
-  { id: 'pen', label: 'Pen', icon: (c) => <PenLine size={20} fill={c ?? 'none'} />, key: 'P' },
+  { id: 'pen', label: 'Marker', icon: (c) => <PenLine size={20} fill={c ?? 'none'} />, key: 'P' },
   { id: 'highlighter', label: 'Highlighter', icon: () => <Highlighter size={20} />, key: 'H' },
   { id: 'eraser', label: 'Eraser', icon: () => <Eraser size={20} />, key: 'E' },
   { id: 'lasso', label: 'Select', icon: () => <Lasso size={20} />, key: 'S' },
@@ -208,7 +208,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
             aria-pressed={on}
           >
             <span className="tb-line" style={{ height: Math.max(1.5, Math.min(6, s * 1.3)) }} />
-            <Tip label={on && t.tool === 'pen' ? 'Pen settings' : `${s.toFixed(1)} pt`} />
+            <Tip label={on && t.tool === 'pen' ? 'Marker settings' : `${s.toFixed(1)} pt`} />
           </button>
         );
       })}
@@ -448,7 +448,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
 
       <Popover anchor={anchorRef.current} open={pop === 'pen'} onClose={close} className="tool-pop">
         <div className="pop-section">
-          <div className="pop-label">Pen</div>
+          <div className="pop-label">Marker</div>
           <div className="brush-grid">
             {PEN_BRUSHES.map((b) => (
               <button key={b} className={cx('brush-tile', t.pen.brush === b && 'is-active')} onClick={() => t.setPen({ brush: b })}>

@@ -40,19 +40,6 @@
   margin: 16px 0 24px;
   background: var(--class-main, var(--accent));
 }
-/* Tags in the assignment header are plain grey links; the class colour stays the header's only colour. */
-.hw-bar .tag,
-.hw-bar .tag-input-wrap,
-.hw-bar .tag-input {
-  color: var(--text-2);
-  font-weight: 400;
-}
-.hw-bar .tag:hover {
-  background: none;
-  color: var(--text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
 
 /* "Your work": Classroom's right-rail card, laid out across the page (its narrow-window form). */
 .hw-work {

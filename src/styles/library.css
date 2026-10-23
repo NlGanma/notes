@@ -1079,7 +1079,7 @@ button.art-crumb:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 .fc-pill.is-got.is-on {
-  background: #e6f4ea;
+  background: var(--success-soft);
   color: var(--success);
   box-shadow: none;
 }
@@ -1099,7 +1099,7 @@ button.art-crumb:hover {
   border-radius: 50%;
 }
 .fc-mark.is-got {
-  background: #e6f4ea;
+  background: var(--success-soft);
   color: var(--success);
 }
 .fc-mark.is-missed {
@@ -1285,7 +1285,7 @@ button.art-crumb:hover {
   color: var(--text-2);
 }
 .quiz-choice.is-right {
-  background: #e6f4ea;
+  background: var(--success-soft);
 }
 .quiz-choice.is-wrong {
   background: var(--danger-soft);

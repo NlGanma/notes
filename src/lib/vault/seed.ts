@@ -100,7 +100,7 @@ export function buildSeedNotes(): NoteDoc[] {
           b('Just start typing'),
           ' after you write. Your text lands on the ruled line right under your handwriting. Press ',
           b('Esc'),
-          ' to pick the pen back up.',
+          ' to pick the marker back up.',
         ),
       ),
       h(2, 'Things to try'),

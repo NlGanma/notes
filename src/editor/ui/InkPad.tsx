@@ -197,7 +197,7 @@ export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClo
             <Eraser size={15} />
           </button>
           <button className={cx('chip', matchText && 'is-on')} onClick={() => setMatchText((v) => !v)} title="Use the colour of the surrounding text">
-            <Palette size={13} /> {matchText ? 'Matches text colour' : 'Pen colour'}
+            <Palette size={13} /> {matchText ? 'Matches text colour' : 'Marker colour'}
           </button>
           <span className="grow" />
           {typeof pos === 'number' && onPopOut && (
