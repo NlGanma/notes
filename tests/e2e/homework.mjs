@@ -497,15 +497,25 @@ check((await folderMeta()).Scratch?.kind === 'class', '…while Make class makes
 
 // ---------------------------------------------------------------- Move to Trash says so, with Undo
 const welcomeTrashed = () => page.evaluate(() => !!Object.values(window.__nib.vault.getState().notes).find((n) => n.meta.title === 'Welcome to Nib')?.meta.trashed);
+const tabTitles = () => page.locator('.mainbar .tab').evaluateAll((ts) => ts.map((t) => t.title));
+// Welcome open in a tab behind the list, so Undo has a tab to put back.
 await showSidebar(page);
 await page.click('.nav-item:has-text("All notes")');
+await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').first().click();
+await page.waitForSelector('.note-view:not(.is-hidden) .page-title');
+await showSidebar(page);
+await page.click('.nav-item:has-text("All notes")');
+await page.waitForSelector('.notes-view');
+const tabsBefore = await tabTitles();
 await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').first().click({ button: 'right' });
 await page.click('.context-menu .menu-item:has-text("Move to Trash")');
 await page.waitForSelector('.toast:has-text("to Trash")', { timeout: 3000 }).catch(() => undefined);
 check((await welcomeTrashed()) && (await page.locator('.toast:has-text("to Trash")').count()), 'Move to Trash on a row trashes the note and says so');
+check(tabsBefore.includes('Welcome to Nib') && !(await tabTitles()).includes('Welcome to Nib'), '…and closes its tab');
 await page.click('.toast:has-text("to Trash") .toast-action:has-text("Undo")');
 await page.waitForTimeout(250);
 check(!(await welcomeTrashed()) && (await page.locator('.notes-view .note-row:has-text("Welcome to Nib")').count()), '…and Undo brings it back');
+check(JSON.stringify(await tabTitles()) === JSON.stringify(tabsBefore) && (await page.locator('.notes-view').count()), '…with its tab where it was, and the list still on screen');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.

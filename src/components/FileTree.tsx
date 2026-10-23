@@ -199,15 +199,17 @@ export async function moveNoteTo(n: NoteDoc) {
   if (target !== n.meta.folder) useVault.getState().moveNote(n.meta.id, target);
 }
 
-/** Move to Trash, from a row, a tab or the editor's ⋯ menu, with Undo (which reopens the note if it was open). */
+/** Move to Trash, from a row, a tab or the editor's ⋯ menu, with Undo (which puts its tab back, and reopens it if it was on screen). */
 export function trashNote(id: string) {
   const ui = useUI.getState();
   const wasOpen = ui.view.kind === 'note' && ui.view.id === id;
+  const tabAt = ui.tabs.indexOf(id);
   const n = useVault.getState().notes[id];
   useVault.getState().trashNote(id);
   ui.closeTab(id);
   const undo = () => {
     useVault.getState().restoreNote(id);
+    if (tabAt >= 0) useUI.getState().reopenTab(id, tabAt);
     if (wasOpen) useUI.getState().openNote(id, { newTab: true });
   };
   toast.info(n ? `Moved ${short(displayTitle(n))} to Trash` : 'Moved to Trash', undefined, { label: 'Undo', run: undo }, 8000);
