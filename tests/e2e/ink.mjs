@@ -1365,6 +1365,35 @@ check(
   'a ⌘N note left empty is gone, tab and all, and the one written in stays',
 );
 
+// 18e. On the narrowest page (the Assistant open in a small window) a new note's paper choice still fits its date line
+// beside a class and folder: thumbnails only, and the folder keeps a few letters.
+const dateLine = () =>
+  page.evaluate((V) => {
+    const meta = document.querySelector(`${V} .page-meta`);
+    const parts = [...meta.querySelectorAll('.crumb-part')].map((p) => Math.round(p.querySelector('.crumb').getBoundingClientRect().width));
+    const label = meta.querySelector('.paper-opt-label').getBoundingClientRect().width;
+    const right = meta.querySelector('.paper-strip').getBoundingClientRect().right;
+    return { sw: meta.scrollWidth, cw: meta.clientWidth, parts, label, inColumn: right <= document.querySelector(`${V} .page-title`).getBoundingClientRect().right + 0.5 };
+  }, V);
+await page.evaluate(() => window.__nib.ui.getState().setView({ kind: 'folder', path: 'Spanish II/Unidad 3 — El pasado' }));
+await page.waitForTimeout(300);
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForSelector(`${V} .paper-strip`);
+const wideLine = await dateLine();
+await page.setViewportSize({ width: 860, height: 760 });
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForSelector('.assistant');
+await page.waitForTimeout(500);
+const narrowLine = await dateLine();
+check(wideLine.label > 10 && wideLine.parts.length === 2 && wideLine.sw <= wideLine.cw, `with room, the paper choice is labeled (${JSON.stringify(wideLine)})`);
+check(
+  narrowLine.sw <= narrowLine.cw && narrowLine.inColumn && narrowLine.label <= 1 && narrowLine.parts.length === 2 && narrowLine.parts.every((w) => w >= 20),
+  `on the narrowest page it fits the date line as thumbnails, class and folder still readable (${JSON.stringify(narrowLine)})`,
+);
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForFunction(() => !document.querySelector('.assistant'));
+await page.setViewportSize({ width: 1440, height: 1000 });
+
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
 await browser.close();

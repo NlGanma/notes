@@ -81,17 +81,21 @@
   color: var(--text-3);
   white-space: nowrap;
   min-width: 0;
+  /* (Its width follows the page's fit: the paper choice below asks it how much room there is.) */
+  container-type: inline-size;
 }
+/* A folder shortens to a few letters at most, never to a bare "›". */
 .page-meta .crumb-part {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  min-width: calc(4ch + 12px);
   flex: 0 1 auto;
 }
-/* Short of room (a new note's paper choice beside a long folder name), the folders shorten before the class. */
-.page-meta .crumb-part:has(.is-class) {
-  flex-shrink: 0;
+/* Short of room (a new note's paper choice beside a long folder name), the folders shorten first; the class only
+   once they are down to their few letters. (Beside a factor this large, the class's share rounds to nothing.) */
+.page-meta .crumb-part:not(:has(.is-class)) {
+  flex-shrink: 1000000;
 }
 /* A long class or folder name shortens; the date never does. */
 .page-meta .crumb {
@@ -210,6 +214,23 @@
 }
 .paper-picker.is-strip .paper-opt.is-active .paper-thumb {
   outline: none;
+}
+/* On a narrow page the choice keeps its thumbnails: each still says its name on hover and to a screen reader. */
+@container (max-width: 519px) {
+  .paper-strip-label {
+    display: none;
+  }
+  .paper-picker.is-strip .paper-opt {
+    position: relative;
+    padding: 0 5px;
+  }
+  .paper-picker.is-strip .paper-opt-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 /* --------------------------------------------------------------- surface & editor */

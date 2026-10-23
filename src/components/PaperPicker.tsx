@@ -50,6 +50,7 @@ export function PaperPicker({
           tabIndex={value === p.id ? 0 : -1}
           data-paper={p.id}
           className={cx('paper-opt', value === p.id && 'is-active')}
+          title={size === 's' ? p.label : undefined}
           onClick={() => onChange(p.id)}
         >
           <PaperThumb paper={p.id} />
