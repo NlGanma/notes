@@ -30,7 +30,7 @@ import { rasterizeStrokes } from '../lib/ink/raster';
 import type { InkTranscript, Stroke, Tool } from '../lib/ink/types';
 import { strokeBounds, translateStroke, unionBounds } from '../lib/ink/geometry';
 import { bytesToBase64, cx, debounce } from '../lib/util';
-import { toast } from '../components/common/toast';
+import { toast, useToasts } from '../components/common/toast';
 import { readLine } from '../lib/displayTitle';
 
 // ⌥S is Select (as the welcome note and Settings → Shortcuts say); ⌥A, once Ask about an area, selects too.
@@ -479,7 +479,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       } catch (e) {
         toast.error('Couldn’t read the handwriting', readFailure(e));
       } finally {
-        void id;
+        useToasts.getState().dismiss(id);
       }
     },
     [editor],
@@ -498,13 +498,16 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
           toast.error('No model that can see images', 'Reading handwriting needs one. Choose it in Settings → Local AI.');
           return;
         }
+        // (The "Reading…" toast goes when the answer comes, so the two never show at once.)
+        const id = toast.info('Reading handwriting…');
         try {
-          toast.info('Reading handwriting…');
           const t = await transcribeStrokes(blockStrokesAbs(blockId));
           if (t) setTranscript(editor, blockId, t);
           toast.success('Handwriting read', t ? readLine(t.text || t.description || '') || undefined : undefined);
         } catch (e) {
           toast.error('Couldn’t read the handwriting', readFailure(e));
+        } finally {
+          useToasts.getState().dismiss(id);
         }
       }),
       editorBus.on('ink:convert', ({ editor: ed, blockId, to }) => {
