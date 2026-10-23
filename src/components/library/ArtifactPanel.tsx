@@ -5,7 +5,6 @@ import type { StudyTool } from '../../lib/ai/prompts';
 import { copyText, MessageView } from '../ai/Message';
 import { openSource } from '../ai/Citations';
 import { Flashcards, Quiz, parseStudyJSON, type QuizQ } from './StudyTools';
-import { TOOL_LOOK } from './notebook';
 import { cx, plural } from '../../lib/util';
 
 export const TOOL_ICON: Record<StudyTool | 'review', typeof Target> = {
@@ -20,11 +19,6 @@ export const TOOL_ICON: Record<StudyTool | 'review', typeof Target> = {
 export function ToolIcon({ tool, size = 16 }: { tool: StudyTool | 'review'; size?: number }) {
   const I = TOOL_ICON[tool];
   return <I size={size} />;
-}
-
-export function toolStyle(tool: StudyTool | 'review') {
-  const t = TOOL_LOOK[tool];
-  return { ['--tool-bg' as string]: t.bg, ['--tool-ink' as string]: t.ink };
 }
 
 /** A study tool's result (made from a tool reply in the conversation). */

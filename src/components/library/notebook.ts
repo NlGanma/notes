@@ -81,14 +81,14 @@ export function scopeFromPick(sel: SourceSelection, notes: Record<string, NoteDo
   return ids.size ? { kind: 'notes', ids: [...ids] } : { kind: 'all' };
 }
 
-/** How each study tool is named. (The colours stay neutral: the AI is drawn like everything else.) */
-export const TOOL_LOOK: Record<StudyTool | 'review', { name: string; noun: string; bg: string; ink: string }> = {
-  summary: { name: 'Summary', noun: 'summary', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
-  guide: { name: 'Study guide', noun: 'study guide', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
-  terms: { name: 'Key terms', noun: 'key terms', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
-  flashcards: { name: 'Flashcards', noun: 'flashcards', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
-  quiz: { name: 'Quiz', noun: 'quiz', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
-  review: { name: 'Review', noun: 'review', bg: 'var(--bg-subtle)', ink: 'var(--text-2)' },
+/** How each study tool is named. */
+export const TOOL_LOOK: Record<StudyTool | 'review', { name: string; noun: string }> = {
+  summary: { name: 'Summary', noun: 'summary' },
+  guide: { name: 'Study guide', noun: 'study guide' },
+  terms: { name: 'Key terms', noun: 'key terms' },
+  flashcards: { name: 'Flashcards', noun: 'flashcards' },
+  quiz: { name: 'Quiz', noun: 'quiz' },
+  review: { name: 'Review', noun: 'review' },
 };
 
 /** Saves Markdown (an answer, a study guide) as a note in the notebook's class; the AI wrote it, so it's never cited back. */
