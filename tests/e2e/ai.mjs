@@ -299,6 +299,7 @@ await page.click('.polish-all');
 await page.waitForTimeout(1200);
 const after = await page.evaluate((id) => window.__nib.vault.getState().notes[id].meta.folder, loose);
 check(after === '' && !(await page.locator(`${V} .crumb.is-class`).count()), `Apply all leaves the note where it was (folder ${JSON.stringify(after)})`);
+check(await classGroup.locator('.polish-row:has-text("Move to Calculus I")').count(), '…and Polish stays open on the choices it left alone');
 await page.keyboard.press('Escape');
 
 // 9. Settings shows the detected models.

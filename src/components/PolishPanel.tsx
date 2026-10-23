@@ -56,7 +56,8 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
   const filing = suggestions.filter((s) => s.id === 'class');
   const quick = suggestions.filter((s) => !s.ai && s.id !== 'class');
   const smart = suggestions.filter((s) => s.ai);
-  const left = suggestions.length - done.length;
+  // An applied fix usually drops out of the list on its own; count what's still on offer.
+  const left = suggestions.filter((s) => !done.includes(s.id)).length;
 
   return (
     <div className="polish">
@@ -88,7 +89,8 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
                 disabled={!!busy || quick.every((s) => done.includes(s.id))}
                 onClick={async () => {
                   for (const s of quick) if (!done.includes(s.id)) await apply(s);
-                  onDone();
+                  // Filing and the AI's suggestions are left for the student to choose: the sheet stays while any are.
+                  if ([...filing, ...smart].every((s) => done.includes(s.id))) onDone();
                 }}
               >
                 Apply all
