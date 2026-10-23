@@ -399,6 +399,14 @@ export function LibraryView() {
     if (openId && overlay) main.setAttribute('inert', '');
     else main.removeAttribute('inert');
   }, [openId, overlay]);
+  // …and a click on the part of it left showing closes the output (inert, it lets the click through to the page).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !openId || !overlay) return;
+    const close = (e: PointerEvent) => e.target === root && setArtifact(null);
+    root.addEventListener('pointerdown', close);
+    return () => root.removeEventListener('pointerdown', close);
+  }, [openId, overlay]);
   // An output that opens takes the keyboard, so Space flips its first card; closing it gives the keyboard back to the composer.
   const shownId = useRef<string | null>(null);
   useEffect(() => {
@@ -417,12 +425,7 @@ export function LibraryView() {
   const scoped = scope.kind !== 'all' && scope.kind !== 'tag';
   const convTitle = empty ? '' : conversationTitle(messages);
   return (
-    <div
-      className={cx('library', art && 'has-artifact')}
-      ref={rootRef}
-      // Over a narrow page, a click on the conversation left showing closes the output (the conversation itself is inert).
-      onPointerDown={(e) => overlay && art && e.target === e.currentTarget && setArtifact(null)}
-    >
+    <div className={cx('library', art && 'has-artifact')} ref={rootRef}>
       <div className="lib-main" ref={mainRef}>
         <header className="lib-head">
           <div className="library-title">
