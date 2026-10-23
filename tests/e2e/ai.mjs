@@ -186,4 +186,52 @@ await shot(page, 'ai-11-settings');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.join('\n') || 'no page errors');
+
+// 10. No model server: the composer says so, Send waits, and Open settings goes to Local AI.
+// (Requests are cut in this browser only; the shared mock server is untouched.)
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 940 } });
+  const off = await ctx.newPage();
+  await off.route('**/api/**', (r) => r.abort());
+  await off.goto(BASE);
+  await off.waitForSelector('[data-ai-status="offline"]', { timeout: 15000 });
+  await off.click('.nav-item:has-text("Ask your notes")');
+  await off.waitForSelector('.library .composer-status.is-offline');
+  await off.fill('.library-composer textarea', 'What is a limit?');
+  check(await off.locator('.library-composer .send-btn').isDisabled(), 'offline: the composer says the local AI isn’t running, and Send waits');
+  check(await off.locator('.study-tool').first().isDisabled(), '…and so do the study chips');
+  await off.click('.composer-status-link');
+  await off.waitForSelector('.settings-nav-item.is-active:has-text("Local AI")');
+  check(true, '…and Open settings goes to Local AI');
+  await ctx.close();
+}
+
+// 11. While the model server is still being found, a question waits for it instead of failing.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 940 } });
+  const slow = await ctx.newPage();
+  let release;
+  const held = new Promise((r) => (release = r));
+  await slow.route('**/api/tags', async (r) => {
+    await held;
+    await r.continue();
+  });
+  await slow.goto(BASE);
+  await slow.click('.nav-item:has-text("Ask your notes")');
+  await slow.waitForSelector('.library .composer-status.is-loading');
+  await slow.fill('.library-composer textarea', 'What is the squeeze theorem?');
+  await slow.keyboard.press('Enter');
+  await slow.waitForSelector('.library .msg.is-bot');
+  await slow.waitForTimeout(1500);
+  const waiting = await slow.evaluate(() => ({
+    error: document.querySelector('.library .msg-error')?.textContent ?? '',
+    streaming: !!document.querySelector('.library .msg.is-bot.is-streaming'),
+    stop: !!document.querySelector('.library .send-btn.is-stop'),
+  }));
+  check(!waiting.error && waiting.streaming && waiting.stop, `loading: a question waits for the model, with Stop, and no error (${waiting.error || 'none'})`);
+  release();
+  await slow.waitForSelector('.library .msg.is-bot .cite', { timeout: 20000 });
+  check(!(await slow.locator('.library .msg-error').count()), '…and is answered once the model is there');
+  await ctx.close();
+}
 await browser.close();
