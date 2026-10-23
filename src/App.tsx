@@ -64,7 +64,7 @@ export function App() {
     let beat: ReturnType<typeof setTimeout>;
     const tick = async () => {
       const change = await useAI.getState().heartbeat();
-      if (change === 'lost') toast.error('Local AI disconnected', 'Nib will reconnect automatically when the model server is back.');
+      if (change === 'lost') toast.error('Local AI disconnected', 'Reconnects when the model server is back.');
       if (change === 'restored') toast.success('Local AI reconnected', useAI.getState().chatModel);
       beat = setTimeout(tick, useAI.getState().status === 'online' ? 30_000 : 10_000);
     };
@@ -95,7 +95,7 @@ export function App() {
   // The window title names the open note, so Mission Control and the Window menu can tell windows apart.
   const openTitle = view.kind === 'note' && notes[view.id] ? displayTitle(notes[view.id]) : null;
   useEffect(() => {
-    document.title = openTitle ? `${openTitle} — Nib` : 'Nib';
+    document.title = openTitle ? `${openTitle} · Nib` : 'Nib';
   }, [openTitle]);
 
   // Keep the open note in the tab strip; drop tabs whose note is gone.
