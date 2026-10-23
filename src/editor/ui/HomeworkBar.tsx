@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import type { JSONContent } from '@tiptap/core';
-import { BookOpen, CalendarDays, Check, FilePlus, FileText, Folder, Paperclip, Plus, ScanText, X } from 'lucide-react';
+import { CalendarDays, Check, FilePlus, FileText, Folder, Paperclip, Plus, ScanText, X } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI, visionModel } from '../../state/ai';
 import { classForFolder, classInfo, inFolder, themeVars } from '../../lib/classes';
 import { dueLabel, homeworkSources, suggestSources } from '../../lib/homework';
-import { linkNotes } from '../../lib/commands';
+import { linkNotes, newNote } from '../../lib/commands';
 import { displayTitle } from '../../lib/displayTitle';
 import { pickFiles, scanToBlocks, SCAN_TYPES } from '../../lib/import';
 import { needsReading, readScannedPages } from '../../lib/scan';
@@ -20,9 +20,9 @@ import { folderName, shortDate } from '../../components/homework/sources';
 import { cx, plural } from '../../lib/util';
 
 /**
- * Under a homework's title: one quiet row with its class, when it's due, the notes it uses and Mark done;
- * then the notes themselves (× unlinks one), the worksheet's pages and whether they've been read, and the
- * line saying the assistant answers only from these notes.
+ * Under a homework's title: one quiet row with its class, when it's due and Mark done; then the notes it uses
+ * (× unlinks one, Change… picks them), the worksheet's pages and whether they've been read, and the line
+ * saying the homework helper answers only from these notes.
  */
 export function HomeworkBar({ note }: { note: NoteDoc }) {
   const notes = useVault((s) => s.notes);
@@ -58,9 +58,10 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
     setReading(true);
     try {
       const n = await readScannedPages(note.meta.id);
-      toast.success('Pages read', `${plural(n, 'page')} — the assistant can now see the questions`);
+      toast.success('Pages read', `${plural(n, 'page')}. The homework helper can see the questions now.`);
     } catch (e) {
-      toast.error('Couldn’t read the pages', String((e as Error).message ?? e));
+      console.warn('Reading the pages failed', e);
+      toast.error('Couldn’t read the pages', 'Check that the local AI is running, then try again.');
     } finally {
       setReading(false);
     }
@@ -75,7 +76,8 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
     try {
       blocks = await scanToBlocks(f);
     } catch (e) {
-      toast.error('Couldn’t import this file', String((e as Error).message ?? e));
+      console.warn('Importing the scan failed', e);
+      toast.error('Couldn’t import this file', 'It may be damaged, or not a PDF or image.');
       return;
     }
     const ed = editors.get(note.meta.id);
@@ -92,12 +94,13 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
     if (useAI.getState().status === 'online' && visionModel()) void readScannedPages(note.meta.id, { priority: 'background' }).catch(() => undefined);
   };
 
-  // A note to work things out in, filed with the class and used as one of the homework's notes.
-  const createBlank = () => {
+  // A note to work things out in, filed with the class and used as one of the homework's notes. It opens
+  // offering the paper choice, as every new note does.
+  const createNote = () => {
     setAddOpen(false);
-    const doc = useVault.getState().createNote({ folder: classPath ?? '', title: `Notes for ${displayTitle(note)}` });
+    const doc = newNote(classPath ?? '', { newTab: true });
+    useVault.getState().updateMeta(doc.meta.id, { title: `Notes for ${displayTitle(note)}` });
     update({ sources: [...hw.sources, doc.meta.id] });
-    useUI.getState().openNote(doc.meta.id, { newTab: true });
   };
 
   const scrollToPages = () => {
@@ -128,10 +131,6 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
           <CalendarDays size={14} strokeWidth={1.5} />
           {due ? due.text : 'No due date'}
         </button>
-        <button className={cx('hw-chip hw-link-btn', !sources.length && 'is-warn')} onClick={() => linkNotes(note.meta.id)}>
-          <BookOpen size={14} strokeWidth={1.5} />
-          {sources.length ? `Uses ${plural(sources.length, 'note')}` : 'No notes linked'}
-        </button>
         <span className="grow" />
         {!hw.done && (
           <button ref={addBtn} className={cx('btn is-ghost is-quiet hw-add', addOpen && 'is-on')} onClick={() => setAddOpen(!addOpen)} aria-haspopup="menu">
@@ -144,7 +143,8 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
         </button>
       </div>
 
-      {(sources.length > 0 || pages.length > 0 || suggestions.length > 0) && (
+      {/* The notes it uses, said once: the chips, and the one button that changes them. */}
+      {(!hw.done || sources.length > 0 || pages.length > 0) && (
         <div className="hw-sources">
           {hw.folders.map((f) => (
             <span key={`f:${f}`} className="hw-source-chip is-folder">
@@ -192,6 +192,17 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
               ))}
             </span>
           )}
+          {!hw.done && (
+            <button className="btn is-ghost is-quiet hw-link-btn" onClick={() => linkNotes(note.meta.id)}>
+              {sources.length ? (
+                'Change…'
+              ) : (
+                <>
+                  <Plus size={14} strokeWidth={1.75} /> Link notes
+                </>
+              )}
+            </button>
+          )}
           {pages.length > 0 && (
             <span className="hw-sheet-group">
               <button className="hw-source-chip is-sheet hw-source-open" onClick={scrollToPages} title={sheetName}>
@@ -210,10 +221,10 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
           )}
         </div>
       )}
-      {needsVision && unread > 0 && <div className="hw-read-hint">Needs a vision model, set one in Settings → Local AI</div>}
-      {/* What the assistant may use, said plainly: a notes-only label. */}
+      {needsVision && unread > 0 && <div className="hw-read-hint">Needs a vision model. Set one in Settings → Local AI.</div>}
+      {/* What the homework helper may use, said plainly: a notes-only label. */}
       <div className={cx('hw-work-note', !sources.length && 'hw-no-sources')}>
-        {sources.length ? 'The assistant answers only from these notes.' : 'Link notes so the assistant can answer from them.'}
+        {sources.length ? 'The homework helper answers only from these notes.' : 'No notes linked yet. The homework helper answers only from linked notes.'}
       </div>
 
       <Popover anchor={dueBtn.current} open={dueOpen} onClose={() => setDueOpen(false)} align="start" offset={4} className="due-pop">
@@ -231,9 +242,9 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
             <Paperclip size={16} strokeWidth={1.5} />
             <span className="menu-label">Scan or photo…</span>
           </button>
-          <button className="menu-item" role="menuitem" onClick={createBlank}>
+          <button className="menu-item" role="menuitem" onClick={createNote}>
             <FilePlus size={16} strokeWidth={1.5} />
-            <span className="menu-label">{cls ? `Blank note in ${cls.name}` : 'Blank note'}</span>
+            <span className="menu-label">New note for this homework</span>
           </button>
         </div>
       </Popover>

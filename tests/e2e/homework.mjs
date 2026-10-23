@@ -288,7 +288,8 @@ check(await page.locator(`${V} .callout[data-variant="outside"]`).count(), 'inse
 // ---------------------------------------------------------------- linking notes
 await page.click(`${V} .hw-source-chip button[aria-label^="Remove"]`);
 await page.waitForSelector(`${V} .hw-no-sources`);
-check(/Link notes so the assistant can answer from them/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar asks for linked notes');
+check(/No notes linked yet/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar says none are linked');
+check(/Link notes/.test(await page.textContent(`${V} .hw-link-btn`)) && !(await page.locator(`${V} .hw-meta-row .hw-link-btn`).count()), '…and the one button that links them sits at the end of the sources line');
 check(await page.locator(`${V} .hw-suggest:has-text("Lecture 4")`).count(), 'with nothing linked, Lecture 4 is suggested');
 await page.click('.assistant .icon-btn[title="New conversation"]');
 await page.click('.starter:has-text("Give me a hint")');
@@ -303,6 +304,7 @@ await page.click('.link-dialog .link-row:has-text("Lecture 4")');
 await page.click('.link-dialog .btn.is-primary');
 await page.waitForTimeout(300);
 check(/Lecture 4/.test(await page.textContent(`${V} .hw-bar`)), 'linking a note shows it as a source');
+check(/^Change…$/.test((await page.textContent(`${V} .hw-link-btn`)).trim()), '…and the button reads Change… once notes are linked');
 
 // ---------------------------------------------------------------- harness: retries & continue
 await page.click('.assistant .icon-btn[title="New conversation"]');

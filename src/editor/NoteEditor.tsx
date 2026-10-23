@@ -514,6 +514,8 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     width: pageWidth,
     transform: `scale(${scale})`,
     ['--line' as string]: `${line}px`,
+    // What fitting to the window scaled the page by: the controls in its header undo it (see .hw-bar).
+    ['--page-fit' as string]: settings.fitWidth ? fit : 1,
   } as React.CSSProperties;
 
   return (
