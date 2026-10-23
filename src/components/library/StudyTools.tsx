@@ -63,8 +63,8 @@ export function saveFlashcards(cards: Card[], title = 'Flashcards', folder = '')
 type Mark = 'got' | 'missed';
 
 /**
- * NotebookLM's flashcards: one big calm card, "See answer" to flip, then mark
- * it "Got it" or "Missed it" (which moves on). Space flips, ← → move, G / M mark.
+ * Flashcards: one calm card, "See answer" to flip, then "Got it" or "Missed it" (which moves on).
+ * Space flips, ← → move, G / M mark.
  */
 export function Flashcards({
   cards: initial,
@@ -140,17 +140,14 @@ export function Flashcards({
           <span style={{ width: `${(got / cards.length) * 100}%` }} />
         </div>
         <div className="fc-end-actions">
+          <button className="btn is-secondary" onClick={() => restart(initial)}>
+            Start over
+          </button>
           {missed.length > 0 && (
             <button className="btn is-primary" onClick={() => restart(missed)}>
-              Practise missed ({missed.length})
+              Practise the {missed.length} missed
             </button>
           )}
-          <button className="btn is-secondary" onClick={() => restart(initial)}>
-            All cards
-          </button>
-          <button className="btn is-secondary" onClick={() => restart(cards)}>
-            Same cards
-          </button>
         </div>
       </div>
     );
@@ -158,7 +155,6 @@ export function Flashcards({
 
   return (
     <div className="flashcards">
-      <div className="fc-hint">Press Space to flip, ← → to move</div>
       <div
         className={cx('fc-card', flipped && 'is-flipped')}
         onClick={() => setFlipped((v) => !v)}
@@ -169,7 +165,7 @@ export function Flashcards({
       >
         <div className="fc-face fc-front" aria-hidden={flipped}>
           <div className="md fc-text" dangerouslySetInnerHTML={{ __html: md(card.front) }} />
-          <span className="fc-see">See answer</span>
+          <span className="fc-see">See answer · Space</span>
         </div>
         <div className="fc-face fc-back" aria-hidden={!flipped}>
           <div className="fc-back-body">
@@ -178,30 +174,30 @@ export function Flashcards({
           </div>
           <div className="fc-bar" onClick={(e) => e.stopPropagation()}>
             {onExplain && (
-              <button className="fc-pill" onClick={() => onExplain(card.front)}>
-                <MessageSquareText size={18} /> Explain
+              <button className="btn is-ghost is-small fc-explain" onClick={() => onExplain(card.front)}>
+                <MessageSquareText size={16} /> Explain
               </button>
             )}
             <span className="grow" />
-            <button className={cx('fc-pill is-missed', marks[i] === 'missed' && 'is-on')} onClick={() => mark('missed')} title="Missed it (M)">
-              <X size={18} /> Missed it
+            <button className={cx('btn is-secondary is-small fc-mark-btn is-missed', marks[i] === 'missed' && 'is-on')} onClick={() => mark('missed')} title="Missed it (M)">
+              <X size={16} /> Missed it
             </button>
-            <button className={cx('fc-pill is-got', marks[i] === 'got' && 'is-on')} onClick={() => mark('got')} title="Got it (G)">
-              <Check size={18} /> Got it
+            <button className={cx('btn is-secondary is-small fc-mark-btn is-got', marks[i] === 'got' && 'is-on')} onClick={() => mark('got')} title="Got it (G)">
+              <Check size={16} /> Got it
             </button>
           </div>
         </div>
         {marks[i] && !flipped && <span className={cx('fc-mark', `is-${marks[i]}`)}>{marks[i] === 'got' ? <Check size={14} /> : <X size={14} />}</span>}
       </div>
       <div className="fc-nav">
-        <button className="study-nav-btn" onClick={() => go(i - 1)} disabled={i === 0} aria-label="Previous card">
-          <ArrowLeft size={20} />
+        <button className="icon-btn" onClick={() => go(i - 1)} disabled={i === 0} aria-label="Previous card" title="Previous card (←)">
+          <ArrowLeft size={16} />
         </button>
         <span className="fc-count">
-          {i + 1} / {cards.length} cards
+          {i + 1} of {cards.length}
         </span>
-        <button className="study-nav-btn" onClick={() => go(i + 1)} disabled={i === cards.length - 1} aria-label="Next card">
-          <ArrowRight size={20} />
+        <button className="icon-btn" onClick={() => go(i + 1)} disabled={i === cards.length - 1} aria-label="Next card" title="Next card (→)">
+          <ArrowRight size={16} />
         </button>
       </div>
     </div>
@@ -211,9 +207,8 @@ export function Flashcards({
 const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 /**
- * NotebookLM's quiz: one question at a time, big soft option cards (A–D), a
- * short verdict with the sentence from the notes, and a sticky footer.
- * A–D answer, ← → move, Enter goes on.
+ * A quiz: one question at a time, its choices as rows (A–D), a short verdict with the sentence from
+ * the notes, then Next. A–D answer, ← → move, Enter goes on.
  */
 export function Quiz({
   questions,
@@ -264,17 +259,10 @@ export function Quiz({
     return (
       <div className="quiz quiz-end">
         <div className="fc-end-score">
-          You scored {score} / {questions.length}
+          You got {score} of {questions.length} right
         </div>
         <div className="study-bar">
           <span style={{ width: `${(score / questions.length) * 100}%` }} />
-        </div>
-        <div className="quiz-end-note">
-          {score === questions.length
-            ? 'Perfect: you know this material.'
-            : score >= questions.length * 0.6
-              ? 'Nice work. Go over the ones you missed.'
-              : 'Worth another pass through these notes.'}
         </div>
         <div className="fc-end-actions">
           <button
@@ -324,7 +312,7 @@ export function Quiz({
     <div className="quiz">
       <div className="quiz-q">
         <div className="quiz-count">
-          {i + 1} / {questions.length}
+          Question {i + 1} of {questions.length}
         </div>
         <div className="md quiz-text" dangerouslySetInnerHTML={{ __html: md(q.q) }} />
         <div className="quiz-choices">
@@ -346,12 +334,12 @@ export function Quiz({
       </div>
       <div className="quiz-foot">
         {picked !== null && onExplain && (
-          <button className="btn is-secondary quiz-explain-btn" onClick={() => onExplain(q, picked)}>
-            <MessageSquareText size={18} /> Explain
+          <button className="btn is-ghost quiz-explain-btn" onClick={() => onExplain(q, picked)}>
+            <MessageSquareText size={16} /> Explain
           </button>
         )}
         <span className="grow" />
-        <button className="btn quiz-prev" onClick={() => setI(i - 1)} disabled={i === 0}>
+        <button className="btn is-secondary quiz-prev" onClick={() => setI(i - 1)} disabled={i === 0}>
           Previous
         </button>
         <button className="btn is-primary" onClick={next}>

@@ -76,7 +76,7 @@ export interface ChatMsg {
   sources?: SourceRef[];
   /** Block the question was about — replies are inserted right after it. */
   anchor?: string;
-  /** Homework: the problem text the question was about (kept so follow-ups and Retry stay on it). */
+  /** Homework: the problem text the question was about (kept so follow-ups and Retry stay on it). Study tools: their topic. */
   focus?: string;
   /** The reply hit the token limit; it can be continued. */
   truncated?: boolean;
@@ -774,7 +774,9 @@ export const useAssistant = create<AssistantState>()(
           const ai = useAI.getState();
           const key = LIBRARY_KEY;
           const question = tool ? STUDY_TOOLS[tool].label : prompt.trim();
-          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, scope, scopeLabel, forced: force, at: Date.now() };
+          // A study tool's topic (what was typed when its chip was picked) stays with the request, for its name and Retry.
+          const focus = tool && prompt.trim() ? prompt.trim() : undefined;
+          const userMsg: ChatMsg = { id: uid('m'), role: 'user', content: question, tool, focus, scope, scopeLabel, forced: force, at: Date.now() };
           const botMsg: ChatMsg = {
             id: uid('m'),
             role: 'assistant',
@@ -905,7 +907,7 @@ export const useAssistant = create<AssistantState>()(
           set({ threads: { ...get().threads, [key]: { ...t, messages: t.messages.slice(0, idx) } } });
           if (key === LIBRARY_KEY)
             void get().askLibrary({
-              prompt: lastUser.tool ? '' : lastUser.content,
+              prompt: lastUser.tool ? (lastUser.focus ?? '') : lastUser.content,
               scope: lastUser.scope ?? { kind: 'all' },
               scopeLabel: lastUser.scopeLabel,
               tool: lastUser.tool,
