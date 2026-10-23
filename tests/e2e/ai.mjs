@@ -105,6 +105,16 @@ check(/squeeze|squeezed|g\(x\)/i.test(answer), 'library answer drawn from the ca
 check(await page.locator('.library .sources .source').count(), 'sources listed under the answer');
 const chips = (await page.locator('.library .lib-dock .study-tool').allTextContents()).map((t) => t.trim()).join(' · ');
 check(chips === 'Summarize · Study guide · Key terms · Flashcards · Quiz me', `the study tools stay under the composer during a conversation (${chips})`);
+// The docked composer grows with what's typed (up to a cap), so a long question stays readable.
+const box = page.locator('.library-composer textarea');
+await box.click();
+for (let i = 1; i <= 5; i++) {
+  await page.keyboard.type(`line ${i} of a long question`);
+  if (i < 5) await page.keyboard.press('Shift+Enter');
+}
+const grown = await box.evaluate((el) => ({ box: el.clientHeight, text: el.scrollHeight }));
+check(grown.box > 120 && grown.text - grown.box < 4, `the docked composer grows to fit five lines (${grown.box}px for ${grown.text}px of text)`);
+await box.fill('');
 await page.locator('.library .msg.is-bot .cite').first().click();
 await page.waitForSelector('.cite-preview');
 await shot(page, 'ai-06-library-cited');
