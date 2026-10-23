@@ -312,9 +312,10 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       const inField = !!target.closest?.('input, textarea, select, [contenteditable="true"]');
       if (e.altKey && !e.metaKey && !e.ctrlKey && TOOL_KEYS[e.code]) {
         // The title is part of the note: a new note's caret starts there, and ⌥P must still pick up the marker
-        // (and never type a π into the title).
+        // (and never type a π into the title). ⌥E there stays the accent key, for titles like "Lección 3".
         const inTitle = !!target.closest?.('.page-title');
         if (inField && !inTitle && !target.closest('.ProseMirror')) return;
+        if (inTitle && e.key === 'Dead') return;
         e.preventDefault();
         const next = TOOL_KEYS[e.code];
         useTools.getState().setTool(next);
