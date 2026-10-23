@@ -150,6 +150,52 @@
   color: var(--outline-variant);
 }
 
+/* A new note's paper, still open to change: one quiet line under the title. */
+.paper-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+  transition:
+    opacity var(--dur) var(--ease),
+    visibility 0s linear var(--dur);
+}
+.paper-strip.is-spent {
+  opacity: 0;
+  visibility: hidden;
+}
+.paper-picker.is-strip {
+  gap: 2px;
+}
+.paper-picker.is-strip .paper-opt {
+  flex-direction: row;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  border-radius: var(--radius-s);
+  font-size: 12px;
+  line-height: 16px;
+}
+.paper-picker.is-strip .paper-thumb {
+  width: 14px;
+  height: 18px;
+  border-radius: 2px;
+  --step: 3px;
+}
+.paper-picker.is-strip .paper-thumb.is-ruled {
+  --step: 4px;
+  background-position: 0 4px;
+}
+.paper-picker.is-strip .paper-opt.is-active {
+  background: var(--bg-active);
+}
+.paper-picker.is-strip .paper-opt.is-active .paper-thumb {
+  outline: none;
+}
+
 /* Hashtags are text (Apple Notes), not pills; "+ Add tag" shows while the header is hovered. */
 .page-tags {
   display: flex;
@@ -1386,26 +1432,6 @@
   font-weight: 500;
   color: var(--text);
   margin-bottom: 12px;
-}
-.pp-sub {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-3);
-}
-.pp-sep {
-  height: 1px;
-  background: var(--border);
-  margin: 16px -16px;
-}
-.seg.pp-seg {
-  display: flex;
-}
-.pp-seg button {
-  flex: 1 1 auto;
-  height: 32px;
-  min-width: 0;
-  padding: 0 10px;
-  font-size: 13px;
 }
 /* ⋯ More */
 .more-menu {

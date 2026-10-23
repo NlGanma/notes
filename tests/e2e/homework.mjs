@@ -294,10 +294,26 @@ check(
   }, pickedPaper),
   '…and Enter makes a note on that paper',
 );
+check(!(await page.locator(`${V} .paper-strip`).count()), 'a note made from a paper in the menu does not offer the paper again');
 await page.click('.sidebar .side-new');
 await page.waitForFunction(() => document.activeElement?.closest('.new-note-pop'));
 await page.keyboard.press('Escape');
 check(await page.evaluate(() => !document.querySelector('.new-note-pop') && !!document.activeElement?.classList.contains('side-new')), 'Esc closes it and gives the focus back to New note');
+
+// ⌘N takes the last paper and offers the choice under the title until something goes in the body.
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForSelector(`${V} .paper-strip:not(.is-spent)`);
+check(true, '⌘N offers the paper under the new note’s title');
+await page.click(`${V} .paper-strip .paper-opt[data-paper="grid"]`);
+check((await page.locator(`${V} .page.paper-grid`).count()) === 1, '…picking Squared there switches the page');
+check(await page.evaluate(() => JSON.parse(localStorage.getItem('nib.settings') || '{}').state?.paper === 'grid'), '…and the next note starts on it too');
+const titleTop = await page.locator(`${V} .surface`).evaluate((el) => el.getBoundingClientRect().top);
+await page.locator(`${V} .page-title`).press('Enter');
+await page.keyboard.type('Limits');
+await page.waitForSelector(`${V} .paper-strip.is-spent`);
+const bodyTop = await page.locator(`${V} .surface`).evaluate((el) => el.getBoundingClientRect().top);
+check(Math.abs(bodyTop - titleTop) < 1, 'the first words put the paper choice away without moving the page');
 
 // ---------------------------------------------------------------- renaming a class keeps links
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');

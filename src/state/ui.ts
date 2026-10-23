@@ -192,8 +192,10 @@ export const useUI = create<UIState>()(
 );
 
 // Remember the last tab used and the last page that wasn't a note, whichever way the view changed.
+// A new note's paper choice goes once the note is left.
 useUI.subscribe((s, prev) => {
   if (s.view === prev.view) return;
+  if (s.paperStrip && !(s.view.kind === 'note' && s.view.id === s.paperStrip)) useUI.setState({ paperStrip: null });
   if (s.view.kind === 'note') {
     if (s.lastTab !== s.view.id) useUI.setState({ lastTab: s.view.id });
   } else useUI.setState({ lastPage: s.view });

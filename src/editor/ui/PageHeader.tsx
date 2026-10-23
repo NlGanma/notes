@@ -9,7 +9,9 @@ import { cx } from '../../lib/util';
 import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, themeVars } from '../../lib/classes';
 import { HomeworkBar } from './HomeworkBar';
 import { displayTitle, isDateTitle } from '../../lib/displayTitle';
-
+import { PaperPicker } from '../../components/PaperPicker';
+import { normalizePaper, type Paper } from '../../lib/paper';
+import { useSettings } from '../../state/settings';
 
 /**
  * Moves the caret from the title into the note body — synchronously, so fast
@@ -24,6 +26,41 @@ function focusBody(editor: Editor, newLine: boolean) {
   tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
   editor.view.dispatch(tr.scrollIntoView());
   editor.view.focus();
+}
+
+/** True while the body holds nothing at all: one empty line. */
+function blankBody(editor: Editor) {
+  const doc = editor.state.doc;
+  return doc.childCount === 1 && doc.firstChild!.type.name === 'paragraph' && doc.firstChild!.content.size === 0;
+}
+
+/**
+ * A note made without picking a paper (⌘N, the palette, a menu's New note) offers the choice under its
+ * title until something goes in the body: typing, a stroke, a paste or a drop. Then it fades but keeps its
+ * room until the note is left, so a pen already writing never sees the page jump.
+ */
+function PaperStrip({ note, editor }: { note: NoteDoc; editor: Editor }) {
+  const [spent, setSpent] = useState(() => !blankBody(editor));
+  useEffect(() => {
+    if (spent) return;
+    const onUpdate = () => !blankBody(editor) && setSpent(true);
+    editor.on('update', onUpdate);
+    return () => {
+      editor.off('update', onUpdate);
+    };
+  }, [editor, spent]);
+  // Picking here is a creation pick: the next note starts on it too.
+  const pick = (paper: Paper) => {
+    useVault.getState().updateMeta(note.meta.id, { paper, updated: note.meta.updated });
+    useSettings.getState().set({ paper });
+  };
+  return (
+    // Spent, it is visibility: hidden — out of the tab order and out of reach, but still holding its room.
+    <div className={cx('paper-strip', spent && 'is-spent')}>
+      <span className="paper-strip-label">Paper</span>
+      <PaperPicker value={normalizePaper(note.meta.paper)} onChange={pick} size="s" className="is-strip" />
+    </div>
+  );
 }
 
 /** Apple Notes' date line: "Today at 2:14 PM", "Yesterday at 9:03 AM", else the full date. */
@@ -45,6 +82,7 @@ export function editedAt(ts: number, now = Date.now()): string {
 export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) {
   const updateMeta = useVault((s) => s.updateMeta);
   const focusTitle = useUI((s) => s.focusTitle);
+  const strip = useUI((s) => s.paperStrip === note.meta.id);
   const [title, setTitle] = useState(note.meta.title);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const folderMeta = useVault((s) => s.folderMeta);
@@ -156,6 +194,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
       ) : (
         titleEl
       )}
+      {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       {note.meta.homework && <HomeworkBar note={note} />}
     </header>
   );

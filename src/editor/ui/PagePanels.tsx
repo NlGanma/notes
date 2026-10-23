@@ -3,11 +3,9 @@ import { ArrowLeft, Check, ChevronRight, Code2, Copy, Download, FileDown, FileJs
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
-import { useSettings, type LineSpacing } from '../../state/settings';
 import { normalizePaper, PAPERS, type Paper } from '../../lib/paper';
 import { PaperPicker } from '../../components/PaperPicker';
 import { PolishPanel } from '../../components/PolishPanel';
-import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
 import { HOMEWORK_SUBFOLDER, listClasses } from '../../lib/classes';
 import { ClassBadge } from '../../components/classes/ClassIcon';
@@ -16,33 +14,14 @@ import { newClass } from '../../lib/commands';
 
 export { PAPERS };
 
-const SPACINGS: [LineSpacing, string][] = [
-  ['compact', 'Compact'],
-  ['comfortable', 'Comfortable'],
-  ['roomy', 'Roomy'],
-];
-
-/** The toolbar's Paper popover: the three papers, then line spacing. */
+/** The toolbar's Paper popover: the three papers. (Line spacing is for all notes, so it lives in Settings.) */
 export function PaperPanel({ note }: { note: NoteDoc }) {
-  const settings = useSettings();
   const paper = normalizePaper(note.meta.paper);
   const setPaper = (p: Paper) => useVault.getState().updateMeta(note.meta.id, { paper: p, updated: note.meta.updated });
   return (
     <div className="paper-panel">
       <div className="pp-title">Paper</div>
       <PaperPicker value={paper} onChange={setPaper} size="m" />
-      <div className="pp-sep" />
-      <div className="pp-title">
-        Line spacing <span className="pp-sub">All notes</span>
-      </div>
-      <div className="seg pp-seg">
-        {SPACINGS.map(([v, label]) => (
-          <button key={v} className={cx(settings.lineSpacing === v && 'is-active')} onClick={() => settings.set({ lineSpacing: v })}>
-            {settings.lineSpacing === v && <Check size={16} />}
-            {label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
