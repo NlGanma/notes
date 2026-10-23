@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Paper } from '../lib/paper';
+import { migrateSettings, SETTINGS_VERSION } from './migrate';
 
-export type Paper = 'blank' | 'ruled' | 'grid' | 'dots' | 'legal';
+export type { Paper };
 export type FontChoice = 'sans' | 'serif' | 'mono';
 export type PageSize = 'letter' | 'a4';
 export type LineSpacing = 'compact' | 'comfortable' | 'roomy';
@@ -10,6 +12,7 @@ export const LINE_PX: Record<LineSpacing, number> = { compact: 28, comfortable: 
 export const PAGE_WIDTH: Record<PageSize, number> = { letter: 816, a4: 794 };
 
 export interface WritingSettings {
+  /** The paper last picked when making a note: the next one starts on it. There is no separate default. */
   paper: Paper;
   font: FontChoice;
   pageSize: PageSize;
@@ -33,6 +36,6 @@ export const useSettings = create<WritingSettings>()(
       spellcheck: true,
       set: (p) => set(p),
     }),
-    { name: 'nib.settings' },
+    { name: 'nib.settings', version: SETTINGS_VERSION, migrate: (s, v) => migrateSettings(s, v) as unknown as WritingSettings },
   ),
 );

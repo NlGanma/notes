@@ -16,6 +16,7 @@ import { captureInlineSketch, startTypingFromInk } from './ink/typeFlow';
 import { findBlock, inkOf, removeStrokes, replaceBlockWith, setTranscript } from './ink/ops';
 import { useVault } from '../state/vault';
 import { LINE_PX, PAGE_WIDTH, useSettings } from '../state/settings';
+import { normalizePaper } from '../lib/paper';
 import { useTools } from '../state/tools';
 import { useUI } from '../state/ui';
 import { useAI, visionModel } from '../state/ai';
@@ -58,7 +59,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
   const zoom = useUI((s) => s.zoom);
   const line = LINE_PX[settings.lineSpacing];
   const pageWidth = PAGE_WIDTH[settings.pageSize];
-  const paper = note?.meta.paper ?? settings.paper;
+  const paper = normalizePaper(note?.meta.paper);
   const tool = useTools((s) => s.tool);
 
   const scrollRef = useRef<HTMLDivElement>(null);

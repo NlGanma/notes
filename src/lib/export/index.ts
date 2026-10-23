@@ -8,6 +8,8 @@ import { docToMarkdown } from '../doc/toMarkdown';
 import { serializeNote } from '../vault/types';
 import { escapeHtml, nextFrame, sanitizeFileName } from '../util';
 import { toast } from '../../components/common/toast';
+import { displayTitle } from '../displayTitle';
+import { normalizePaper } from '../paper';
 import docCss from '../../styles/doc.css?raw';
 
 const exportCss = `${docCss}
@@ -61,11 +63,12 @@ function pageHTML(title: string, bodyHTML: string, paper: string, line: number) 
 export async function exportNote(id: string, kind: ExportKind) {
   const { note, content, pads } = liveContent(id);
   if (!note) return;
-  const title = note.meta.title || 'Untitled';
+  // An untitled note exports under the name it goes by in the app.
+  const title = displayTitle(note);
   const name = sanitizeFileName(title);
   const settings = useSettings.getState();
   // Without measured padding the lines could drift from the text, so fall back to blank paper.
-  const paper = pads ? (note.meta.paper ?? settings.paper) : 'blank';
+  const paper = pads ? normalizePaper(note.meta.paper) : 'blank';
   const line = LINE_PX[settings.lineSpacing];
   try {
     if (kind === 'md') return await saveText(`${name}.md`, docToMarkdown(title, content), 'text/markdown', 'md', 'Markdown');

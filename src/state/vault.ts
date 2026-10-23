@@ -6,6 +6,7 @@ import { createFsVault } from '../lib/vault/fs';
 import { EMPTY_DOC, type FolderMeta, type NoteDoc, type NoteMeta, type VaultBackend } from '../lib/vault/types';
 import { sanitizeFolderName, uid } from '../lib/util';
 import { normalizeDocJSON } from '../editor/extensions/blockAttrs';
+import { normalizePaper, type Paper } from '../lib/paper';
 import { useSettings } from './settings';
 import { useUI } from './ui';
 
@@ -22,7 +23,7 @@ export interface VaultState {
   /** Bumped whenever note content changes (for search / index invalidation). */
   revision: number;
   init(root?: string): Promise<void>;
-  createNote(opts?: { folder?: string; title?: string; content?: JSONContent; tags?: string[]; generated?: boolean }): NoteDoc;
+  createNote(opts?: { folder?: string; title?: string; content?: JSONContent; tags?: string[]; generated?: boolean; paper?: Paper }): NoteDoc;
   updateContent(id: string, content: JSONContent): void;
   updateMeta(id: string, patch: Partial<NoteMeta>): void;
   duplicateNote(id: string): NoteDoc | null;
@@ -126,7 +127,7 @@ export const useVault = create<VaultState>((set, get) => {
           tags: opts.tags ?? [],
           created: now,
           updated: now,
-          paper: useSettings.getState().paper,
+          paper: opts.paper ?? normalizePaper(useSettings.getState().paper),
           ...(opts.generated ? { generated: true } : {}),
         },
         content: normalizeDocJSON(structuredClone(opts.content ?? EMPTY_DOC) as never),
@@ -150,10 +151,12 @@ export const useVault = create<VaultState>((set, get) => {
       if (!src) return null;
       const copy = get().createNote({
         folder: src.meta.folder,
-        title: `${src.meta.title || 'Untitled'} copy`,
+        // An untitled note's copy stays untitled: it goes by the same first line.
+        title: src.meta.title ? `${src.meta.title} copy` : '',
         content: structuredClone(src.content),
         tags: [...src.meta.tags],
         generated: src.meta.generated,
+        paper: normalizePaper(src.meta.paper),
       });
       // A copy of homework is homework too — otherwise it would count as class notes and be cited as a source.
       if (src.meta.homework) get().updateMeta(copy.meta.id, { homework: structuredClone(src.meta.homework) });
@@ -324,18 +327,25 @@ export const useVault = create<VaultState>((set, get) => {
       const notes: Record<string, NoteDoc> = {};
       for (const n of snap.notes) {
         normalizeDocJSON(n.content as never);
-        notes[n.meta.id] = n;
+        // The browser vault stores notes as they were, without parseNoteFile: give old ones one of the three papers here too.
+        const paper = normalizePaper(n.meta.paper);
+        notes[n.meta.id] = paper === n.meta.paper ? n : { ...n, meta: { ...n.meta, paper } };
       }
       // Folders that exist: on disk, or implied by a live note. Trashed notes remember their old folder,
       // but that must not resurrect a deleted folder (restoring the note brings it back).
       const folders = [...new Set([...snap.folders, ...snap.notes.filter((n) => !n.meta.trashed).flatMap((n) => parentsOf(n.meta.folder))])].sort();
       // Details of folders that no longer exist (deleted outside Nib) are dropped. A class that an older
       // version let you nest inside another folder becomes a plain folder again, but keeps its details
-      // (code, teacher…) so "Make this a class" brings them back.
+      // (code, teacher…) so "Make this a class" brings them back. Archiving is gone: an archived class
+      // is an ordinary class again.
       const folderMeta = Object.fromEntries(
         Object.entries(snap.folderMeta ?? {})
           .filter(([k, m]) => folders.includes(k) && m && typeof m === 'object')
-          .map(([k, m]) => [k, m.kind === 'class' && k.includes('/') ? { ...m, kind: undefined } : m]),
+          .map(([k, m]) => {
+            const { archived: _a, ...rest } = m;
+            void _a;
+            return [k, m.kind === 'class' && k.includes('/') ? { ...rest, kind: undefined } : rest];
+          }),
       );
       set({ backend, notes, folders, folderMeta, ready: true, error: null, revision: get().revision + 1 });
       // Write the cleaned-up details back, so leftovers from deleted folders don't linger in folders.json.

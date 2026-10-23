@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import type { Paper } from '../../state/settings';
+import { normalizePaper, type Paper } from '../paper';
 import { isSafeColor, sanitizeDoc } from './sanitize';
 
 export interface NoteMeta {
@@ -13,6 +13,7 @@ export interface NoteMeta {
   pinned?: boolean;
   /** Set when the note is in the trash (timestamp). */
   trashed?: number;
+  /** Every note loaded or made has one (see normalizePaper); optional only for drafts that aren't notes yet. */
   paper?: Paper;
   /** Accent colour for the notebook card. */
   color?: string;
@@ -97,7 +98,7 @@ export function parseNoteFile(text: string): NoteDoc | null {
         updated: Number(meta.updated) || Date.now(),
         pinned: !!meta.pinned,
         trashed: meta.trashed ? Number(meta.trashed) : undefined,
-        paper: (['blank', 'ruled', 'legal', 'grid', 'dots'] as const).includes(meta.paper as never) ? meta.paper : undefined,
+        paper: normalizePaper(meta.paper),
         color: isSafeColor(meta.color) ? meta.color : undefined,
         homework:
           meta.homework && typeof meta.homework === 'object'

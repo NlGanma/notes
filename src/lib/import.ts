@@ -147,10 +147,9 @@ export async function pickFiles(opts: { accept?: string[]; multiple?: boolean; t
   });
 }
 
-export async function importFiles(files?: InFile[]) {
+export async function importFiles(files?: InFile[], folder = currentFolder()) {
   const list = files ?? (await pickFiles());
   if (!list.length) return;
-  const folder = currentFolder();
   let last: string | null = null;
   let ok = 0;
   for (const f of list) {
