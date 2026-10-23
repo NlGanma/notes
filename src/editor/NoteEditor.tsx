@@ -324,7 +324,9 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       }
       const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What Nib read';
       if (texts.length) attachments.push({ kind: 'text', label: textLabel, text: texts.join('\n\n') });
-      return attachments;
+      // (carried by the chips, so a question sent later from the panel is still about this part of the page)
+      const anchor = req.blockIds[req.blockIds.length - 1] ?? req.place;
+      return anchor ? attachments.map((a) => ({ ...a, anchor })) : attachments;
     },
     [editor],
   );
@@ -336,23 +338,24 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         toast.info('Nothing to ask about', 'Select some handwriting or drag a box over part of the page.');
         return;
       }
-      assistantAsk({ prompt: req.prompt, mode: req.mode, attachments, anchor: req.blockIds[req.blockIds.length - 1] });
+      assistantAsk({ prompt: req.prompt, mode: req.mode, attachments, anchor: req.blockIds[req.blockIds.length - 1] ?? req.place });
     },
     [inkAttachments, assistantAsk],
   );
 
   /**
-   * The assistant is open: what the Select box caught goes into its composer, which takes the keyboard. One
-   * part of the page at a time: a new box (or "Ask about this…") replaces what the last one put there.
+   * The assistant is open: what the Select box caught goes into its composer, which takes the keyboard unless
+   * the box caught ink. One part of the page at a time: a new box (or "Ask about this…") replaces what the last
+   * one put there.
    */
   const onInkAttach = useCallback(
-    (req: Omit<InkAskRequest, 'mode' | 'prompt'>) => {
+    (req: Omit<InkAskRequest, 'mode' | 'prompt'>, opts?: { focus?: boolean }) => {
       const attachments = inkAttachments(req);
       if (!attachments.length) return;
       const a = useAssistant.getState();
       for (const old of a.draft(noteId).attachments) if (PAGE_PARTS.has(old.label)) a.detach(noteId, old.id);
       for (const att of attachments) a.attach(noteId, att);
-      a.focus();
+      if (opts?.focus !== false) a.focus();
     },
     [inkAttachments, noteId],
   );

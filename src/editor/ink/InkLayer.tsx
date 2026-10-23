@@ -113,6 +113,8 @@ export interface InkAskRequest {
   label: string;
   /** Sent as it is in place of the blocks' text: an equation inside a quote or list (`blockIds` then only places the reply). */
   text?: string;
+  /** Where the reply goes when the box covers no block (blank lines under a paragraph): placement only, no text. */
+  place?: string;
 }
 
 export interface InkLayerHandle {
@@ -132,8 +134,11 @@ interface Props {
   line: number;
   session: React.MutableRefObject<InkSession>;
   onAsk(req: InkAskRequest): void;
-  /** The assistant panel is open: put what was captured in its composer instead of asking at once. */
-  onAttach(req: Omit<InkAskRequest, 'mode' | 'prompt'>): void;
+  /**
+   * The assistant panel is open: put what was captured in its composer instead of asking at once. `focus: false`
+   * leaves the keyboard with caught ink, so ⌫, ⌘C and the arrows still act on it.
+   */
+  onAttach(req: Omit<InkAskRequest, 'mode' | 'prompt'>, opts?: { focus?: boolean }): void;
   onConvert(req: { to: 'text' | 'math'; strokes: Stroke[]; selection: SelectionItem[] }): void;
   captureRegion(clientRect: DOMRect): Promise<string | null>;
 }
@@ -544,8 +549,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
   async function capture(region: Bounds): Promise<Omit<InkAskRequest, 'mode' | 'prompt'>> {
     const strokes: Stroke[] = [];
     const blockIds: string[] = [];
+    let place: string | undefined;
     for (const blk of layoutRef.current.blocks) {
       if (blk.zoneEnd < region.minY || blk.top > region.maxY) continue;
+      place = blk.id;
       const before = strokes.length;
       for (const s of blk.ink) {
         const abs = translateStroke(s, 0, blk.top);
@@ -568,7 +575,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       image = null;
     }
     setCapturing(false);
-    return { image, strokes, blockIds, label: 'Area of the page' };
+    return { image, strokes, blockIds, place, label: 'Area of the page' };
   }
 
   /** With the assistant open, what is captured goes into its composer; otherwise a composer opens under it. */
@@ -673,10 +680,13 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       if (!sel) return;
       sel.area = prev?.area ? unionBounds([prev.area, r])! : r;
       setSelection(sel);
-      // With the assistant open, the box goes straight into its composer; the ink stays selected.
+      // With the assistant open, the box goes into its composer too, but the keyboard stays with the ink, which
+      // stays selected: boxing ink is as often to move or delete it as to ask about it.
       if (useUI.getState().assistant) {
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest('textarea, input')) active.blur();
         const frame = selectionFrame(sel.bounds, 1 / s).frame;
-        void capture(unionBounds([sel.area, frame])!).then((req) => propsRef.current.onAttach(req));
+        void capture(unionBounds([sel.area, frame])!).then((req) => propsRef.current.onAttach(req, { focus: false }));
       }
       return;
     }
