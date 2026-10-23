@@ -134,6 +134,7 @@ check(await page.locator(`${V} .ProseMirror img`).count(), 'the PDF page is in t
 const alt = await page.locator(`${V} .ProseMirror img`).first().getAttribute('alt');
 check(/nucleophile/.test(alt ?? ''), 'the PDF text layer is kept for the assistant');
 check(/All Organic Chemistry notes/.test(await page.textContent(`${V} .hw-source-chip`)), 'homework uses the class notes as its sources by default');
+check(/answers only from these notes/.test(await page.textContent(`${V} .hw-work-note`)), 'under its sources the homework says the assistant answers only from them');
 await shot(page, 'hw-01-pdf-homework');
 await showSidebar(page);
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
@@ -171,6 +172,22 @@ await page.click('.hw-dialog .hw-create');
 await page.waitForSelector(`${V} .hw-bar`);
 await page.waitForFunction((v) => /Problem Set 5/.test(document.querySelector(`${v} .ProseMirror img`)?.getAttribute('alt') ?? ''), V, { timeout: 15000 });
 check(true, 'a photographed worksheet is read by the vision model');
+// A page nobody has read yet: the worksheet chip offers to read it.
+await page.evaluate((v) => {
+  const ed = document.querySelector(`${v} .ProseMirror`).editor;
+  ed.commands.command(({ tr }) => {
+    tr.doc.descendants((n, pos) => {
+      if (n.type.name === 'image') tr.setNodeMarkup(pos, undefined, { ...n.attrs, alt: '' });
+    });
+    return true;
+  });
+}, V);
+await page.waitForSelector(`${V} .hw-read`);
+check(/^Read 1 page$/.test((await page.textContent(`${V} .hw-read`)).trim()), 'an unread worksheet page shows Read 1 page beside the worksheet');
+await page.click(`${V} .hw-read`);
+await page.waitForSelector('.toast:has-text("Pages read")', { timeout: 15000 });
+await page.waitForSelector(`${V} .hw-read`, { state: 'detached' });
+check(/Problem Set 5/.test((await page.locator(`${V} .ProseMirror img`).first().getAttribute('alt')) ?? ''), '…and reading it puts the questions where the assistant can see them');
 await page.click('.nav-item:has-text("Homework")');
 await page.waitForSelector('.homework-view');
 check((await page.locator('.hw-row-item').count()) === 3, 'the Homework page lists all three assignments');
@@ -255,6 +272,7 @@ check(await page.locator(`${V} .callout[data-variant="outside"]`).count(), 'inse
 // ---------------------------------------------------------------- linking notes
 await page.click(`${V} .hw-source-chip button[aria-label^="Remove"]`);
 await page.waitForSelector(`${V} .hw-no-sources`);
+check(/Link notes so the assistant can answer from them/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar asks for linked notes');
 check(await page.locator(`${V} .hw-suggest:has-text("Lecture 4")`).count(), 'with nothing linked, Lecture 4 is suggested');
 await page.click('.assistant .icon-btn[title="New conversation"]');
 await page.click('.starter:has-text("Give me a hint")');
