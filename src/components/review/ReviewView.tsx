@@ -89,7 +89,8 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   useEffect(() => {
     const el = startRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setStartInView(e.isIntersecting));
+    // Half hidden counts as hidden: the bar stands in until all of Start shows.
+    const io = new IntersectionObserver(([e]) => setStartInView(e.intersectionRatio > 0.99), { threshold: [0, 1] });
     io.observe(el);
     return () => io.disconnect();
   }, [tree.length]);
