@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useUI } from '../../state/ui';
@@ -45,7 +45,8 @@ export function ClassDialog() {
   const [iconTouched, setIconTouched] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Before the first paint, so the dialog never shows (or saves) the last class's name for a moment.
+  useLayoutEffect(() => {
     if (!open) return;
     setName(existing?.name ?? '');
     setColor(existing ? null : CLASS_COLORS[classCount % CLASS_COLORS.length]);
@@ -122,7 +123,8 @@ export function ClassDialog() {
               value={name}
               autoFocus
               maxLength={100}
-              placeholder="Untitled class"
+              // Cleared in Edit class, the field shows the name Save keeps.
+              placeholder={existing?.name ?? 'Untitled class'}
               aria-label="Class name"
               spellCheck={false}
               onChange={(e) => setName(e.target.value)}

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, Folder, Search, X } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useVault } from '../../state/vault';
@@ -90,7 +90,8 @@ export function NotePicker({
   );
   const suggestions = useMemo(() => (open && query ? suggestSources(query, notes, 8, classPath) : []), [open, query, notes, classPath]);
 
-  useEffect(() => {
+  // Before the first paint, so the last pick's ticks never show for a moment.
+  useLayoutEffect(() => {
     if (!open) return;
     setSources(new Set(initial.sources));
     setFolders(new Set(initial.folders));
