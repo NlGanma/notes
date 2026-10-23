@@ -7,6 +7,7 @@ import type { InlineInkAttrs, Stroke } from '../../lib/ink/types';
 import { livePath, strokePath, strokeSvgAttrs } from '../../lib/ink/render';
 import { compactPoints, simplifyPoints, strokeBounds, translateStroke, unionBounds } from '../../lib/ink/geometry';
 import { useTools } from '../../state/tools';
+import { BRUSHES } from '../../lib/ink/brushes';
 import { cx, uid } from '../../lib/util';
 
 const W = 440;
@@ -71,7 +72,10 @@ export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClo
     setAnchor({ left: Math.max(12, Math.min(window.innerWidth - w - 12, r.left - 40)), top: Math.max(12, top) });
   }, [editor, pos]);
 
-  const penSize = Math.max(4.5, Math.min(14, tools.pen.size * 2.6));
+  // The pad is drawn big and shrunk into the line. The same felt marker, about 2.2× its width on the page, which
+  // is how thick sketches have always come out in the text.
+  const scale = BRUSHES.marker.sizeScale;
+  const penSize = Math.max(4.5, Math.min(14, tools.pen.size * scale * 2.2)) / scale;
   const color = matchText ? 'currentColor' : tools.pen.color;
 
   const local = (e: { clientX: number; clientY: number }) => {
@@ -85,7 +89,7 @@ export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClo
     const p = local(e);
     drawing.current = {
       id: uid('s'),
-      brush: tools.pen.brush === 'marker' ? 'ballpoint' : tools.pen.brush,
+      brush: 'marker',
       color,
       size: penSize,
       pts: [p.x, p.y, e.pointerType === 'pen' ? e.pressure : 0.5],

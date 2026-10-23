@@ -5,14 +5,12 @@ import type { Editor } from '@tiptap/core';
  * React tree of the note) can ask the note editor / assistant to do things.
  */
 export interface EditorEvents {
-  /** Ask the assistant about a handwriting area or inline sketch. */
-  'ink:ask': { editor: Editor; blockId: string; mode: 'explain' | 'tutor' };
   'ink:transcribe': { editor: Editor; blockId: string };
   'ink:convert': { editor: Editor; blockId: string; to: 'text' | 'math' };
   /** Open the inline ink pad, optionally editing an existing sketch at `pos`. */
   'inlineInk:open': { editor: Editor; pos?: number };
   'inlineInk:convert': { editor: Editor; pos: number };
-  'math:ask': { editor: Editor; latex: string; mode: 'explain' | 'tutor'; blockId?: string };
+  /** "Ask about this…" on a handwriting area or an equation: the Ask composer opens under it. */
   'block:ask': { editor: Editor; blockId: string };
 }
 

@@ -101,7 +101,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
           if (event.key === 'Escape' && !event.defaultPrevented) {
             const t = useTools.getState();
             if (session.current.lastAt > 0) {
-              t.setTool(t.lastInkTool === 'ask' ? 'pen' : t.lastInkTool);
+              t.setTool(t.lastInkTool);
               (editor?.view.dom as HTMLElement | undefined)?.blur();
               return true;
             }
@@ -295,9 +295,10 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     [noteId],
   );
 
-  const onInkAsk = useCallback(
-    (req: InkAskRequest) => {
-      if (!editor) return;
+  /** What the assistant is given about ink or part of the page: a picture, and the text of the blocks involved. */
+  const inkAttachments = useCallback(
+    (req: Omit<InkAskRequest, 'mode' | 'prompt'>): Omit<Attachment, 'id'>[] => {
+      if (!editor) return [];
       const doc = editor.state.doc;
       const attachments: Omit<Attachment, 'id'>[] = [];
       const isArea = req.label === 'Area of the page';
@@ -318,15 +319,35 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         const t = f.node.type.name === 'inkBlock' ? inkTranscriptText(f.node.attrs.transcript as InkTranscript) : blockToText(json);
         if (t?.trim()) texts.push(t);
       }
-      if (texts.length) attachments.push({ kind: 'text', label: isArea ? 'Text in that area' : 'What Nib read', text: texts.join('\n\n') });
+      const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What Nib read';
+      if (texts.length) attachments.push({ kind: 'text', label: textLabel, text: texts.join('\n\n') });
+      return attachments;
+    },
+    [editor],
+  );
+
+  const onInkAsk = useCallback(
+    (req: InkAskRequest) => {
+      const attachments = inkAttachments(req);
       if (!attachments.length) {
-        toast.info('Nothing to ask about', 'Select some handwriting or drag over part of the page.');
+        toast.info('Nothing to ask about', 'Select some handwriting or drag a box over part of the page.');
         return;
       }
       assistantAsk({ prompt: req.prompt, mode: req.mode, attachments, anchor: req.blockIds[req.blockIds.length - 1] });
-      if (req.label === 'Area of the page') useTools.getState().setTool(useTools.getState().lastInkTool);
     },
-    [editor, assistantAsk],
+    [inkAttachments, assistantAsk],
+  );
+
+  /** The assistant is open: what the Select box caught goes into its composer, which takes the keyboard. */
+  const onInkAttach = useCallback(
+    (req: Omit<InkAskRequest, 'mode' | 'prompt'>) => {
+      const attachments = inkAttachments(req);
+      if (!attachments.length) return;
+      const a = useAssistant.getState();
+      for (const att of attachments) a.attach(noteId, att);
+      a.focus();
+    },
+    [inkAttachments, noteId],
   );
 
   const blockStrokesAbs = (blockId: string): Stroke[] => {
@@ -399,10 +420,9 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
   useEffect(() => {
     if (!editor) return;
     const offs = [
-      editorBus.on('ink:ask', ({ editor: ed, blockId, mode }) => {
+      editorBus.on('block:ask', ({ editor: ed, blockId }) => {
         if (ed !== editor) return;
-        const strokes = blockStrokesAbs(blockId);
-        onInkAsk({ mode, strokes, blockIds: [blockId], label: 'Handwriting', image: rasterizeStrokes(strokes) });
+        inkRef.current?.askAbout(blockId);
       }),
       editorBus.on('ink:transcribe', async ({ editor: ed, blockId }) => {
         if (ed !== editor) return;
@@ -426,10 +446,6 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       editorBus.on('inlineInk:open', ({ editor: ed, pos }) => {
         if (ed !== editor) return;
         setPad({ editor, pos });
-      }),
-      editorBus.on('math:ask', ({ editor: ed, latex, mode, blockId }) => {
-        if (ed !== editor) return;
-        assistantAsk({ mode, attachments: [{ kind: 'text', label: 'Equation', text: `$$${latex}$$` }], anchor: blockId });
       }),
     ];
     return () => offs.forEach((off) => off());
@@ -493,8 +509,11 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
   return (
     <div className={cx('note-view', !active && 'is-hidden')} data-note={noteId}>
       <div className="note-scroll" ref={scrollRef}>
+        {/* The bar floats over the top of the page, its left edge on the page's. */}
         <div className="toolbar-dock">
-          <InkToolbar editor={editor} note={note} />
+          <div className="tb-lane" style={{ width: pageWidth * scale }}>
+            <InkToolbar editor={editor} note={note} />
+          </div>
         </div>
         <div className="page-scaler" style={{ width: pageWidth * scale, height: pageHeight * scale + 80 }}>
           <div
@@ -514,6 +533,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
                   line={line}
                   session={session}
                   onAsk={onInkAsk}
+                  onAttach={onInkAttach}
                   captureRegion={captureRegion}
                   onConvert={({ to, strokes, selection }) => {
                     const bb = unionBounds(strokes.map(strokeBounds));
