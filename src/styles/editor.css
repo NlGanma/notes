@@ -1274,6 +1274,14 @@
   color: var(--text-2);
   flex: none;
 }
+/* Ask opens its composer with choices: the same "Ask ▾" as the bubble over selected text. */
+.sel-btn.is-ask {
+  gap: 4px;
+  padding-right: 7px;
+}
+.sel-btn .sel-chev {
+  color: var(--text-3);
+}
 .sel-btn.icon {
   width: 32px;
   padding: 0;

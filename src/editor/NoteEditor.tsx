@@ -204,6 +204,11 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     return () => ro.disconnect();
   }, []);
 
+  // A note put away lets go of the keyboard, so the browser's own undo can never reach it from another page.
+  useEffect(() => {
+    if (!active && editor?.isFocused) (editor.view.dom as HTMLElement).blur();
+  }, [active, editor]);
+
   // Remember scroll position per note.
   useEffect(() => {
     const el = scrollRef.current;
@@ -263,18 +268,26 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       const target = e.target as HTMLElement;
       const inField = !!target.closest?.('input, textarea, select, [contenteditable="true"]');
       if (e.altKey && !e.metaKey && !e.ctrlKey && TOOL_KEYS[e.code]) {
-        if (inField && !target.closest('.ProseMirror')) return;
+        // The title is part of the note: a new note's caret starts there, and ⌥P must still pick up the marker
+        // (and never type a π into the title).
+        const inTitle = !!target.closest?.('.page-title');
+        if (inField && !inTitle && !target.closest('.ProseMirror')) return;
         e.preventDefault();
         const next = TOOL_KEYS[e.code];
         useTools.getState().setTool(next);
-        if (next === 'text') editor.commands.focus();
-        else (editor.view.dom as HTMLElement).blur();
+        if (next !== 'text') (document.activeElement as HTMLElement | null)?.blur();
+        else if (!inTitle) editor.commands.focus();
         return;
       }
       if (inField || e.metaKey || e.ctrlKey || e.altKey) return;
       if (document.querySelector('.modal-backdrop, .inkpad-backdrop, .popover, .context-menu')) return;
       const t = useTools.getState();
-      if (t.tool === 'text') return;
+      // "Just type" follows the marker and the highlighter only. Under Select, Space is for moving its box, even
+      // when held before the drag starts, so it never types or scrolls.
+      if (t.tool !== 'pen' && t.tool !== 'highlighter') {
+        if (t.tool === 'lasso' && e.key === ' ') e.preventDefault();
+        return;
+      }
       if (inkRef.current?.hasSelection()) return;
       const printable = e.key.length === 1;
       if (!printable && e.key !== 'Enter') return;

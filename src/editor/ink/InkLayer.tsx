@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import { Copy, CopyPlus, MessageCircleQuestion, Sigma, Trash2, Type } from 'lucide-react';
+import { ChevronDown, Copy, CopyPlus, MessageCircleQuestion, Sigma, Trash2, Type } from 'lucide-react';
 import type { Bounds, Stroke } from '../../lib/ink/types';
 import { livePath, strokePath, strokeSvgAttrs } from '../../lib/ink/render';
 import {
@@ -23,7 +23,6 @@ import { recognizeShape, straightenIfLinear } from '../../lib/ink/shapes';
 import { BRUSHES } from '../../lib/ink/brushes';
 import { useInkHint, useTools } from '../../state/tools';
 import { useUI } from '../../state/ui';
-import { isElectron } from '../../lib/platform';
 import { rhythmKey } from '../extensions/rhythm';
 import type { Transaction } from '@tiptap/pm/state';
 import { appendInkBlock, appendStrokes, applyInkEdits, gridCeil, inkOf, insertInkArea, removeInlineNode, removeStrokes } from './ops';
@@ -526,6 +525,13 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
 
   function selectedStrokesAbs(sel: Selection | null = selectionRef.current): Stroke[] {
     return placedOf(sel).map(({ stroke, top }) => translateStroke(stroke, 0, top));
+  }
+
+  /** The selection without its highlights: they mark what is written already, so reading them only repeats it. */
+  function writingOf(sel: Selection): Selection {
+    const lay = layoutRef.current;
+    const isHighlight = (it: SelectionItem) => lay.blocks.find((b) => b.id === it.blockId)?.ink.find((s) => s.id === it.strokeId)?.brush === 'highlighter';
+    return { ...sel, items: sel.items.filter((it) => !isHighlight(it)) };
   }
 
   /** The blob of handwriting under the point (a word, a symbol, a drawing), or null. */
@@ -1287,12 +1293,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       if (editor.isFocused) return;
       const sel = selectionRef.current;
       const mod = e.metaKey || e.ctrlKey;
-      // Redo after moving ink. (⌘Z already reaches the editor; in the Mac app the menu handles both.)
-      if (!isElectron && mod && !e.altKey && ((e.shiftKey && e.key.toLowerCase() === 'z') || (!e.shiftKey && e.key.toLowerCase() === 'y'))) {
-        e.preventDefault();
-        editor.commands.redo();
-        return;
-      }
+      // (⌘Z and ⇧⌘Z: lib/keys.ts in the browser, the menu in the Mac app.)
       if (mod && e.key.toLowerCase() === 'v' && clipboard?.length) {
         e.preventDefault();
         const b = unionBounds(clipboard.map(strokeBounds))!;
@@ -1880,8 +1881,12 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
           scale={scale || 1}
           count={selection.items.length}
           colors={highlighterOnly ? st.highlighterColors : st.penColors}
+          canConvert={!highlighterOnly}
           onAsk={askSelection}
-          onConvert={(to) => props.onConvert({ to, strokes: selectedStrokesAbs(), selection: selection.items })}
+          onConvert={(to) => {
+            const writing = writingOf(selection);
+            props.onConvert({ to, strokes: selectedStrokesAbs(writing), selection: writing.items });
+          }}
           onColor={(color) => editSelected((s) => ({ ...s, id: s.id, color }))}
           onDuplicate={() => duplicateSelection()}
           onCopy={() => {
@@ -1916,6 +1921,8 @@ function SelectionMenu(props: {
   scale: number;
   count: number;
   colors: string[];
+  /** False when only highlights are selected: there is no writing to turn into text. */
+  canConvert: boolean;
   onAsk(): void;
   onConvert(to: 'text' | 'math'): void;
   onColor(c: string): void;
@@ -1957,22 +1964,27 @@ function SelectionMenu(props: {
       style={{ left, top, transform: `translate(-50%, ${below ? '0' : '-100%'}) scale(${inv})`, transformOrigin: below ? '50% 0' : '50% 100%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button className="sel-btn is-ask" onClick={props.onAsk} disabled={!!unanswerable} title={unanswerable ?? 'Ask about this'}>
-        <MessageCircleQuestion size={15} />
+      <button className="sel-btn is-ask" onClick={props.onAsk} disabled={!!unanswerable} title={unanswerable ?? 'Ask about this'} aria-haspopup="dialog">
+        <MessageCircleQuestion size={16} />
         Ask
+        <ChevronDown size={12} className="sel-chev" />
       </button>
       <span className="sel-sep" />
-      <button className="sel-btn" onClick={() => props.onConvert('text')} title="Turn into typed text">
-        <Type size={15} />
-        Text
-      </button>
-      <button className="sel-btn" onClick={() => props.onConvert('math')} title="Turn into typeset math">
-        <Sigma size={15} />
-        Math
-      </button>
-      <span className="sel-sep" />
+      {props.canConvert && (
+        <>
+          <button className="sel-btn" onClick={() => props.onConvert('text')} title="Turn into typed text">
+            <Type size={15} />
+            Text
+          </button>
+          <button className="sel-btn" onClick={() => props.onConvert('math')} title="Turn into typeset math">
+            <Sigma size={15} />
+            Math
+          </button>
+          <span className="sel-sep" />
+        </>
+      )}
       {props.colors.map((c, i) => (
-        <button key={`${i}${c}`} className="sel-swatch" title="Recolour" aria-label={`Recolour ${i + 1}`} onClick={() => props.onColor(c)}>
+        <button key={`${i}${c}`} className="sel-swatch" title="Recolor" aria-label={`Recolor ${i + 1}`} onClick={() => props.onColor(c)}>
           <span style={{ background: c }} />
         </button>
       ))}

@@ -101,6 +101,13 @@ export function runCommand(cmd: string, arg?: string) {
   }
 }
 
+/** A field that keeps its own undo: text inputs, and a contenteditable on screen (a hidden note's is not). */
+function ownsUndo(el: Element | null): boolean {
+  if (!el) return false;
+  if (el.matches('textarea, input:not([type=checkbox], [type=radio], [type=range], [type=button], [type=submit], [type=color], [type=file])')) return true;
+  return (el as HTMLElement).isContentEditable && !el.closest('.is-hidden');
+}
+
 /**
  * Keyboard shortcuts. In the Mac app the native menu owns most accelerators
  * (so they are skipped here); the browser build handles them all.
@@ -128,6 +135,12 @@ export function handleGlobalKey(e: KeyboardEvent) {
     if (e.shiftKey) map['l'] = () => runCommand('library');
     if (e.shiftKey) map['y'] = () => runCommand('new-homework');
     if (e.shiftKey) map['e'] = () => runCommand('review');
+    // Undo is the open note's (its text and ink share one history). Left to the browser, ⌘Z would undo typing
+    // in whichever note was last edited, even one that isn't on screen.
+    if (!e.altKey && !ownsUndo(document.activeElement)) {
+      map['z'] = () => runCommand(e.shiftKey ? 'redo' : 'undo');
+      if (!e.shiftKey) map['y'] = () => runCommand('redo');
+    }
   }
   const fn = map[key];
   if (fn && !(key === 'l' && !e.shiftKey)) {
