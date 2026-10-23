@@ -126,6 +126,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 16px 24px 32px;
   user-select: text;
 }

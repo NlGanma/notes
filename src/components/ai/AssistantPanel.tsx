@@ -271,6 +271,8 @@ export function AssistantPanel() {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
+        // An attached picture that finishes loading makes the list taller after it was scrolled.
+        onLoadCapture={(e) => stick.current && (e.currentTarget.scrollTop = e.currentTarget.scrollHeight)}
       >
         {!messages.length && note && (
           <div className={cx('assistant-empty', isHomework && 'is-homework')}>

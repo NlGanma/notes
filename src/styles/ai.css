@@ -65,6 +65,8 @@
 .assistant-list {
   flex: 1;
   overflow-y: auto;
+  /* The panel keeps itself at the newest reply; the browser shifting it would read as "scrolled up". */
+  overflow-anchor: none;
   padding: 8px 16px 20px;
   display: flex;
   flex-direction: column;
