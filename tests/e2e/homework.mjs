@@ -287,8 +287,16 @@ check(await page.locator(`${V} .callout[data-variant="outside"]`).count(), 'inse
 
 // ---------------------------------------------------------------- linking notes
 await page.click(`${V} .hw-source-chip button[aria-label^="Remove"]`);
-await page.waitForSelector(`${V} .hw-no-sources`);
-check(/No notes linked yet/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar says none are linked');
+await page.waitForSelector(`${V} .hw-work-note:has-text("No notes linked yet")`);
+check(true, 'with no sources the line under the bar says none are linked');
+const muted = await page.evaluate((v) => {
+  const probe = document.body.appendChild(document.createElement('span'));
+  probe.style.color = 'var(--text-3)';
+  const want = getComputedStyle(probe).color;
+  probe.remove();
+  return getComputedStyle(document.querySelector(`${v} .hw-work-note`)).color === want;
+}, V);
+check(muted, '…in the muted line, as amber is kept for the AI’s own knowledge');
 check(/Link notes/.test(await page.textContent(`${V} .hw-link-btn`)) && !(await page.locator(`${V} .hw-meta-row .hw-link-btn`).count()), '…and the one button that links them sits at the end of the sources line');
 check(await page.locator(`${V} .hw-suggest:has-text("Lecture 4")`).count(), 'with nothing linked, Lecture 4 is suggested');
 await page.click('.assistant .icon-btn[title="New conversation"]');
