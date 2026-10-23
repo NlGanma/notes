@@ -10,8 +10,11 @@ export interface EditorEvents {
   /** Open the inline ink pad, optionally editing an existing sketch at `pos`. */
   'inlineInk:open': { editor: Editor; pos?: number };
   'inlineInk:convert': { editor: Editor; pos: number };
-  /** "Ask about this…" on a handwriting area or an equation: the Ask composer opens under it. */
-  'block:ask': { editor: Editor; blockId: string };
+  /**
+   * "Ask about this…" on a handwriting area or an equation: the Ask composer opens under it. `pos` finds an
+   * equation inside a quote, callout or list, which has no block id of its own.
+   */
+  'block:ask': { editor: Editor; blockId: string | null; pos?: number };
 }
 
 type Handler<T> = (payload: T) => void;

@@ -110,6 +110,8 @@ export interface InkAskRequest {
   strokes: Stroke[];
   blockIds: string[];
   label: string;
+  /** Sent as it is in place of the blocks' text: an equation inside a quote or list (`blockIds` then only places the reply). */
+  text?: string;
 }
 
 export interface InkLayerHandle {
@@ -118,8 +120,8 @@ export interface InkLayerHandle {
   hasSelection(): boolean;
   /** Turns the inline sketch at `pos` back into handwriting where it is, selected. */
   popOut(pos: number): void;
-  /** Opens the Ask composer under a handwriting area (its ⋯ menu). */
-  askAbout(blockId: string): void;
+  /** Opens the Ask composer under a handwriting area or an equation (their ⋯ menus). */
+  askAbout(blockId: string | null, pos?: number): void;
 }
 
 interface Props {
@@ -155,7 +157,8 @@ interface AskAt {
   region: Bounds | null;
   /** Draw `region` as a dashed frame (nothing was selected in it). */
   framed: boolean;
-  blockId?: string;
+  /** A handwriting area or an equation, asked about from its ⋯ menu. */
+  block?: { id: string | null; pos?: number; math: boolean };
 }
 
 type Pt = { x: number; y: number };
@@ -474,19 +477,15 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       (propsRef.current.editor.view.dom as HTMLElement).blur();
       place(out.strokes, new Set(), undefined, (tr) => removeInlineNode(tr, pos));
     },
-    askAbout: (blockId: string) => {
-      const b = layoutRef.current.blocks.find((x) => x.id === blockId);
-      if (!b) return;
+    askAbout: (blockId: string | null, pos?: number) => {
+      const found = blockAsk(blockId, pos);
+      if (!found) return;
       // The assistant is open: the question is typed there, not in a second composer on the page.
       if (useUI.getState().assistant) {
-        propsRef.current.onAttach(blockRequest(b));
+        propsRef.current.onAttach(found.req);
         return;
       }
-      // Under the writing itself; an equation (or an empty area) is as wide as the column.
-      const bb = unionBounds(b.ink.map(strokeBounds));
-      const width = wrapRef.current?.offsetWidth ?? 600;
-      const under = bb ? offsetBounds(bb, 0, b.top) : { minX: 0, minY: b.top, maxX: width, maxY: b.top + b.height };
-      setAsk({ under, region: null, framed: false, blockId });
+      setAsk({ under: found.under, region: null, framed: false, block: { id: blockId, pos, math: found.req.label === 'Equation' } });
     },
   }));
 
@@ -589,17 +588,42 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     void askRegion(region, { ...frame, maxY: frame.maxY + 5 * inv }, false);
   }
 
-  /** A handwriting area's ink, or an equation's text, as Ask sends it. */
-  function blockRequest(b: BlockBox): Omit<InkAskRequest, 'mode' | 'prompt'> {
-    const strokes = b.ink.map((s) => translateStroke(s, 0, b.top));
-    return { strokes, blockIds: [b.id], label: b.type === 'mathBlock' ? 'Equation' : 'Handwriting' };
+  /**
+   * A handwriting area's ink, or an equation's text, as Ask sends it, and where the composer goes: under the
+   * writing itself, or the width of the column for an equation.
+   */
+  function blockAsk(blockId: string | null, pos?: number): { req: Omit<InkAskRequest, 'mode' | 'prompt'>; under: Bounds } | null {
+    const width = wrapRef.current?.offsetWidth ?? 600;
+    const b = blockId ? layoutRef.current.blocks.find((x) => x.id === blockId) : undefined;
+    if (b) {
+      const strokes = b.ink.map((s) => translateStroke(s, 0, b.top));
+      const bb = unionBounds(b.ink.map(strokeBounds));
+      const under = bb ? offsetBounds(bb, 0, b.top) : { minX: 0, minY: b.top, maxX: width, maxY: b.top + b.height };
+      return { req: { strokes, blockIds: [b.id], label: b.type === 'mathBlock' ? 'Equation' : 'Handwriting' }, under };
+    }
+    // An equation inside a quote, callout or list isn't a block of the page's layout (nor has an id of its own):
+    // found by its position, with the reply placed after the block it is in.
+    const { editor, scale } = propsRef.current;
+    const wrap = wrapRef.current;
+    if (pos == null || !wrap || pos < 0 || pos >= editor.state.doc.content.size) return null;
+    const node = editor.state.doc.nodeAt(pos);
+    const el = editor.view.nodeDOM(pos);
+    if (node?.type.name !== 'mathBlock' || !(el instanceof HTMLElement)) return null;
+    const $pos = editor.state.doc.resolve(pos);
+    const outer = ($pos.depth > 0 ? $pos.node(1) : node).attrs.id as string | null;
+    const s = scale || 1;
+    const top = (el.getBoundingClientRect().top - wrap.getBoundingClientRect().top) / s;
+    return {
+      req: { strokes: [], blockIds: outer ? [outer] : [], label: 'Equation', text: `$$${node.attrs.latex as string}$$` },
+      under: { minX: 0, minY: top, maxX: width, maxY: top + el.offsetHeight },
+    };
   }
 
   async function submitAsk(a: AskAt, mode: AskMode, prompt?: string) {
-    if (a.blockId) {
-      const b = layoutRef.current.blocks.find((x) => x.id === a.blockId);
+    if (a.block) {
+      const found = blockAsk(a.block.id, a.block.pos);
       setAsk(null);
-      if (b) propsRef.current.onAsk({ ...blockRequest(b), mode, prompt });
+      if (found) propsRef.current.onAsk({ ...found.req, mode, prompt });
       return;
     }
     if (!a.region) return;
@@ -1849,10 +1873,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
 
       {ask && !capturing && (
         <SnipAsk
-          key={`${ask.under.minX},${ask.under.maxY},${ask.blockId ?? ''}`}
+          key={`${ask.under.minX},${ask.under.maxY},${ask.block?.id ?? ask.block?.pos ?? ''}`}
           bounds={ask.under}
           inv={inv}
-          placeholder={ask.blockId ? (layout.blocks.find((b) => b.id === ask.blockId)?.type === 'mathBlock' ? 'Ask about this equation…' : 'Ask about this handwriting…') : undefined}
+          placeholder={ask.block ? (ask.block.math ? 'Ask about this equation…' : 'Ask about this handwriting…') : undefined}
           onCancel={() => setAsk(null)}
           onSubmit={(mode, prompt) => void submitAsk(ask, mode, prompt)}
         />

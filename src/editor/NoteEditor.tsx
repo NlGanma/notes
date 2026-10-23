@@ -311,8 +311,8 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       }
       if (image) attachments.push({ kind: 'image', label: imageLabel, image });
       // Typed text and transcripts of the blocks involved.
-      const texts: string[] = [];
-      for (const id of req.blockIds) {
+      const texts: string[] = req.text ? [req.text] : [];
+      for (const id of req.text ? [] : req.blockIds) {
         const f = findBlock(doc, id);
         if (!f) continue;
         const json = f.node.toJSON() as JSONContent;
@@ -420,9 +420,9 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
   useEffect(() => {
     if (!editor) return;
     const offs = [
-      editorBus.on('block:ask', ({ editor: ed, blockId }) => {
+      editorBus.on('block:ask', ({ editor: ed, blockId, pos }) => {
         if (ed !== editor) return;
-        inkRef.current?.askAbout(blockId);
+        inkRef.current?.askAbout(blockId, pos);
       }),
       editorBus.on('ink:transcribe', async ({ editor: ed, blockId }) => {
         if (ed !== editor) return;

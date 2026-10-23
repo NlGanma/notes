@@ -2,7 +2,7 @@ import { InputRule, mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Copy, MessageCircle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, MessageCircleQuestion, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { renderMath } from '../../lib/katex';
 import { useTools } from '../../state/tools';
 import { editorBus } from '../bus';
@@ -321,7 +321,10 @@ function MathBlockView({ node, updateAttributes, selected, editor, getPos, delet
       )}
       <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
         <div className="menu ink-menu" role="menu">
-          {latex && item(<MessageCircle size={20} />, 'Ask about this…', () => editorBus.emit('block:ask', { editor, blockId: node.attrs.id }))}
+          {latex &&
+            item(<MessageCircleQuestion size={20} />, 'Ask about this…', () =>
+              editorBus.emit('block:ask', { editor, blockId: node.attrs.id ?? null, pos: typeof getPos === 'function' ? getPos() : undefined }),
+            )}
           {latex && <div className="menu-sep" />}
           {item(<Pencil size={20} />, 'Edit equation', () => setEditing(true), 'Enter')}
           {latex &&
