@@ -339,6 +339,10 @@
   line-height: 18px;
   color: var(--text-3);
 }
+/* Dropped cards are a notes-only label: amber, like the rest. */
+.art-left-out {
+  color: var(--warning);
+}
 .msg-making {
   display: flex;
   align-items: center;

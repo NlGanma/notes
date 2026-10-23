@@ -16,7 +16,7 @@ import { ComposerStatus, useAvailability } from '../ai/ComposerStatus';
 import { Popover } from '../common/Popover';
 import { NotePicker } from '../homework/NotePicker';
 import { parseStudyJSON, saveFlashcards } from './StudyTools';
-import { ArtifactPanel, ToolIcon, outputMeta, type Output } from './ArtifactPanel';
+import { ArtifactPanel, LeftOut, ToolIcon, outputMeta, type Output } from './ArtifactPanel';
 import { conversationTitle, pastConversations, reopenConversation, startConversation } from './history';
 import { TOOL_LOOK, notebookNotes, saveMarkdownNote, scopeFromPick, scopeName, scopeNotes, selectionFor } from './notebook';
 
@@ -598,7 +598,10 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
         </span>
         <span className="art-card-text">
           <span className="art-card-title">{output.title}</span>
-          <span className="art-card-meta">{outputMeta(output)}</span>
+          <span className="art-card-meta">
+            {outputMeta(output)}
+            <LeftOut output={output} />
+          </span>
         </span>
       </button>
       {onRetry && <RetryRow onRetry={onRetry} />}

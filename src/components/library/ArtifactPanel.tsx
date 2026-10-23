@@ -45,6 +45,18 @@ export function outputMeta(o: Output): string {
   return `From ${plural(o.notes || 1, 'note')}`;
 }
 
+/** Cards or questions dropped because no passage of the notes backed them: said wherever the output's size is. */
+export function LeftOut({ output }: { output: Output }) {
+  const { msg, tool, parsed } = output;
+  if (!msg.dropped || !parsed) return null;
+  return (
+    <span className="art-left-out" title="No passage of your notes backed them">
+      {' '}
+      · {plural(msg.dropped, tool === 'quiz' ? 'question' : 'card')} left out: not in your notes
+    </span>
+  );
+}
+
 /**
  * A study output opened beside the conversation, as Claude opens an artifact: its name and kind in the
  * header with Shuffle / Copy, Save as note and Close; the cards, quiz or text below. (Retry stays with
@@ -74,7 +86,6 @@ export function ArtifactPanel({
   const sources = msg.sources ?? [];
   const json = tool === 'flashcards' || tool === 'quiz';
   const ready = !!parsed || (msg.status === 'done' && !output.failed);
-  const skipped = msg.dropped && parsed ? plural(msg.dropped, tool === 'quiz' ? 'question' : tool === 'flashcards' ? 'card' : 'item') : '';
   return (
     <section className={cx('lib-artifact', overlay && 'is-overlay')} aria-label={output.title}>
       <header className="art-head">
@@ -87,7 +98,7 @@ export function ArtifactPanel({
           </div>
           <div className="art-sub">
             {outputMeta(output)}
-            {skipped && <span title="No passage of your notes backed them"> · {skipped} left out</span>}
+            <LeftOut output={output} />
           </div>
         </div>
         {parsed?.kind === 'flashcards' && (
