@@ -132,8 +132,17 @@ export function App() {
     }
   }, [crowded, narrow]);
 
+  // A window that gets narrow puts the sidebar away; widening it again brings it back.
+  const narrowHidden = useRef(false);
   useEffect(() => {
-    if (narrow) useUI.getState().set({ sidebar: false });
+    const ui = useUI.getState();
+    if (narrow && ui.sidebar) {
+      narrowHidden.current = true;
+      ui.set({ sidebar: false });
+    } else if (!narrow && narrowHidden.current) {
+      narrowHidden.current = false;
+      ui.set({ sidebar: true });
+    }
   }, [narrow]);
 
   // The floating sidebar goes away on a click outside it, on Esc, and when a page is picked.
