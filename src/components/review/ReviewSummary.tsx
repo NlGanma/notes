@@ -86,7 +86,7 @@ export function ReviewSummary() {
   };
   const open = (id: string) => {
     const m = meta(id);
-    if (m && notes[m.noteId]) useUI.getState().openNote(m.noteId, { newTab: true });
+    if (m && notes[m.noteId]) useUI.getState().openNote(m.noteId);
   };
 
   const steps = [

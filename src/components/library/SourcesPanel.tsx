@@ -242,7 +242,7 @@ function SourceViewer({ note, onBack, onAsk }: { note: NoteDoc; onBack(): void; 
         </button>
         <TypeIcon note={note} />
         <span className="src-view-title">{note.meta.title || 'Untitled'}</span>
-        <button className="icon-btn" onClick={() => useUI.getState().openNote(note.meta.id, { newTab: true })} title="Open in editor" aria-label="Open in editor">
+        <button className="icon-btn" onClick={() => useUI.getState().openNote(note.meta.id)} title="Open in editor" aria-label="Open in editor">
           <ExternalLink size={20} />
         </button>
       </div>

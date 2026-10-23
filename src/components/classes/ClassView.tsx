@@ -204,7 +204,7 @@ function Stream({ path, notes, onTab }: { path: string; notes: Record<string, No
           <div className="upcoming-title">Upcoming</div>
           {upcoming.length ? (
             upcoming.map((n) => (
-              <button key={n.meta.id} className="upcoming-item" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
+              <button key={n.meta.id} className="upcoming-item" onClick={() => useUI.getState().openNote(n.meta.id)}>
                 <span className={cx('upcoming-when', isMissing(n.meta.homework) && 'is-missing')}>{dueText(n)}</span>
                 <span className="upcoming-name">{n.meta.title || 'Untitled homework'}</span>
               </button>
@@ -237,8 +237,8 @@ function Stream({ path, notes, onTab }: { path: string; notes: Record<string, No
                   className="stream-card"
                   role="link"
                   tabIndex={0}
-                  onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}
-                  onKeyDown={(e) => e.key === 'Enter' && useUI.getState().openNote(n.meta.id, { newTab: true })}
+                  onClick={() => useUI.getState().openNote(n.meta.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && useUI.getState().openNote(n.meta.id)}
                   onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
                 >
                   <span className="item-circle is-40">{n.meta.homework ? <ClipboardList size={20} /> : <FileText size={20} />}</span>
@@ -285,7 +285,7 @@ function Classwork({ path, notes, folders }: { path: string; notes: Record<strin
   const [createOpen, setCreateOpen] = useState(false);
   const createBtn = useRef<HTMLButtonElement>(null);
   const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
-  const open = (n: NoteDoc) => useUI.getState().openNote(n.meta.id, { newTab: true });
+  const open = (n: NoteDoc) => useUI.getState().openNote(n.meta.id);
   const live = Object.values(notes).filter((n) => !n.meta.trashed && inFolder(n, path));
   const homework = live.filter((n) => n.meta.homework).sort((a, b) => (a.meta.homework!.due ?? Infinity) - (b.meta.homework!.due ?? Infinity));
   const topics = folders

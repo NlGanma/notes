@@ -172,7 +172,7 @@ export async function saveMarkdownNote(title: string, md: string, folder: string
     const html = markdownToEditorHTML(md, { stripCitations: true });
     const content = normalizeDocJSON(generateJSON(html, buildExtensions()) as never) as JSONContent;
     const doc = useVault.getState().createNote({ folder, title, content, tags, generated: true });
-    toast.info('Saved to note', title, { label: 'Open', run: () => useUI.getState().openNote(doc.meta.id, { newTab: true }) });
+    toast.info('Saved to note', title, { label: 'Open', run: () => useUI.getState().openNote(doc.meta.id) });
     return doc.meta.id;
   } catch (e) {
     toast.error('Couldn’t save the note', String(e));

@@ -1,40 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ArrowLeft,
   ArrowRight,
-  CornerDownLeft,
+  ClipboardList,
+  FileDown,
   FilePlus,
   FileText,
-  FolderPlus,
   FileUp,
+  Folder,
+  FolderOpen,
+  GraduationCap,
   Keyboard,
-  LibraryBig,
+  LayoutGrid,
+  ListChecks,
+  MessagesSquare,
   PanelLeft,
+  PanelRight,
+  Repeat,
   Search,
   Settings,
-  MessageCircleQuestion,
   TextSearch,
-  FileDown,
-  Folder,
-  Cpu,
-  ClipboardList,
-  GraduationCap,
-  Target,
-  X,
+  Trash2,
 } from 'lucide-react';
 import { listClasses } from '../lib/classes';
-import { ClassBadge } from './classes/ClassIcon';
-import { useUI } from '../state/ui';
+import { useUI, goBack, goForward, type View } from '../state/ui';
 import { useVault } from '../state/vault';
 import { keywordSearch } from '../state/library';
-import { newClass, newFolder, newHomework, newNote, openClass, openLibrary, openReview, reviewFolder, reviewNote, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
+import { newClass, newHomework, newNote, openClass, openLibrary, openReview, reviewNote, toggleAssistant, currentNoteId, openVaultFolder } from '../lib/commands';
 import { isReviewable } from '../lib/review/tree';
 import { dueNotes } from '../state/review';
 import { importFiles } from '../lib/import';
 import { exportNote } from '../lib/export';
 import { snippet } from '../lib/ai/rag';
+import { displayTitle } from '../lib/displayTitle';
 import { cx, formatRelativeTime } from '../lib/util';
-import { MOD, SHIFT } from '../lib/platform';
+import { bridge, MOD, SHIFT } from '../lib/platform';
 
 interface Item {
   id: string;
@@ -43,7 +44,10 @@ interface Item {
   sub?: string;
   icon: React.ReactNode;
   hint?: string;
-  run(): void;
+  /** Shown before anything is typed. */
+  always?: boolean;
+  hit?: boolean;
+  run(newTab: boolean): void;
 }
 
 function fuzzyScore(text: string, q: string): number {
@@ -73,12 +77,15 @@ function highlight(text: string, q: string) {
   return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
 }
 
+const ICON = { size: 16, strokeWidth: 1.5 };
+
 export function CommandPalette() {
   const open = useUI((s) => s.palette);
   if (!open) return null;
   return createPortal(<Palette />, document.body);
 }
 
+/** ⌘K: find a note, a class or a folder by name, search inside notes, or run one of a few commands. */
 function Palette() {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
@@ -94,179 +101,119 @@ function Palette() {
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
     const live = Object.values(notes).filter((n) => !n.meta.trashed);
-    const query = q.trim();
-    const isCmd = query.startsWith('>');
-    const term = isCmd ? query.slice(1).trim() : query;
+    const term = q.trim();
+    const goNote = (id: string, blockId?: string) => (newTab: boolean) => useUI.getState().openNote(id, { newTab, blockId });
+    const where = (folder: string) => folder.split('/').join(' › ');
 
-    if (!isCmd) {
-      const titled = live
-        .map((n) => ({ n, s: fuzzyScore(`${n.meta.title || 'Untitled'} ${n.meta.folder}`, term) }))
-        .filter((x) => x.s > 0)
-        .sort((a, b) => b.s - a.s || b.n.meta.updated - a.n.meta.updated)
-        .slice(0, term ? 6 : 8);
-      for (const { n } of titled) {
+    const titled = live
+      .map((n) => ({ n, s: fuzzyScore(`${displayTitle(n)} ${n.meta.folder}`, term) }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s || b.n.meta.updated - a.n.meta.updated)
+      .slice(0, 6);
+    for (const { n } of titled) {
+      out.push({
+        id: `note:${n.meta.id}`,
+        group: term ? 'Notes' : 'Recent notes',
+        label: displayTitle(n),
+        sub: [where(n.meta.folder), formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
+        icon: n.meta.homework ? <ClipboardList {...ICON} /> : <FileText {...ICON} />,
+        run: goNote(n.meta.id),
+      });
+    }
+
+    if (term.length > 2) {
+      const seen = new Set(titled.map((x) => x.n.meta.id));
+      for (const h of keywordSearch(term, 8)) {
+        const key = `${h.chunk.noteId}:${h.chunk.section}`;
+        if (seen.has(key) || !notes[h.chunk.noteId]) continue;
+        seen.add(key);
         out.push({
-          id: `note:${n.meta.id}`,
-          group: term ? 'Notes' : 'Recent notes',
-          label: n.meta.title || 'Untitled',
-          sub: [n.meta.folder.split('/').join(' › '), formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
-          // The same Docs-blue type glyph as every other note list.
-          icon: n.meta.homework ? <ClipboardList size={20} className="note-card-type" /> : <FileText size={20} className="note-card-type" />,
-          run: () => useUI.getState().openNote(n.meta.id, { newTab: true }),
+          id: `hit:${h.chunk.id}`,
+          group: 'In your notes',
+          label: snippet(h.chunk.text, term, 110),
+          sub: [displayTitle(notes[h.chunk.noteId]), h.chunk.section].filter(Boolean).join(' › '),
+          icon: <TextSearch {...ICON} />,
+          hit: true,
+          run: goNote(h.chunk.noteId, h.chunk.blockIds[0]),
         });
       }
-      if (term.length > 2) {
-        const seen = new Set(titled.map((x) => x.n.meta.id));
-        for (const h of keywordSearch(term, 8)) {
-          if (seen.has(`${h.chunk.noteId}:${h.chunk.section}`)) continue;
-          seen.add(`${h.chunk.noteId}:${h.chunk.section}`);
-          out.push({
-            id: `hit:${h.chunk.id}`,
-            group: 'In your notes',
-            label: snippet(h.chunk.text, term, 110),
-            sub: [h.chunk.title, h.chunk.section].filter(Boolean).join(' › '),
-            icon: <TextSearch size={20} />,
-            run: () => useUI.getState().openNote(h.chunk.noteId, { newTab: true, blockId: h.chunk.blockIds[0] }),
-          });
-        }
-        for (const c of listClasses(folders, folderMeta)
-          .filter((c) => fuzzyScore(`${c.name} ${c.code ?? ''}`, term) > 20)
-          .slice(0, 3)) {
-          out.push({
-            id: `class:${c.path}`,
-            group: 'Classes',
-            label: c.name,
-            sub: [c.code, c.instructor].filter(Boolean).join(' · '),
-            icon: <ClassBadge cls={c} size={24} />,
-            run: () => openClass(c.path),
-          });
-        }
-        for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && fuzzyScore(f, term) > 20).slice(0, 3)) {
-          out.push({
-            id: `folder:${f}`,
-            group: 'Folders',
-            label: f.split('/').pop()!,
-            sub: f,
-            icon: <Folder size={20} />,
-            run: () => useUI.getState().setView({ kind: 'folder', path: f }),
-          });
-        }
+    }
+
+    if (term) {
+      // A class or a folder by its name: typing "bio" finds Biology itself.
+      for (const c of listClasses(folders, folderMeta)
+        .filter((c) => fuzzyScore(c.name, term) > 20)
+        .slice(0, 3)) {
         out.push({
-          id: 'ask-library',
-          group: 'Ask',
-          label: `Ask your notes: “${term}”`,
-          icon: <MessageCircleQuestion size={20} />,
-          run: () => {
-            openLibrary();
-            setTimeout(() => window.dispatchEvent(new CustomEvent('nib:library-ask', { detail: term })), 50);
-          },
+          id: `class:${c.path}`,
+          group: 'Classes',
+          label: c.name,
+          icon: <span className="class-square is-palette" style={{ background: c.color }} />,
+          run: () => openClass(c.path),
+        });
+      }
+      for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && fuzzyScore(f.split('/').pop()!, term) > 20).slice(0, 3)) {
+        out.push({
+          id: `folder:${f}`,
+          group: 'Folders',
+          label: f.split('/').pop()!,
+          sub: f.includes('/') ? where(f) : undefined,
+          icon: <Folder {...ICON} />,
+          run: () => useUI.getState().setView({ kind: 'folder', path: f }),
         });
       }
     }
 
     const noteId = currentNoteId();
-    const classes = listClasses(folders, folderMeta);
+    const go = (label: string, icon: React.ReactNode, view: View): Item => ({
+      id: `go:${label}`,
+      group: 'Go to',
+      label,
+      icon,
+      always: true,
+      run: () => useUI.getState().setView(view),
+    });
     const commands: Item[] = [
-      { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus size={20} />, hint: `${MOD}N`, run: () => newNote() },
-      { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList size={20} />, run: () => newHomework() },
-      { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap size={20} />, run: () => newClass() },
-      {
-        id: 'c:hwlist',
-        group: 'Commands',
-        label: 'Go to Homework',
-        icon: <ClipboardList size={20} />,
-        run: () => useUI.getState().setView({ kind: 'homework' }),
-      },
-      // Before the per-class commands: searching "review" keeps only the first few matches.
-      { id: 'c:review', group: 'Commands', label: 'Review…', sub: 'Pick any notes, mix classes', icon: <Target size={20} />, hint: `${SHIFT}${MOD}E`, run: () => openReview() },
-      {
-        id: 'c:review-due',
-        group: 'Commands',
-        label: 'Review what’s due',
-        icon: <Target size={20} />,
-        run: () => openReview(dueNotes().ids),
-      },
-      ...(noteId && notes[noteId] && isReviewable(notes[noteId])
-        ? [{ id: 'c:review-note', group: 'Commands', label: 'Review this note', icon: <Target size={20} />, run: () => reviewNote(noteId) }]
-        : []),
-      ...classes.flatMap((c) => [
-        {
-          id: `c:note:${c.path}`,
-          group: 'Commands',
-          label: `New ${c.name} note`,
-          icon: <ClassBadge cls={c} size={24} />,
-          run: () => newNote(c.path),
-        },
-        {
-          id: `c:hw:${c.path}`,
-          group: 'Commands',
-          label: `New ${c.name} homework`,
-          icon: <ClassBadge cls={c} size={24} />,
-          run: () => newHomework(c.path),
-        },
-        {
-          id: `c:ask:${c.path}`,
-          group: 'Commands',
-          label: `Ask ${c.name}`,
-          sub: 'Answers only from this class’s notes',
-          icon: <ClassBadge cls={c} size={24} />,
-          run: () => openLibrary({ kind: 'folder', path: c.path }),
-        },
-        {
-          id: `c:review:${c.path}`,
-          group: 'Commands',
-          label: `Review ${c.name}`,
-          sub: 'Practise until you know it — from this class’s notes',
-          icon: <ClassBadge cls={c} size={24} />,
-          run: () => reviewFolder(c.path),
-        },
-      ]),
-      { id: 'c:folder', group: 'Commands', label: 'New folder', icon: <FolderPlus size={20} />, run: () => void newFolder() },
-      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <LibraryBig size={20} />, hint: `${SHIFT}${MOD}L`, run: () => openLibrary() },
-      { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <MessageCircleQuestion size={20} />, hint: `${MOD}J`, run: () => toggleAssistant() },
-      { id: 'c:import', group: 'Commands', label: 'Import PDF, Markdown or images…', icon: <FileUp size={20} />, run: () => void importFiles() },
+      { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus {...ICON} />, hint: `${MOD}N`, always: true, run: () => newNote() },
+      { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList {...ICON} />, hint: `${SHIFT}${MOD}Y`, always: true, run: () => newHomework() },
+      { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap {...ICON} />, always: true, run: () => newClass() },
+      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <MessagesSquare {...ICON} />, hint: `${SHIFT}${MOD}L`, always: true, run: () => openLibrary({ kind: 'all' }) },
+      { id: 'c:review-due', group: 'Commands', label: 'Review what’s due', icon: <Repeat {...ICON} />, hint: `${SHIFT}${MOD}E`, always: true, run: () => openReview(dueNotes().ids) },
+      { id: 'c:import', group: 'Commands', label: 'Import…', sub: 'PDF, Markdown or images', icon: <FileUp {...ICON} />, always: true, run: () => void importFiles() },
+      { id: 'c:settings', group: 'Commands', label: 'Settings', icon: <Settings {...ICON} />, hint: `${MOD},`, always: true, run: () => useUI.getState().openSettings() },
+      { id: 'c:sidebar', group: 'Commands', label: 'Toggle sidebar', icon: <PanelLeft {...ICON} />, hint: `${MOD}\\`, always: true, run: () => useUI.getState().toggleSidebar() },
+      // Found by typing only, so the list stays short.
+      ...(noteId && notes[noteId] && isReviewable(notes[noteId]) ? [{ id: 'c:review-note', group: 'Commands', label: 'Review this note', icon: <Repeat {...ICON} />, run: () => reviewNote(noteId) }] : []),
       ...(noteId
         ? [
-            {
-              id: 'c:pdf',
-              group: 'Commands',
-              label: 'Export note as PDF',
-              icon: <FileDown size={20} />,
-              hint: `${MOD}P`,
-              run: () => void exportNote(noteId, 'pdf'),
-            },
+            { id: 'c:assistant', group: 'Commands', label: 'Toggle assistant', icon: <PanelRight {...ICON} />, hint: `${MOD}J`, run: () => toggleAssistant() },
+            { id: 'c:pdf', group: 'Commands', label: 'Export note as PDF', icon: <FileDown {...ICON} />, hint: `${MOD}P`, run: () => void exportNote(noteId, 'pdf') },
           ]
         : []),
-      {
-        id: 'c:sidebar',
-        group: 'Commands',
-        label: 'Toggle sidebar',
-        icon: <PanelLeft size={20} />,
-        hint: `${MOD}\\`,
-        run: () => useUI.getState().toggleSidebar(),
-      },
-      { id: 'c:ai', group: 'Commands', label: 'AI settings — connect a local model', icon: <Cpu size={20} />, run: () => useUI.getState().openSettings('ai') },
-      {
-        id: 'c:settings',
-        group: 'Commands',
-        label: 'Settings',
-        icon: <Settings size={20} />,
-        hint: `${MOD},`,
-        run: () => useUI.getState().openSettings('writing'),
-      },
-      {
-        id: 'c:keys',
-        group: 'Commands',
-        label: 'Keyboard shortcuts',
-        icon: <Keyboard size={20} />,
-        hint: `${MOD}/`,
-        run: () => useUI.getState().openSettings('shortcuts'),
-      },
-      { id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <Folder size={20} />, run: () => void openVaultFolder() },
+      { id: 'c:back', group: 'Commands', label: 'Go back', icon: <ArrowLeft {...ICON} />, hint: `${MOD}[`, run: () => goBack() },
+      { id: 'c:forward', group: 'Commands', label: 'Go forward', icon: <ArrowRight {...ICON} />, hint: `${MOD}]`, run: () => goForward() },
+      { id: 'c:keys', group: 'Commands', label: 'Keyboard shortcuts', icon: <Keyboard {...ICON} />, hint: `${MOD}/`, run: () => useUI.getState().openSettings('shortcuts') },
+      ...(bridge ? [{ id: 'c:vault', group: 'Commands', label: 'Open another vault folder…', icon: <FolderOpen {...ICON} />, run: () => void openVaultFolder() }] : []),
+      go('Classes', <LayoutGrid {...ICON} />, { kind: 'classes' }),
+      go('Homework', <ListChecks {...ICON} />, { kind: 'homework' }),
+      go('All notes', <FileText {...ICON} />, { kind: 'home' }),
+      go('Trash', <Trash2 {...ICON} />, { kind: 'trash' }),
     ];
-    // Per-class commands only show up when searched for, so the default list stays short.
-    const cmdMatches = commands.filter((c) => (term ? fuzzyScore(c.label, term) > (isCmd ? 0 : 30) : !c.id.split(':')[2]));
-    out.push(...(isCmd || !term ? cmdMatches : cmdMatches.slice(0, 4)));
+    const matches = term ? commands.filter((c) => fuzzyScore(`${c.group === 'Go to' ? 'go to ' : ''}${c.label}`, term) > 30).slice(0, 5) : commands.filter((c) => c.always);
+    out.push(...matches);
+
+    if (term.length > 2 && live.length) {
+      out.push({
+        id: 'ask-library',
+        group: 'Ask',
+        label: `Ask your notes: “${term}”`,
+        icon: <MessagesSquare {...ICON} />,
+        run: () => {
+          openLibrary({ kind: 'all' });
+          setTimeout(() => window.dispatchEvent(new CustomEvent('nib:library-ask', { detail: term })), 50);
+        },
+      });
+    }
     return out;
   }, [q, notes, folders, folderMeta]);
 
@@ -275,23 +222,24 @@ function Palette() {
     listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
   }, [index]);
 
-  const run = (it: Item | undefined) => {
+  const run = (it: Item | undefined, newTab = false) => {
     if (!it) return;
     close();
-    it.run();
+    it.run(newTab);
   };
 
   let lastGroup = '';
   return (
     <div className="palette-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="palette" role="dialog" aria-label="Quick open">
+      <div className="palette" role="dialog" aria-label="Search">
         <div className="palette-input">
-          <Search size={24} />
+          <Search size={18} strokeWidth={1.5} />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search notes, or type > for commands"
+            placeholder="Search notes and commands"
+            aria-label="Search notes and commands"
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -301,42 +249,43 @@ function Palette() {
                 setIndex((i) => Math.max(0, i - 1));
               } else if (e.key === 'Enter') {
                 e.preventDefault();
-                run(items[index]);
+                run(items[index], e.metaKey || e.ctrlKey);
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 close();
               }
             }}
           />
-          <button className="icon-btn" onClick={close} aria-label="Close search">
-            <X size={24} />
-          </button>
         </div>
         <div className="palette-list" ref={listRef}>
-          {items.length === 0 && <div className="palette-empty">No matches. Press ↵ to create “{q}”.</div>}
+          {items.length === 0 && <div className="palette-empty">No matches</div>}
           {items.map((it, i) => {
             const header = it.group !== lastGroup ? it.group : null;
             lastGroup = it.group;
             return (
               <div key={it.id}>
                 {header && <div className="palette-group">{header}</div>}
-                <button className={cx('palette-item', i === index && 'is-active')} onMouseMove={() => setIndex(i)} onClick={() => run(it)}>
+                <button
+                  className={cx('palette-item', i === index && 'is-active', it.hit && 'is-hit')}
+                  onMouseMove={() => setIndex(i)}
+                  onClick={(e) => run(it, e.metaKey || e.ctrlKey)}
+                  title={it.label}
+                >
                   <span className="palette-icon">{it.icon}</span>
                   <span className="palette-text">
-                    <span className="palette-label">{it.group === 'In your notes' ? highlight(it.label, q) : it.label}</span>
+                    <span className="palette-label">{it.hit ? highlight(it.label, q) : it.label}</span>
                     {it.sub && <span className="palette-sub">{it.sub}</span>}
                   </span>
-                  {it.hint ? (
-                    <kbd>{it.hint}</kbd>
-                  ) : i === index ? (
-                    <CornerDownLeft size={18} className="palette-enter" />
-                  ) : (
-                    <ArrowRight size={18} className="palette-arrow" />
-                  )}
+                  {it.hint && <kbd>{it.hint}</kbd>}
                 </button>
               </div>
             );
           })}
+        </div>
+        <div className="palette-foot">
+          <span>↑↓ to move</span>
+          <span>↵ to open</span>
+          <span>esc to close</span>
         </div>
       </div>
     </div>

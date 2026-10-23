@@ -109,7 +109,7 @@ export const HomeworkRow = memo(function HomeworkRow({
 }) {
   const hw = note.meta.homework!;
   const scanned = (note.content.content ?? []).some((b) => b.type === 'image');
-  const open = () => useUI.getState().openNote(note.meta.id, { newTab: true });
+  const open = () => useUI.getState().openNote(note.meta.id);
   const time = hw.due ? dueTime(hw.due) : '';
   const late = !!hw.due && hw.due < startOfDay(note.meta.updated);
   const right =

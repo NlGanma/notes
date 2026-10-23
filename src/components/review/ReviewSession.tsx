@@ -482,7 +482,7 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
         <span>{label}</span>
         <button
           className="rv-source-chip"
-          onClick={() => useUI.getState().openNote(src.noteId, { newTab: true, blockId: src.blockId ?? undefined })}
+          onClick={() => useUI.getState().openNote(src.noteId, { blockId: src.blockId ?? undefined })}
           title="Open this part of your notes"
         >
           <span>

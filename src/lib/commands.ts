@@ -1,5 +1,7 @@
 import { useVault } from '../state/vault';
 import { useUI } from '../state/ui';
+import { useSettings } from '../state/settings';
+import type { Paper } from './paper';
 import { useAssistant } from '../state/assistant';
 import { flushReview } from '../state/review';
 import { editors } from '../editor/registry';
@@ -41,12 +43,35 @@ export function currentClass(): string | null {
   return null;
 }
 
-export function newNote(folder = currentFolder(), opts: { newTab?: boolean } = {}) {
+/**
+ * Where a new note goes when nothing says otherwise: the class or folder being looked at (a class page,
+ * a folder page, or the open note's place in a class), else the top of the vault.
+ */
+export function newNoteFolder(): string {
+  const v = useUI.getState().view;
+  const { notes, folderMeta } = useVault.getState();
+  if (v.kind === 'class' || v.kind === 'folder') return v.path;
+  if (v.kind === 'note') {
+    const n = notes[v.id];
+    if (!n || !classForFolder(n.meta.folder, folderMeta)) return '';
+    return currentFolder();
+  }
+  return '';
+}
+
+/**
+ * Makes a note and opens it. With a paper picked (the New note menu's tiles), that paper is remembered
+ * for next time; without one (⌘N, the palette, a menu's New note) it takes the last paper and offers
+ * the choice inside the empty note.
+ */
+export function newNote(folder = newNoteFolder(), opts: { newTab?: boolean; paper?: Paper } = {}) {
   // Notes never land inside a Homework folder by accident.
   const fm = useVault.getState().folderMeta;
   const cls = classForFolder(folder, fm);
   if (cls && (folder === homeworkFolderFor(cls) || folder.startsWith(homeworkFolderFor(cls) + '/'))) folder = cls;
-  const doc = useVault.getState().createNote({ folder });
+  if (opts.paper) useSettings.getState().set({ paper: opts.paper });
+  const doc = useVault.getState().createNote({ folder, paper: opts.paper });
+  useUI.getState().set({ paperStrip: opts.paper ? null : doc.meta.id });
   useUI.getState().openNote(doc.meta.id, { newTab: opts.newTab ?? true, focusTitle: true });
   return doc;
 }
@@ -68,12 +93,14 @@ export function newHomework(classPath: string | null = currentClass(), file?: { 
  * Creates a homework assignment. By default its sources are all of its
  * class's notes; the student can narrow that to specific lectures.
  */
-export function createHomework(opts: { classPath: string | null; title: string; due?: number; content?: JSONContent; sources?: string[] }) {
+export function createHomework(opts: { classPath: string | null; title: string; due?: number; content?: JSONContent; sources?: string[]; paper?: Paper }) {
   const folder = homeworkFolderFor(opts.classPath);
   const vault = useVault.getState();
+  if (opts.paper) useSettings.getState().set({ paper: opts.paper });
   const doc = vault.createNote({
     folder,
     title: opts.title,
+    paper: opts.paper,
     content: opts.content ?? {
       type: 'doc',
       content: [{ type: 'paragraph' }, { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'My work' }] }, { type: 'paragraph' }],
@@ -168,7 +195,7 @@ export async function openVaultFolder() {
   // Review's pending save goes to this vault before the other one opens.
   flushReview();
   localStorage.setItem('nib.vaultRoot', root);
-  useUI.getState().set({ tabs: [], view: { kind: 'home' } });
+  useUI.getState().set({ tabs: [], lastTab: null, view: { kind: 'home' } });
   useVault.setState({ notes: {}, folders: [], folderMeta: {}, ready: false });
   await useVault.getState().init(root);
   toast.success('Vault opened', root);

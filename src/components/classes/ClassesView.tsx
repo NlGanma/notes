@@ -91,7 +91,7 @@ export function ClassCard({ cls, due }: { cls: ClassInfo; due: NoteDoc[] }) {
       )}
       <div className={cx('class-card-body', initial && 'has-avatar')}>
         {due.slice(0, 2).map((n) => (
-          <button key={n.meta.id} className="class-card-due" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
+          <button key={n.meta.id} className="class-card-due" onClick={() => useUI.getState().openNote(n.meta.id)}>
             <span className={cx('class-card-due-when', isMissing(n.meta.homework) && 'is-missing')}>{dueText(n)}</span>
             <span className="class-card-due-title">{n.meta.title || 'Untitled homework'}</span>
           </button>
@@ -172,7 +172,7 @@ export function ClassesView({ archived = false }: { archived?: boolean }) {
                       key={n.meta.id}
                       className="due-row"
                       style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
-                      onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}
+                      onClick={() => useUI.getState().openNote(n.meta.id)}
                     >
                       <span className="item-circle">
                         <ClipboardList size={20} />

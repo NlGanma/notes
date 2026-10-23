@@ -7,7 +7,7 @@ import { Popover } from '../common/Popover';
 
 /** Opens the cited note and flashes the cited passage. */
 export function openSource(src: SourceRef) {
-  useUI.getState().openNote(src.noteId, { newTab: true, blockId: src.blockId ?? undefined });
+  useUI.getState().openNote(src.noteId, { blockId: src.blockId ?? undefined });
 }
 
 /** First ~420 characters of a passage, without its heading line, ending on a word. */

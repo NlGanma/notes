@@ -1,35 +1,30 @@
-/* ------------------------------------------------------------------ layout (Google Classroom shell) */
+/* ------------------------------------------------------------------ layout */
 
 /*
- * The window is the grey-blue shell: the app bar runs across the top, the
- * navigation drawer sits on the left, and the content is a white panel with a
- * 28px top-left corner where it meets the shell.
+ * Claude's shell: the sidebar on its own slightly darker cream, the main area on the canvas with a
+ * 44px bar on top, and the assistant (when open) as a column on the right. Flat surfaces, hairlines
+ * between them, no shadows except on things that float.
  */
 .app {
   display: flex;
-  flex-direction: column;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: var(--bg-shell);
-}
-.app-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
+  background: var(--bg-canvas);
+  position: relative;
 }
 
 .splash {
   height: 100vh;
   display: grid;
   place-items: center;
-  background: var(--bg-shell);
+  background: var(--bg-canvas);
 }
 .splash-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: var(--accent);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--clay);
   animation: fade-in 0.6s var(--ease);
 }
 
@@ -38,13 +33,9 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  border-top-left-radius: var(--radius-2xl);
+  background: var(--bg-canvas);
   position: relative;
   overflow: hidden;
-}
-.app.has-assistant .main {
-  border-top-right-radius: var(--radius-2xl);
 }
 
 .content {
@@ -58,13 +49,13 @@
   content: 'Drop to import';
   position: absolute;
   inset: 12px;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-l);
-  background: var(--accent-tint);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: rgba(250, 249, 245, 0.85);
   display: grid;
   place-items: center;
-  font-size: 16px;
-  color: var(--accent);
+  font-size: 15px;
+  color: var(--text-2);
   z-index: 100;
   pointer-events: none;
 }
@@ -77,119 +68,86 @@
   background: var(--danger-soft);
   color: var(--danger);
   padding: 8px 16px;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius);
   z-index: 50;
 }
 
-/* ------------------------------------------------------------------ app bar */
+/* ------------------------------------------------------------------ main bar */
 
-.appbar {
+/* The open notes as quiet tabs, and the Assistant toggle at the right; the empty part drags the window. */
+.mainbar {
   height: var(--topbar-h);
   flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 16px 0 0;
-  background: var(--bg-shell);
+  padding: 0 10px 0 12px;
+  background: var(--bg-canvas);
   position: relative;
   z-index: 30;
+  transition: box-shadow var(--dur) var(--ease);
 }
-.appbar-start {
-  width: var(--sidebar-w);
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 12px;
+/* A hairline only once something has scrolled under the bar. */
+.mainbar.is-scrolled {
+  box-shadow: 0 1px 0 var(--hairline);
 }
-.appbar.has-traffic .appbar-start {
-  padding-left: 80px;
+/* The traffic lights sit over the bar while the sidebar is away (not in full screen, where they hide). */
+html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
+  padding-left: 78px;
 }
-.appbar.is-rail .appbar-start {
-  width: auto;
-  padding-right: 24px;
-}
-/* Two classes so it beats .icon-btn's 36px (components.css loads later): the 48px button centres on the icon column. */
-.icon-btn.appbar-menu {
-  width: 48px;
-  height: 48px;
-}
-.appbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 48px;
-  padding: 0 8px 0 4px;
-  border-radius: var(--radius-pill);
-}
-.appbar-name {
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  color: var(--text-2);
-  letter-spacing: 0;
-}
-.appbar-sep {
-  width: 1px;
-  height: 24px;
-  background: var(--border);
-  margin: 0 8px;
+.mainbar-show {
+  margin-right: 4px;
 }
 
-/* Open notes, as tabs in the bar (GoodNotes for Mac keeps its document tabs up here). */
 .tabs {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding: 0 4px;
-}
-.tabs::-webkit-scrollbar {
-  display: none;
+  gap: 2px;
+  height: 100%;
+  /* Room to drag the window by, even when the strip is full. */
+  padding-right: 64px;
 }
 .tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  max-width: 320px;
-  /* When the strip is tight, inactive tabs shrink to their icon (Chrome's tab strip); the title stays in the tooltip. */
-  min-width: 52px;
-  overflow: hidden;
-  padding: 0 6px 0 14px;
-  border-radius: var(--radius-pill);
-  color: var(--text-2);
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.15s var(--ease);
-  flex: 0 1 auto;
+  gap: 4px;
+  height: 28px;
+  min-width: 96px;
+  max-width: 200px;
+  flex: 0 1 200px;
+  padding: 0 4px 0 10px;
+  border-radius: 7px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 18px;
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 .tab:hover {
   background: var(--bg-hover);
+  color: var(--text-2);
 }
 .tab.is-active {
-  min-width: 144px;
-  background: var(--bg-selected);
-  color: var(--on-selected);
-}
-.tab-icon {
-  flex: none;
+  background: var(--bg-active);
+  color: var(--text);
 }
 .tab-title {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tab-close {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  color: inherit;
+  border-radius: 5px;
+  color: var(--text-3);
   opacity: 0;
   flex: none;
 }
@@ -198,94 +156,32 @@
   opacity: 1;
 }
 .tab-close:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
+  color: var(--text);
+}
+.tab-more {
+  width: 28px;
+  height: 28px;
 }
 
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-.icon-btn.top-btn,
-.topbar-actions .icon-btn {
-  width: 40px;
-  height: 40px;
-  position: relative;
-}
-.icon-btn.is-on {
-  background: var(--bg-selected);
-  color: var(--on-selected);
-}
-.btn.is-assistant {
-  height: 40px;
-  margin-left: 4px;
-}
-.badge {
-  position: absolute;
-  top: 4px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 500;
-  display: inline-grid;
-  place-items: center;
-  line-height: 1;
-}
-
-/* The local model's status: a quiet assist chip at the end of the bar. */
-.ai-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  max-width: 200px;
-  padding: 0 12px 0 10px;
-  margin-left: 4px;
-  border-radius: var(--radius-s);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  font-size: 13px;
-  font-weight: 500;
+/* The Assistant toggle: a quiet button, pressed while the panel is open. */
+.btn.top-btn.is-assistant {
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: 7px;
   color: var(--text-2);
-  text-align: left;
+  font-weight: 400;
 }
-.ai-status:hover {
+.btn.top-btn.is-assistant:hover {
   background: var(--bg-hover);
+  color: var(--text);
 }
-.ai-status-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ai-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-4);
-  flex: none;
-}
-.is-online .ai-dot {
-  background: #1e8e3e;
-}
-.is-checking .ai-dot {
-  background: #f9ab00;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-.is-offline .ai-dot {
-  background: var(--danger);
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
+.btn.top-btn.is-assistant.is-on {
+  background: var(--bg-active);
+  color: var(--text);
 }
 
-/* ------------------------------------------------------------------ navigation drawer */
+/* ------------------------------------------------------------------ sidebar */
 
 .sidebar {
   width: var(--sidebar-w);
@@ -293,58 +189,104 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-shell);
+  box-shadow: inset -1px 0 0 var(--hairline);
   position: relative;
-  transition: width 0.2s var(--ease);
+  z-index: 40;
+  overflow: hidden;
+  transition:
+    width var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.sidebar.is-hidden {
+  width: 0;
+  box-shadow: none;
+}
+.sidebar > * {
+  width: var(--sidebar-w);
+}
+/* Narrow windows: the sidebar floats over the page and goes away again on its own. */
+.sidebar.is-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar-w);
+  box-shadow: var(--shadow-l);
+}
+.sidebar.is-overlay.is-hidden {
+  width: var(--sidebar-w);
+  transform: translateX(-100%);
+  box-shadow: none;
+}
+
+.sidebar-head {
+  height: var(--topbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 12px;
+}
+.sidebar-top {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 8px 12px;
 }
 .sidebar-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 0 16px;
+  padding: 0 8px 12px;
   scrollbar-width: thin;
+}
+.sidebar-foot {
+  flex: none;
+  padding: 8px;
+  box-shadow: inset 0 1px 0 rgba(20, 20, 19, 0.06);
 }
 .nav {
   display: flex;
   flex-direction: column;
-  padding-bottom: 8px;
-}
-.nav.is-end {
-  padding-top: 8px;
+  gap: 2px;
 }
 
-/* A drawer item: a 48px pill inset 12px from both edges. */
+/* A row: 32px, an 18px icon, a 14px label; the page you're on gets a quiet fill (no colour, no bar). */
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  height: 48px;
-  margin: 0 12px;
-  padding: 0 12px 0 12px;
-  border-radius: var(--radius-pill);
+  gap: 10px;
+  height: var(--row-h);
+  width: 100%;
+  padding: 0 8px;
+  border-radius: var(--radius);
   color: var(--text-2);
   font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  width: calc(100% - 24px);
+  line-height: 20px;
   text-align: left;
   flex: none;
-  transition: background 0.15s var(--ease);
+  position: relative;
+  transition: background var(--dur-fast) var(--ease);
 }
 .nav-item:hover {
   background: var(--bg-hover);
 }
 .nav-item.is-active {
   background: var(--bg-selected);
-  color: #004a77;
-}
-.nav-item.is-dense {
-  height: 36px;
+  color: var(--text);
 }
 .nav-icon {
-  width: 24px;
-  display: inline-flex;
-  justify-content: center;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-2);
   flex: none;
+  position: relative;
+}
+.nav-item.is-active .nav-icon {
+  color: var(--text);
 }
 .nav-label {
   flex: 1;
@@ -354,416 +296,484 @@
   white-space: nowrap;
 }
 .nav-count {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-.nav-item.is-active .nav-count {
-  color: #004a77;
+  flex: none;
 }
 
-/* A class: its first letter on the theme's light tone, then name over code · term. */
-/* Class rows also carry .tree-row (for the tests); keep the drawer's 16px gap so names share the label column. */
-.nav-item.nav-class {
-  height: 48px;
-  gap: 16px;
+/* New note: the clay circle, the one warm thing in the chrome. */
+.side-new {
+  font-weight: 500;
+  color: var(--text);
+  gap: 8px;
+  padding-left: 4px;
 }
-.class-letter {
+.side-new-circle {
   width: 24px;
   height: 24px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--class-light, #e8f0fe);
-  color: var(--class-main, #1967d2);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1;
+  background: var(--clay-strong);
+  color: #fff;
+  flex: none;
+  transition: transform var(--dur-fast) var(--ease);
 }
-.nav-label.is-two-line {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.side-new:hover .side-new-circle,
+.side-new.is-open .side-new-circle {
+  transform: scale(1.05);
 }
-.nav-class-name {
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.nav-class-sub {
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 400;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.nav-item.is-active .nav-class-name,
-.nav-item.is-active .nav-class-sub {
-  color: #004a77;
-}
-
-/* A group with a header row (Classroom's "Enrolled ⌃"): its icon and label sit in the items' columns. */
-.side-section {
-  padding: 8px 0;
-}
-.side-section-head {
-  display: flex;
-  align-items: center;
-  height: 48px;
-  margin: 0 12px;
-  padding: 0 4px 0 0;
-}
-.side-section-label {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 40px;
-  padding: 0 12px;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-2);
-  border-radius: var(--radius-pill);
-}
-.side-section-label:hover {
+.side-new.is-open {
   background: var(--bg-hover);
 }
-.side-section-chev {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--text-2);
-  flex: none;
-}
-.side-section-chev:hover {
-  background: var(--bg-hover);
-}
-.chev {
-  transition: transform 0.2s var(--ease);
-}
-.side-section-chev .chev {
-  transform: rotate(0deg);
-}
-.side-section-chev .chev.is-open {
-  transform: rotate(180deg);
-}
 
-/* Rail: the drawer collapsed to icons (the hamburger toggles it). */
-.sidebar.is-rail {
-  width: 76px;
-}
-.sidebar.is-rail .nav-item {
-  width: 52px;
-  height: 32px;
-  margin: 4px 12px 12px;
-  padding: 0;
-  justify-content: center;
-  border-radius: 16px;
-}
-.sidebar.is-rail .nav-item.nav-class {
-  display: none;
-}
-.sidebar.is-rail .nav-label,
-.sidebar.is-rail .nav-count,
-.sidebar.is-rail .side-section-head,
-.sidebar.is-rail .tree,
-.sidebar.is-rail .tag-pill,
-.sidebar.is-rail .nav-item.is-dense {
-  display: none;
-}
-.sidebar.is-rail .side-section {
-  padding: 0 0 16px;
-}
-/* Classroom's rail keeps only destinations, with one even 16px gap between groups. Classes stay on Home;
-   a collapsed or tags-only section has nothing to show here, so it takes no gap either. */
-.sidebar.is-rail .nav {
-  padding-bottom: 16px;
-}
-.sidebar.is-rail .nav.is-end {
-  padding-top: 0;
-}
-.sidebar.is-rail .side-section.is-collapsed,
-.sidebar.is-rail .side-section:has(.tag-pill) {
-  display: none;
-}
-/* A flex column, like .nav, so the items' margins don't collapse: one 48px pitch down the rail. */
-.sidebar.is-rail .side-section-body {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Plain folders: Google Drive's expandable tree. */
-.tree {
-  padding: 2px 0 4px;
-}
-.tree.is-drop {
-  background: var(--accent-tint);
-}
-/* Same height and columns as a .nav-item: the arrow sits just left of the folder in the icon column. */
-.tree-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 48px;
-  margin: 0 12px;
-  padding-right: 12px;
-  border-radius: var(--radius-pill);
-  color: var(--text-2);
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  position: relative;
-}
-.tree-row:hover {
-  background: var(--bg-hover);
-}
-.tree-row.is-active {
-  background: var(--bg-selected);
-  color: #004a77;
-}
-/* Like .nav-item.is-active: the glyph, arrow and badge take the selected colour too (an inline folder colour still wins). */
-.tree-row.is-active :is(.tree-icon, .tree-chevron, .tree-count, .tree-due) {
-  color: inherit;
-}
-.tree-row.is-drop {
-  background: var(--accent-tint);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.tree-chevron {
-  width: 16px;
-  height: 24px;
-  margin-right: -16px;
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-  border-radius: 8px;
-  transition: transform 0.15s var(--ease);
-  flex: none;
-}
-.tree-chevron:hover {
-  background: var(--bg-hover);
-}
-.tree-chevron.is-open {
-  transform: rotate(90deg);
-}
-.tree-icon {
-  display: inline-flex;
-  color: var(--text-2);
-  flex: none;
-}
-.tree-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tree-count {
-  font-size: 12px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
-.tree-due {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-
-/* ------------------------------------------------------------------ All notes, folders (Google Drive) */
-
-.notes-body {
-  padding: 8px 24px 64px;
-}
-/* Line the header's controls up with the grid's right edge, and keep the layout toggle's segments equal. */
-.notes-view .screen-head {
-  padding-right: 24px;
-}
-.notes-view .seg button {
-  width: 64px;
-  min-width: 0;
-  padding: 0;
-}
-.notes-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 8px 0 24px;
-}
-/* The outlined Folder pill shares the create pill's 48px height (GM3 buttons in one row match), without its shadow. */
-.notes-toolbar .btn.is-secondary {
-  height: 48px;
-  padding: 0 24px 0 16px;
-  border-radius: 24px;
-}
-.notes-section {
-  margin: 8px 0 12px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-}
-.screen-title-icon {
-  vertical-align: -3px;
-  margin-right: 8px;
-  color: var(--text-2);
-}
-.crumb-step {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.info-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 48px;
-  padding: 0 8px 0 16px;
-  margin: 8px 0 16px;
-  border-radius: var(--radius-s);
-  background: var(--bg-subtle);
-  font-size: 14px;
-  color: var(--text-2);
-}
-
-/* Folder tiles: tinted pills with the folder glyph, name and ⋮. */
-.folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(204px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.folder-tile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 4px 0 16px;
-  border-radius: var(--radius-l);
-  background: var(--bg-subtle);
-  cursor: pointer;
-}
-.folder-tile:hover {
-  background: #e1e5ea;
-}
-.folder-tile-icon {
-  color: var(--text-2);
-  fill: var(--text-2);
-  flex: none;
-}
-.folder-tile-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.folder-tile-more {
-  opacity: 0.85;
-}
-
-/* Note cards: a tinted card with a title row, a white page preview and a meta row. */
-.note-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(204px, 1fr));
-  gap: 16px;
-}
-.note-card {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-l);
-  background: var(--bg-subtle);
-  padding: 0 4px 4px;
-  cursor: pointer;
-  min-width: 0;
-}
-.note-card:hover {
-  background: #e1e5ea;
-}
-.note-card-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 0 0 12px;
-}
-.note-card-type {
-  color: #4285f4;
-  flex: none;
-}
-.note-card-title {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-card-title.is-untitled {
-  color: var(--text-2);
-}
-.note-card-more {
-  width: 32px !important;
-  height: 32px !important;
-  margin-left: auto;
-}
-.note-card-thumb {
-  position: relative;
-  height: 172px;
-  border-radius: var(--radius-s);
-  background: #fff;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-}
-.note-card-thumb .thumb {
-  border-radius: 0;
-  margin-top: 8px;
-}
-/* Drive's starred mark: a small grey filled star right after the name, never a badge on the preview. */
-.note-card-star {
-  flex: none;
-  margin-left: -4px;
-  color: var(--text-2);
-  fill: var(--text-2);
-}
-.note-card-meta {
+/* Search looks like a quiet field but opens the palette. */
+.side-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
-  padding: 0 8px 0 10px;
-  font-size: 12px;
-  color: var(--text-2);
-  min-width: 0;
+  height: var(--row-h);
+  padding: 0 6px 0 10px;
+  margin-top: 4px;
+  border-radius: var(--radius);
+  background: var(--bg-canvas);
+  box-shadow:
+    inset 0 0 0 0.5px var(--border),
+    var(--shadow-xs);
+  color: var(--text-3);
+  font-size: 14px;
+  text-align: left;
 }
-.note-card-when {
+.side-search:hover {
+  box-shadow:
+    inset 0 0 0 0.5px var(--border-strong),
+    var(--shadow-xs);
+}
+.side-search kbd {
+  height: 18px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
+  font-size: 11px;
+}
+
+/* Classes: the label opens the grid, the chevron folds the list of classes under it. */
+.nav-classes {
+  padding: 0;
+  gap: 0;
+  margin-top: 10px;
+}
+.nav-classes-label {
   flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  text-align: left;
+}
+.nav-chev {
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--text-3);
+  flex: none;
+}
+.nav-chev:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.chev {
+  transition: transform var(--dur) var(--ease);
+}
+.chev.is-open {
+  transform: rotate(90deg);
+}
+.nav-item.nav-class {
+  padding-left: 30px;
+  gap: 8px;
+}
+.nav-class-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--class-main);
+  flex: none;
+}
+.nav-more {
+  width: 24px;
+  height: 24px;
+  margin-right: -4px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--text-3);
+  opacity: 0;
+  flex: none;
+}
+.nav-class:hover .nav-more,
+.nav-class:focus-within .nav-more {
+  opacity: 1;
+}
+.nav-more:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* Settings, with the local model's state as a small dot on the gear when it isn't running. */
+.side-ai-dot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--bg-shell);
+}
+.side-ai-dot.is-offline {
+  background: var(--danger);
+}
+.side-ai-dot.is-loading {
+  background: var(--warning-line);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.side-kbd {
+  opacity: 0;
+  font-size: 12px;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.side-settings:hover .side-kbd {
+  opacity: 1;
+}
+
+/* A class's colour as a small rounded square (rows, pickers, the palette). */
+.class-square {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+  display: inline-block;
+}
+.class-square.is-palette {
+  width: 12px;
+  height: 12px;
+}
+
+/* ------------------------------------------------------------------ paper picker */
+
+/* Three thumbnails drawn in CSS: blank, a fine grid, ruled lines. */
+.paper-thumb {
+  --paper-line: #d9e0e8;
+  --step: 5px;
+  display: block;
+  width: 56px;
+  height: 72px;
+  border-radius: var(--radius-s);
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
+  flex: none;
+}
+.paper-thumb.is-grid {
+  background-image:
+    linear-gradient(to bottom, transparent calc(var(--step) - 1px), var(--paper-line) 0),
+    linear-gradient(to right, transparent calc(var(--step) - 1px), var(--paper-line) 0);
+  background-size: var(--step) var(--step);
+  background-position: 2px 2px;
+}
+.paper-thumb.is-ruled {
+  --step: 8px;
+  background-image: linear-gradient(to bottom, transparent calc(var(--step) - 1px), var(--paper-line) 0);
+  background-size: 100% var(--step);
+  background-position: 0 10px;
+  background-repeat: repeat-y;
+}
+.paper-picker {
+  display: flex;
+  gap: 8px;
+}
+.paper-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 4px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.paper-opt:hover {
+  background: var(--bg-hover);
+}
+.paper-opt:hover .paper-thumb {
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.25);
+}
+.paper-opt.is-active {
+  color: var(--text);
+  font-weight: 500;
+}
+.paper-opt.is-active .paper-thumb {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.paper-picker.is-s .paper-thumb {
+  width: 32px;
+  height: 42px;
+  --step: 4px;
+}
+.paper-picker.is-s .paper-thumb.is-ruled {
+  --step: 6px;
+  background-position: 0 7px;
+}
+.paper-picker.is-s .paper-opt {
+  font-size: 12px;
+  gap: 4px;
+}
+.paper-picker.is-l .paper-thumb {
+  width: 72px;
+  height: 92px;
+  --step: 6px;
+}
+.paper-picker.is-l .paper-thumb.is-ruled {
+  --step: 9px;
+}
+/* In the New note menu the papers are menu items: no selection, just focus. */
+.paper-picker.is-tiles {
+  padding: 4px 4px 6px;
+}
+.paper-picker.is-tiles .paper-opt {
+  flex: 1;
+  padding: 8px 6px 6px;
+}
+.paper-picker.is-tiles .paper-opt:focus-visible {
+  background: var(--bg-hover);
+  box-shadow: none;
+}
+.paper-picker.is-tiles .paper-opt:focus-visible .paper-thumb {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.new-note-pop .menu {
+  width: 248px;
+}
+
+/* ------------------------------------------------------------------ lists: All notes, folders, Trash */
+
+/* One centred column, as on Claude's pages, with Apple Notes' rows. */
+.list-page {
+  background: var(--bg-canvas);
+}
+.list-col {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+}
+.list-head {
+  margin-bottom: 20px;
+}
+.list-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  margin: 0 0 4px -6px;
+  padding: 0 6px 0 2px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.note-card-folder-icon {
+.list-back:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.list-head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.list-title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sort-btn svg,
+.trash-link svg {
+  color: var(--text-3);
+}
+.list-section {
+  margin-top: 16px;
+}
+.list-caption {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.list-empty {
+  padding: 56px 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 28px;
   color: var(--text-2);
+}
+
+/* A note: its paper, its name over "date  first words", and ⋯ on hover. */
+.note-row,
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 6px 6px 10px;
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: default;
+  position: relative;
+}
+.note-row + .note-row::before,
+.folder-row + .folder-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50px;
+  right: 10px;
+  height: 1px;
+  background: rgba(20, 20, 19, 0.06);
+}
+.note-row:hover,
+.folder-row:hover,
+.note-row:focus-visible,
+.folder-row:focus-visible {
+  background: var(--bg-hover);
+}
+.note-row:hover::before,
+.note-row:hover + .note-row::before,
+.folder-row:hover::before,
+.folder-row:hover + .folder-row::before {
+  opacity: 0;
+}
+.paper-thumb.note-row-paper {
+  width: 28px;
+  height: 36px;
+  --step: 4px;
+  border-radius: 4px;
+}
+.paper-thumb.note-row-paper.is-ruled {
+  --step: 6px;
+  background-position: 0 6px;
+}
+.note-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.note-row-title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.note-row-date {
+  flex: none;
+  color: var(--text-2);
+}
+.note-row-class {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 140px;
   flex: none;
 }
-.class-letter.is-small {
-  width: 20px;
-  height: 20px;
-  font-size: 11px;
+.note-row-class-name,
+.note-row-from {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.note-row-from {
+  flex: none;
+  max-width: 160px;
+}
+.note-row-snippet {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-more {
+  opacity: 0;
+}
+.note-row:hover .row-more,
+.folder-row:hover .row-more,
+.note-row:focus-within .row-more,
+.folder-row:focus-within .row-more {
+  opacity: 1;
+}
+.note-row-restore {
+  opacity: 0;
+}
+.note-row:hover .note-row-restore {
+  opacity: 1;
+}
+.note-row.is-trashed .note-row-title {
+  color: var(--text-2);
+}
+
+.folder-row {
+  min-height: 40px;
+}
+.folder-row-icon {
+  width: 28px;
+  color: var(--text-3);
+  flex: none;
+}
+.folder-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-row-count {
+  font-size: 13px;
+  color: var(--text-3);
   flex: none;
 }
 
-/* thumbnails render the real note, scaled down */
+/* The page as a thumbnail (still used for previews elsewhere). */
 .thumb {
   overflow: hidden;
   border-radius: 10px;
@@ -771,117 +781,39 @@
   background: #fff;
   pointer-events: none;
 }
-.thumb::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 30%;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff 92%);
-}
 .thumb-page {
   width: 816px;
   padding: 56px var(--page-pad-x) 0;
   transform-origin: 0 0;
   --line: 32px;
 }
-/* The editor's page title, scaled: thumbnails are renders of the real page. */
-.thumb-title {
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 400;
-  letter-spacing: 0;
-  margin-bottom: 24px;
-  line-height: 36px;
+
+@media (max-width: 700px) {
+  .list-col {
+    padding: 20px 16px 48px;
+  }
+  .note-row-class {
+    display: none;
+  }
 }
 
-/* List layout: Drive's Name | Location | Last edited | ⋮ table. */
-.note-list {
-  font-size: 14px;
-}
-.note-list-head,
-.note-row {
+/* A class's initial on its light tone (Review's lists). */
+.class-letter {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 104px 48px;
-  align-items: center;
-  gap: 16px;
-  padding: 0 0 0 16px;
-}
-.note-list-head {
-  height: 48px;
-  font-weight: 500;
-  color: var(--text);
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.note-row {
-  height: 48px;
-  box-shadow: inset 0 -1px 0 var(--border);
-  color: var(--text-2);
-  cursor: pointer;
-}
-.note-row:hover {
-  background: var(--bg-hover);
-}
-.note-list-name {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-.note-row-title {
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.note-row-title.is-untitled {
-  color: var(--text-2);
-}
-.note-row-star {
+  place-items: center;
+  background: var(--class-light, var(--bg-subtle));
+  color: var(--class-dark, var(--text-2));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   flex: none;
-  margin-left: -8px;
-  color: var(--text-2);
-  fill: var(--text-2);
 }
-.note-list-where,
-.note-list-date {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.class-letter.is-small {
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  border-radius: 5px;
 }
-.note-list-more {
-  display: flex;
-  justify-content: center;
-}
-/* Location: the class letter or a folder glyph, then the place (Drive's list). */
-.note-row .note-list-where {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.note-row .note-list-where .note-card-folder-icon {
-  margin: 0 2px;
-}
-.note-list-where-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Recent's time groups ("Today", "Yesterday", …), under the one column header. */
-.note-list-group {
-  display: flex;
-  align-items: flex-end;
-  height: 48px;
-  padding: 0 0 8px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.note-grid + .notes-section {
-  margin-top: 24px;
-}
-
-/* Narrow content (assistant open on a laptop): headers stack, actions wrap. */

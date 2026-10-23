@@ -199,7 +199,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                     {stats.blocked.map((b, i) => (
                       <Fragment key={i}>
                         {i === 0 ? '' : i === stats.blocked.length - 1 ? ' and ' : ', '}
-                        <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id, { newTab: true })} title="Open this note">
+                        <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id)} title="Open this note">
                           {b.label}
                         </button>
                       </Fragment>

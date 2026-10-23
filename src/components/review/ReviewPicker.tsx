@@ -174,7 +174,7 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
                             aria-label={`Open ${n.meta.title || 'Untitled'}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              useUI.getState().openNote(n.meta.id, { newTab: true });
+                              useUI.getState().openNote(n.meta.id);
                             }}
                           >
                             <ExternalLink size={16} />

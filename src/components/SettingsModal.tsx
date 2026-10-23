@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, HardDrive, X } from 'lucide-react';
+import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, Settings2, X } from 'lucide-react';
 import { Modal } from './common/Modal';
 import { useUI, type SettingsSection } from '../state/ui';
 import { useAI } from '../state/ai';
@@ -7,27 +7,28 @@ import { useSettings, type FontChoice, type LineSpacing, type PageSize } from '.
 import { useTools } from '../state/tools';
 import { useVault } from '../state/vault';
 import { DEFAULT_URLS, type ModelInfo } from '../lib/ai/providers';
-import { PAPERS, PaperSwatch } from '../editor/ui/PageHeader';
-import { Toggle } from '../editor/ui/InkToolbar';
 import { bridge, isElectron, MOD, SHIFT, ALT } from '../lib/platform';
 import { openVaultFolder } from '../lib/commands';
 import { cx, formatRelativeTime } from '../lib/util';
 import { chatRobust, useActivity } from '../lib/ai/engine';
-import { NibMark } from './TopBar';
+import { NibMark } from './common/NibMark';
+import { importFiles } from '../lib/import';
+
+const ICON = { size: 16, strokeWidth: 1.5 };
 
 const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
-  { id: 'ai', label: 'Local AI', icon: <Cpu size={20} /> },
-  { id: 'writing', label: 'Writing & ink', icon: <PenLine size={20} /> },
-  { id: 'vault', label: 'Vault', icon: <HardDrive size={20} /> },
-  { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={20} /> },
-  { id: 'about', label: 'About', icon: <Info size={20} /> },
+  { id: 'general', label: 'General', icon: <Settings2 {...ICON} /> },
+  { id: 'writing', label: 'Writing & paper', icon: <PenLine {...ICON} /> },
+  { id: 'ai', label: 'Local AI', icon: <Cpu {...ICON} /> },
+  { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard {...ICON} /> },
+  { id: 'about', label: 'About', icon: <Info {...ICON} /> },
 ];
 
 export function SettingsModal() {
   const section = useUI((s) => s.settings);
   const close = () => useUI.getState().openSettings(null);
   return (
-    <Modal open={!!section} onClose={close} width={960} bare className="settings">
+    <Modal open={!!section} onClose={close} width={880} bare className="settings">
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings">
           <h1 className="settings-nav-title">Settings</h1>
@@ -43,13 +44,13 @@ export function SettingsModal() {
             </button>
           ))}
         </nav>
-        <button className="icon-btn settings-close" onClick={close} aria-label="Close">
-          <X size={20} />
+        <button className="icon-btn is-tiny settings-close" onClick={close} aria-label="Close">
+          <X size={16} strokeWidth={1.5} />
         </button>
         <div className="settings-body">
+          {section === 'general' && <GeneralSection />}
           {section === 'ai' && <AISection />}
           {section === 'writing' && <WritingSection />}
-          {section === 'vault' && <VaultSection />}
           {section === 'shortcuts' && <ShortcutsSection />}
           {section === 'about' && <AboutSection />}
         </div>
@@ -58,26 +59,41 @@ export function SettingsModal() {
   );
 }
 
-/** A Google Drive settings row: the setting's name on the left, its control and a line of help on the right. */
-function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+/** A setting: its name and a line of help on the left, its control on the right (or under it, `stacked`). */
+function Row({ title, help, children, stacked }: { title: React.ReactNode; help?: React.ReactNode; children?: React.ReactNode; stacked?: boolean }) {
   return (
-    <div className="field">
-      <div className="field-label">{label}</div>
-      <div className="field-body">
-        <div className="field-control">{children}</div>
-        {hint && <div className="field-hint">{hint}</div>}
+    <div className={cx('set-row', stacked && 'is-stacked')}>
+      <div className="set-row-text">
+        <div className="set-row-title">{title}</div>
+        {help && <div className="set-row-help">{help}</div>}
       </div>
+      {children && <div className="set-row-control">{children}</div>}
     </div>
   );
 }
 
-/** M3 segmented buttons: the chosen segment is filled and shows a check. */
+/** A switch on a settings row: the row's name is its label. */
+function SwitchRow({ title, help, checked, onChange }: { title: string; help?: string; checked: boolean; onChange(v: boolean): void }) {
+  return (
+    <label className="set-row is-switch">
+      <span className="set-row-text">
+        <span className="set-row-title">{title}</span>
+        {help && <span className="set-row-help">{help}</span>}
+      </span>
+      <span className={cx('switch', checked && 'is-on')}>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <span />
+      </span>
+    </label>
+  );
+}
+
+/** A segmented control: the chosen item sits on a white thumb. */
 function Segmented<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange(v: T): void }) {
   return (
     <div className="seg" role="radiogroup">
       {options.map(([v, label]) => (
         <button key={String(v)} role="radio" aria-checked={value === v} className={cx(value === v && 'is-active')} onClick={() => onChange(v)}>
-          {value === v && <Check size={18} />}
           {label}
         </button>
       ))}
@@ -136,7 +152,7 @@ function CopyCmd({ cmd, note }: { cmd: string; note: string }) {
         }}
         aria-label="Copy"
       >
-        {ok ? <Check size={18} /> : <Copy size={18} />}
+        {ok ? <Check {...ICON} /> : <Copy {...ICON} />}
       </button>
     </div>
   );
@@ -154,30 +170,32 @@ function AISection() {
 
   const chatModels = ai.models.filter((m) => !m.embedding);
   const chatInfo = ai.models.find((m) => m.name === ai.chatModel);
+  const vision = ai.visionModel || (chatInfo?.vision ? ai.chatModel : '');
   const statusText =
     ai.status === 'online'
-      ? `Connected${ai.serverLabel ? ` to ${ai.serverLabel}` : ''} · ${ai.models.length} model${ai.models.length === 1 ? '' : 's'} available`
+      ? `Running${ai.serverLabel ? ` on ${ai.serverLabel}` : ''}`
       : ai.status === 'checking'
-        ? 'Connecting…'
+        ? 'Starting the local model…'
         : ai.status === 'offline'
-          ? 'Can’t reach a model server at this address'
+          ? 'Local AI isn’t running'
           : 'Not connected yet';
+  const statusSub =
+    ai.status === 'offline'
+      ? ai.lastError || `Nothing answers at ${ai.baseUrl}`
+      : ai.status === 'online'
+        ? [ai.chatModel && `Chat: ${ai.chatModel}`, vision && `Vision: ${vision}`].filter(Boolean).join(' · ') || `${ai.models.length} models available`
+        : ai.baseUrl;
 
   return (
     <div className="settings-section">
       <h2>Local AI</h2>
-      <p className="settings-lead">
-        Nib talks only to a model running on your own machine. Your notes never leave it.
-      </p>
-
-      <Field label="Connection">
+      {/* The one place the model's state is shown in full. */}
+      <div className="set-row">
         <div className={cx('status-card', `is-${ai.status}`)}>
           <span className="ai-dot" />
           <div className="status-text">
             <div className="status-title">{statusText}</div>
-            <div className="status-sub">
-              {ai.status === 'offline' ? ai.lastError : `${ai.provider === 'ollama' ? 'Ollama' : 'OpenAI-compatible'} · ${ai.baseUrl}`}
-            </div>
+            <div className="status-sub">{statusSub}</div>
           </div>
           <button
             className="btn is-secondary"
@@ -188,14 +206,14 @@ function AISection() {
               setDetecting(false);
             }}
           >
-            {detecting ? <Loader2 size={18} className="spin" /> : <Radar size={18} />} Detect
+            {detecting ? <Loader2 {...ICON} className="spin" /> : <Radar {...ICON} />} Detect
           </button>
-          <button className="icon-btn" onClick={() => void ai.refresh()} aria-label="Refresh" title="Refresh model list">
-            <RefreshCw size={18} />
+          <button className="icon-btn" onClick={() => void ai.refresh()} aria-label="Refresh" title="Look for models again">
+            <RefreshCw {...ICON} />
           </button>
         </div>
-      </Field>
-      <Field label="Server" hint="Ollama, or anything that speaks the OpenAI API — LM Studio, llama.cpp, Jan, vLLM.">
+      </div>
+      <Row title="Server" help="Ollama, or anything that speaks the OpenAI API: LM Studio, llama.cpp, Jan, vLLM.">
         <Segmented
           value={ai.provider}
           options={[
@@ -204,8 +222,8 @@ function AISection() {
           ]}
           onChange={(v) => ai.set({ provider: v, baseUrl: DEFAULT_URLS[v] })}
         />
-      </Field>
-      <Field label="Address">
+      </Row>
+      <Row title="Address">
         <input
           className="input"
           value={url}
@@ -214,17 +232,18 @@ function AISection() {
           onKeyDown={(e) => e.key === 'Enter' && ai.set({ baseUrl: url })}
           spellCheck={false}
         />
-      </Field>
+      </Row>
       {ai.provider === 'openai' && (
-        <Field label="API key" hint="Usually not needed for local servers.">
-          <input className="input" type="password" value={ai.apiKey} onChange={(e) => ai.set({ apiKey: e.target.value })} placeholder="optional" />
-        </Field>
+        <Row title="API key" help="Usually not needed for local servers.">
+          <input className="input" type="password" value={ai.apiKey} onChange={(e) => ai.set({ apiKey: e.target.value })} placeholder="Optional" />
+        </Row>
       )}
 
-      <Field label="Chat model" hint="Answers questions, tutors, summarises.">
+      <div className="settings-group">Models</div>
+      <Row title="Chat model" help="Answers questions, tutors, summarises.">
         <ModelSelect value={ai.chatModel} onChange={(v) => ai.set({ chatModel: v })} models={ai.models} filter={(m) => !m.embedding} />
-      </Field>
-      <Field label="Vision model" hint="Reads your handwriting and what’s on screen.">
+      </Row>
+      <Row title="Vision model" help="Reads your handwriting and what’s on screen.">
         <ModelSelect
           value={ai.visionModel}
           onChange={(v) => ai.set({ visionModel: v })}
@@ -232,22 +251,16 @@ function AISection() {
           filter={(m) => !m.embedding && (m.vision || ai.forceVision)}
           none={chatModels.find((m) => m.name === ai.chatModel)?.vision ? 'Same as chat model' : 'None'}
         />
-      </Field>
-      <Field label="Embedding model" hint="Optional. Makes “Ask your notes” understand meaning, not just keywords.">
-        <ModelSelect
-          value={ai.embedModel}
-          onChange={(v) => ai.set({ embedModel: v })}
-          models={ai.models}
-          filter={(m) => m.embedding}
-          none="None — keyword search"
-        />
-      </Field>
-      <Field
-        label="Context size"
-        hint={
+      </Row>
+      <Row title="Embedding model" help="Optional. Lets Ask your notes match meaning, not just words.">
+        <ModelSelect value={ai.embedModel} onChange={(v) => ai.set({ embedModel: v })} models={ai.models} filter={(m) => m.embedding} none="None (keyword search)" />
+      </Row>
+      <Row
+        title="Context size"
+        help={
           chatInfo?.contextLength && chatInfo.contextLength < ai.numCtx
-            ? `${ai.chatModel} supports up to ${Math.round(chatInfo.contextLength / 1024)}K — Nib will use that.`
-            : 'How much of a long note the model can read at once. Larger uses more memory.'
+            ? `${ai.chatModel} reads up to ${Math.round(chatInfo.contextLength / 1024)}K; Nib uses that.`
+            : 'How much of a long note the model reads at once. Larger uses more memory.'
         }
       >
         <select className="select" value={ai.numCtx} onChange={(e) => ai.set({ numCtx: Number(e.target.value) })}>
@@ -257,10 +270,10 @@ function AISection() {
             </option>
           ))}
         </select>
-      </Field>
-      <Field label="Creativity" hint={`${ai.temperature.toFixed(1)} — lower is more precise. Answers from your notes always run at 0.15 or below.`}>
+      </Row>
+      <Row title="Creativity" help={`${ai.temperature.toFixed(1)}. Lower is more precise. Answers from your notes always run at 0.15 or below.`}>
         <input
-          className="slider"
+          className="slider set-slider"
           type="range"
           min={0}
           max={1.2}
@@ -269,48 +282,40 @@ function AISection() {
           style={{ '--pct': `${(ai.temperature / 1.2) * 100}%` } as React.CSSProperties}
           onChange={(e) => ai.set({ temperature: Number(e.target.value) })}
         />
-      </Field>
-      <Field label="Answers">
-        <div className="toggles">
-          <Toggle
-            checked={ai.outsideKnowledge === 'auto'}
-            onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
-            label="When my notes don’t cover a question, answer from the AI’s own knowledge"
-            hint="Nib says first that your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
-          />
-          <Toggle
-            checked={ai.doubleCheck}
-            onChange={(v) => ai.set({ doubleCheck: v })}
-            label="Double-check loosely matched sentences"
-            hint="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
-          />
-        </div>
-      </Field>
-      <Field label="Handwriting">
-        <div className="toggles">
-          <Toggle
-            checked={ai.autoTranscribe}
-            onChange={(v) => ai.set({ autoTranscribe: v })}
-            label="Read handwriting in the background"
-            hint="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
-          />
-          <Toggle
-            checked={ai.forceVision}
-            onChange={(v) => ai.set({ forceVision: v })}
-            label="My chat model can see images"
-            hint="Turn on if detection missed it."
-          />
-        </div>
-      </Field>
+      </Row>
 
-      <Field label="Get models" hint="Install Ollama from ollama.com, then run one of these in Terminal.">
+      <div className="settings-group">Answers</div>
+      <SwitchRow
+        title="When my notes don’t cover a question, answer from the AI’s own knowledge"
+        help="Nib first says your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
+        checked={ai.outsideKnowledge === 'auto'}
+        onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
+      />
+      <SwitchRow
+        title="Double-check loosely matched sentences"
+        help="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
+        checked={ai.doubleCheck}
+        onChange={(v) => ai.set({ doubleCheck: v })}
+      />
+
+      <div className="settings-group">Handwriting</div>
+      <SwitchRow
+        title="Read handwriting in the background"
+        help="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
+        checked={ai.autoTranscribe}
+        onChange={(v) => ai.set({ autoTranscribe: v })}
+      />
+      <SwitchRow title="My chat model can see images" help="Turn on if detection missed it." checked={ai.forceVision} onChange={(v) => ai.set({ forceVision: v })} />
+
+      <div className="settings-group">Get models</div>
+      <Row title="Install Ollama from ollama.com, then run one of these in Terminal." stacked>
         <div className="recommend">
-          <CopyCmd cmd="ollama pull qwen2.5vl:7b" note="Reads handwriting & math · 6 GB" />
+          <CopyCmd cmd="ollama pull qwen2.5vl:7b" note="Reads handwriting and math · 6 GB" />
           <CopyCmd cmd="ollama pull gemma3:4b" note="Fast, sees images · 3 GB" />
-          <CopyCmd cmd="ollama pull nomic-embed-text" note="Semantic search · 0.3 GB" />
-          <CopyCmd cmd="ollama pull llama3.2-vision" note="Alternative vision model · 8 GB" />
+          <CopyCmd cmd="ollama pull nomic-embed-text" note="Meaning-based search · 0.3 GB" />
+          <CopyCmd cmd="ollama pull llama3.2-vision" note="Another vision model · 8 GB" />
         </div>
-      </Field>
+      </Row>
 
       <ActivityLog />
     </div>
@@ -338,40 +343,86 @@ function ActivityLog() {
     }
   };
   return (
-    <Field label="Activity" hint="Every request to your model, newest first. Questions you ask jump ahead of background work.">
-      <div className="activity">
-      <div className="activity-head">
-        <button className="btn is-secondary" onClick={() => void runTest()}>
-          Test model
-        </button>
-        {testing && <span className="activity-test">{testing}</span>}
-      </div>
-      {entries.length === 0 ? (
-        <div className="activity-empty">Nothing yet.</div>
-      ) : (
-        <div className="activity-list">
-          {entries.slice(0, 14).map((e) => (
-            <div key={e.id} className="activity-row" title={e.error}>
-              <span className={cx('activity-dot', `is-${e.status}`)} />
-              <span className="activity-label">{e.label}</span>
-              <span className="activity-model">{e.model}</span>
-              <span className="activity-meta">
-                {e.status === 'ok' && e.metrics
-                  ? `${(e.metrics.totalMs / 1000).toFixed(1)}s${e.metrics.tokensPerSec ? ` · ${Math.round(e.metrics.tokensPerSec)} tok/s` : ''}`
-                  : e.status === 'paused'
-                    ? 'paused for your question'
-                    : e.status === 'error'
-                      ? 'failed'
-                      : e.status}
-                {e.attempts > 1 ? ` · ${e.attempts - 1} ${e.attempts === 2 ? 'retry' : 'retries'}` : ''}
-              </span>
-              <span className="activity-time">{formatRelativeTime(e.at)}</span>
+    <>
+      <div className="settings-group">Activity</div>
+      <Row title="Every request to your model, newest first" help="Questions you ask go ahead of background work." stacked>
+        <div className="activity">
+          <div className="activity-head">
+            <button className="btn is-secondary" onClick={() => void runTest()}>
+              Test model
+            </button>
+            {testing && <span className="activity-test">{testing}</span>}
+          </div>
+          {entries.length === 0 ? (
+            <div className="activity-empty">Nothing yet.</div>
+          ) : (
+            <div className="activity-list">
+              {entries.slice(0, 14).map((e) => (
+                <div key={e.id} className="activity-row" title={e.error}>
+                  <span className={cx('activity-dot', `is-${e.status}`)} />
+                  <span className="activity-label">{e.label}</span>
+                  <span className="activity-model">{e.model}</span>
+                  <span className="activity-meta">
+                    {e.status === 'ok' && e.metrics
+                      ? `${(e.metrics.totalMs / 1000).toFixed(1)}s${e.metrics.tokensPerSec ? ` · ${Math.round(e.metrics.tokensPerSec)} tok/s` : ''}`
+                      : e.status === 'paused'
+                        ? 'paused for your question'
+                        : e.status === 'error'
+                          ? 'failed'
+                          : e.status}
+                    {e.attempts > 1 ? ` · ${e.attempts - 1} ${e.attempts === 2 ? 'retry' : 'retries'}` : ''}
+                  </span>
+                  <span className="activity-time">{formatRelativeTime(e.at)}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
-      </div>
-    </Field>
+      </Row>
+    </>
+  );
+}
+
+function GeneralSection() {
+  const backend = useVault((s) => s.backend);
+  const notes = useVault((s) => s.notes);
+  const folders = useVault((s) => s.folders);
+  const live = Object.values(notes).filter((n) => !n.meta.trashed).length;
+  return (
+    <div className="settings-section">
+      <h2>General</h2>
+      <Row
+        title={isElectron ? 'Vault folder' : 'Storage'}
+        help={
+          isElectron
+            ? 'Your notes are ordinary files in this folder. Put it in iCloud Drive or Dropbox to sync it, and back it up like any other folder.'
+            : 'In the browser, notes are kept in this browser’s storage.'
+        }
+        stacked
+      >
+        <div className="vault-card">
+          <FolderOpen {...ICON} />
+          <div className="vault-card-text">
+            <div className="vault-path" title={backend?.label}>
+              {backend?.label}
+            </div>
+            <div className="vault-stats">
+              {live} notes · {folders.length} folders
+            </div>
+          </div>
+          {bridge && (
+            <button className="btn is-secondary" onClick={() => void openVaultFolder()}>
+              Open another folder…
+            </button>
+          )}
+        </div>
+      </Row>
+      <Row title="Import" help="PDFs, Markdown files and images become notes.">
+        <button className="btn is-secondary" onClick={() => void importFiles()}>
+          Import…
+        </button>
+      </Row>
+    </div>
   );
 }
 
@@ -380,25 +431,15 @@ function WritingSection() {
   const t = useTools();
   return (
     <div className="settings-section">
-      <h2>Writing & ink</h2>
-      <Field label="Default paper" hint="For new notes. Change a note’s paper with the Paper button in its toolbar.">
-        <div className="paper-picks">
-          {PAPERS.map((p) => (
-            <button key={p.id} className={cx('paper-pick', s.paper === p.id && 'is-active')} onClick={() => s.set({ paper: p.id })}>
-              <PaperSwatch paper={p.id} />
-              <span>{p.label}</span>
-            </button>
-          ))}
-        </div>
-      </Field>
-      <Field label="Line spacing" hint="Typed text and handwriting share these lines.">
+      <h2>Writing & paper</h2>
+      <Row title="Line spacing" help="Typed text and handwriting share these lines.">
         <Segmented
           value={s.lineSpacing}
           options={(['compact', 'comfortable', 'roomy'] as LineSpacing[]).map((v) => [v, v[0].toUpperCase() + v.slice(1)])}
           onChange={(v) => s.set({ lineSpacing: v })}
         />
-      </Field>
-      <Field label="Typeface">
+      </Row>
+      <Row title="Typeface">
         <Segmented
           value={s.font}
           options={
@@ -410,8 +451,8 @@ function WritingSection() {
           }
           onChange={(v) => s.set({ font: v })}
         />
-      </Field>
-      <Field label="Page size" hint="Matches the exported PDF.">
+      </Row>
+      <Row title="Page size" help="Matches the exported PDF.">
         <Segmented
           value={s.pageSize}
           options={
@@ -422,63 +463,24 @@ function WritingSection() {
           }
           onChange={(v) => s.set({ pageSize: v })}
         />
-      </Field>
-      <Field label="Page">
-        <div className="toggles">
-          <Toggle checked={s.fitWidth} onChange={(v) => s.set({ fitWidth: v })} label="Fit the page to the window" />
-          <Toggle checked={s.spellcheck} onChange={(v) => s.set({ spellcheck: v })} label="Check spelling" />
-        </div>
-      </Field>
-      <Field label="Pen">
-        <div className="toggles">
-          <Toggle
-            checked={t.stylusDraws}
-            onChange={(v) => t.set({ stylusDraws: v })}
-            label="Stylus always draws"
-            hint="With a drawing tablet or Sidecar Apple Pencil, the pen writes and the mouse types — no switching."
-          />
-          <Toggle
-            checked={t.holdToSnap}
-            onChange={(v) => t.set({ holdToSnap: v })}
-            label="Hold to snap shapes"
-            hint="Pause at the end of a stroke to turn it into a clean line, circle or box."
-          />
-          <Toggle checked={t.highlighter.straighten} onChange={(v) => t.setHighlighter({ straighten: v })} label="Straighten highlighter strokes" />
-        </div>
-      </Field>
-    </div>
-  );
-}
+      </Row>
+      <SwitchRow title="Fit the page to the window" checked={s.fitWidth} onChange={(v) => s.set({ fitWidth: v })} />
+      <SwitchRow title="Check spelling" checked={s.spellcheck} onChange={(v) => s.set({ spellcheck: v })} />
 
-function VaultSection() {
-  const backend = useVault((s) => s.backend);
-  const notes = useVault((s) => s.notes);
-  const folders = useVault((s) => s.folders);
-  const live = Object.values(notes).filter((n) => !n.meta.trashed).length;
-  return (
-    <div className="settings-section">
-      <h2>Vault</h2>
-      <p className="settings-lead">
-        {isElectron
-          ? 'Your notes are ordinary files in a folder on your Mac — put it in iCloud Drive or Dropbox to sync, and back it up like any other folder.'
-          : 'In the browser, notes are stored in this browser’s local storage.'}
-      </p>
-      <Field label={isElectron ? 'Folder' : 'Storage'}>
-        <div className="vault-card">
-          <FolderOpen size={20} />
-          <div className="vault-card-text">
-            <div className="vault-path">{backend?.label}</div>
-            <div className="vault-stats">
-              {live} notes · {folders.length} folders
-            </div>
-          </div>
-        </div>
-        {bridge && (
-          <button className="btn is-secondary vault-open" onClick={() => void openVaultFolder()}>
-            Open another folder…
-          </button>
-        )}
-      </Field>
+      <div className="settings-group">Marker</div>
+      <SwitchRow
+        title="Stylus always draws"
+        help="With a drawing tablet or a Sidecar Apple Pencil, the pen writes and the mouse types, with no switching."
+        checked={t.stylusDraws}
+        onChange={(v) => t.set({ stylusDraws: v })}
+      />
+      <SwitchRow
+        title="Hold to snap shapes"
+        help="Pause at the end of a stroke to turn it into a clean line, arrow, circle or box."
+        checked={t.holdToSnap}
+        onChange={(v) => t.set({ holdToSnap: v })}
+      />
+      <SwitchRow title="Straighten highlighter strokes" checked={t.highlighter.straighten} onChange={(v) => t.setHighlighter({ straighten: v })} />
     </div>
   );
 }
@@ -489,10 +491,13 @@ const SHORTCUTS: [string, [string, string][]][] = [
     [
       [`${MOD}N`, 'New note'],
       [`${SHIFT}${MOD}Y`, 'New homework'],
-      [`${MOD}K`, 'Quick open & commands'],
+      [`${MOD}K`, 'Search notes and commands'],
       [`${MOD}J`, 'Assistant'],
       [`${SHIFT}${MOD}L`, 'Ask your notes'],
-      [`${MOD}\\`, 'Toggle sidebar'],
+      [`${SHIFT}${MOD}E`, 'Review'],
+      [`${MOD}\\`, 'Show or hide the sidebar'],
+      [`${MOD}[  /  ${MOD}]`, 'Back / forward'],
+      [`${MOD},`, 'Settings'],
       [`${MOD}P`, 'Export as PDF'],
       [`${MOD}=  /  ${MOD}-`, 'Zoom page'],
     ],
@@ -500,14 +505,13 @@ const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Writing by hand',
     [
-      [`${ALT}P`, 'Pen'],
+      [`${ALT}P`, 'Marker'],
       [`${ALT}H`, 'Highlighter'],
       [`${ALT}E`, 'Eraser'],
-      [`${ALT}L`, 'Lasso'],
-      [`${ALT}S`, 'Shapes'],
-      [`${ALT}A`, 'Ask AI about an area'],
+      [`${ALT}S  /  ${ALT}L`, 'Select'],
+      [`${ALT}T`, 'Type'],
       ['Just type', 'Switch to typing below your handwriting'],
-      ['Esc', 'Back to the pen'],
+      ['Esc', 'Back to the marker'],
       ['Hold', 'Snap a stroke into a shape'],
       [`${MOD}D`, 'Sketch inline (while typing)'],
       [`${MOD} + drag`, 'Move handwriting with the pen'],
@@ -535,7 +539,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
 function ShortcutsSection() {
   return (
     <div className="settings-section">
-      <h2>Keyboard shortcuts</h2>
+      <h2>Shortcuts</h2>
       <div className="shortcut-groups">
         {SHORTCUTS.map(([g, list]) => (
           <div key={g} className="shortcut-group">
@@ -564,10 +568,11 @@ function AboutSection() {
   return (
     <div className="settings-section about">
       <div className="about-mark">
-        <NibMark size={48} />
+        <NibMark size={44} />
       </div>
       <h2>Nib</h2>
-      <p className="muted">{info ? `Version ${info.version} · Electron ${info.electron}` : 'Version 0.1.0'}</p>
+      <p>{info ? `Version ${info.version} · Electron ${info.electron}` : 'Version 0.1.0'}</p>
+      <p>A notebook for typing and handwriting, with a local AI that answers from your own notes.</p>
     </div>
   );
 }

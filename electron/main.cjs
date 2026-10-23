@@ -66,11 +66,11 @@ function createWindow() {
     ...(isMac
       ? {
           titleBarStyle: 'hiddenInset',
-          // Centred in the 64px app bar.
-          trafficLightPosition: { x: 20, y: 26 },
-          backgroundColor: '#f8fafd',
+          // Centred in the sidebar's 44px header row.
+          trafficLightPosition: { x: 16, y: 15 },
+          backgroundColor: '#f5f4ed',
         }
-      : { backgroundColor: '#f8fafd', autoHideMenuBar: false }),
+      : { backgroundColor: '#f5f4ed', autoHideMenuBar: false }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -83,6 +83,9 @@ function createWindow() {
   if (state.maximized) win.maximize();
 
   win.once('ready-to-show', () => win.show());
+  // The traffic lights hide in full screen; the page takes back the room they kept free.
+  win.on('enter-full-screen', () => win.webContents.send('menu', 'fullscreen', 'on'));
+  win.on('leave-full-screen', () => win.webContents.send('menu', 'fullscreen', 'off'));
   win.on('close', () => saveWindowState(win));
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
@@ -145,8 +148,8 @@ function buildMenu() {
         { label: 'New Class…', click: () => send('new-class') },
         { label: 'New Folder', accelerator: 'CmdOrCtrl+Alt+N', click: () => send('new-folder') },
         { type: 'separator' },
-        { label: 'Quick Open…', accelerator: 'CmdOrCtrl+K', click: () => send('palette') },
-        { label: 'Ask Your Library', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('library') },
+        { label: 'Search…', accelerator: 'CmdOrCtrl+K', click: () => send('palette') },
+        { label: 'Ask your notes', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('library') },
         { label: 'Review…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('review') },
         { type: 'separator' },
         { label: 'Import…', accelerator: 'CmdOrCtrl+O', click: () => send('import') },
@@ -191,6 +194,9 @@ function buildMenu() {
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+\\', click: () => send('toggle-sidebar') },
         { label: 'Toggle Assistant', accelerator: 'CmdOrCtrl+J', click: () => send('toggle-assistant') },
+        { type: 'separator' },
+        { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => send('back') },
+        { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => send('forward') },
         { type: 'separator' },
         { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => send('zoom', 'in') },
         { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom', 'out') },

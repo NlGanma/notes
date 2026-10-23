@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { TopBar } from './components/TopBar';
-import { NoteGrid } from './components/NoteGrid';
+import { MainBar } from './components/MainBar';
+import { NotesPage } from './components/NoteGrid';
 import { LibraryView } from './components/library/LibraryView';
 import { ClassView } from './components/classes/ClassView';
 import { ClassesView } from './components/classes/ClassesView';
@@ -25,7 +25,22 @@ import { flushReview, useReview } from './state/review';
 import { bridge, isElectron, isMac } from './lib/platform';
 import { runCommand, handleGlobalKey } from './lib/keys';
 import { importDropped } from './lib/import';
+import { displayTitle } from './lib/displayTitle';
 import { cx } from './lib/util';
+
+/** True while the window is narrower than the query's width. */
+function useNarrow(query: string) {
+  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatch(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return match;
+}
+
+const KNOWN = new Set(['classes', 'home', 'note', 'folder', 'trash', 'library', 'class', 'homework', 'review']);
 
 export function App() {
   const ready = useVault((s) => s.ready);
@@ -36,6 +51,9 @@ export function App() {
   const backend = useVault((s) => s.backend);
   const { view, tabs, sidebar, assistant } = useUI();
   const [dropping, setDropping] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  // Under 900px the sidebar starts hidden and, when shown, floats over the page.
+  const narrow = useNarrow('(max-width: 899px)');
 
   useEffect(() => {
     document.documentElement.classList.toggle('is-mac', isMac);
@@ -75,7 +93,7 @@ export function App() {
   }, [backend]);
 
   // The window title names the open note, so Mission Control and the Window menu can tell windows apart.
-  const openTitle = view.kind === 'note' ? (notes[view.id]?.meta.title || 'Untitled') : null;
+  const openTitle = view.kind === 'note' && notes[view.id] ? displayTitle(notes[view.id]) : null;
   useEffect(() => {
     document.title = openTitle ? `${openTitle} — Nib` : 'Nib';
   }, [openTitle]);
@@ -95,21 +113,51 @@ export function App() {
     else if (valid.length !== ui.tabs.length) ui.set({ tabs: valid });
   }, [ready, notes, folderMeta, folders]);
 
-  // Under 1280px the drawer, the page and the assistant don't all fit (at 1024 the page shrank to 45%):
-  // fold the drawer to its rail while they're open, as Gmail does for Gemini, and unfold it after.
-  // Only a drawer folded here is unfolded again; the menu button still opens it as usual.
-  const crowded = (assistant && view.kind === 'note') || view.kind === 'library';
-  const autoRail = useRef(false);
+  // The assistant needs room: when it would leave the page under 760px, the sidebar steps aside, and
+  // comes back when the assistant closes (only if it was put away here).
+  const crowded = assistant && view.kind === 'note';
+  const autoHidden = useRef(false);
   useEffect(() => {
     const ui = useUI.getState();
-    if (crowded && ui.sidebar && window.matchMedia('(max-width: 1279px)').matches) {
-      autoRail.current = true;
-      ui.set({ sidebar: false });
-    } else if (!crowded && autoRail.current) {
-      autoRail.current = false;
+    if (crowded && ui.sidebar && !narrow) {
+      const panel = document.querySelector('.assistant')?.getBoundingClientRect().width ?? 400;
+      const sidebarW = document.querySelector('.sidebar')?.getBoundingClientRect().width ?? 272;
+      if (window.innerWidth - sidebarW - panel < 760) {
+        autoHidden.current = true;
+        ui.set({ sidebar: false });
+      }
+    } else if (!crowded && autoHidden.current) {
+      autoHidden.current = false;
       ui.set({ sidebar: true });
     }
-  }, [crowded]);
+  }, [crowded, narrow]);
+
+  useEffect(() => {
+    if (narrow) useUI.getState().set({ sidebar: false });
+  }, [narrow]);
+
+  // The floating sidebar goes away on a click outside it, on Esc, and when a page is picked.
+  const overlay = narrow && sidebar;
+  useEffect(() => {
+    if (!overlay) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.sidebar, .popover, .context-menu, .modal-backdrop, .mainbar-show')) return;
+      useUI.getState().set({ sidebar: false });
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && useUI.getState().set({ sidebar: false });
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [overlay]);
+  const viewKey = JSON.stringify(view);
+  useEffect(() => {
+    if (useUI.getState().sidebar && window.matchMedia('(max-width: 899px)').matches) useUI.getState().set({ sidebar: false });
+    setScrolled(false);
+  }, [viewKey]);
 
   if (!ready) {
     return (
@@ -125,7 +173,7 @@ export function App() {
 
   return (
     <div
-      className={cx('app', !sidebar && 'no-sidebar', showAssistant && 'has-assistant', dropping && 'is-dropping')}
+      className={cx('app', !sidebar && 'no-sidebar', narrow && 'is-narrow', showAssistant && 'has-assistant', dropping && 'is-dropping')}
       onDragOver={(e) => {
         // Dialogs handle (or refuse) their own drops; never import behind an open dialog, and never
         // let the browser open the file instead.
@@ -156,32 +204,28 @@ export function App() {
         }
       }}
     >
-      <TopBar />
-      <div className="app-body">
-      <Sidebar />
+      <Sidebar overlay={narrow} />
       <main className="main">
-        <div className="content">
+        <MainBar scrolled={scrolled} />
+        {/* Any page scrolling under the bar gives the bar its hairline. */}
+        <div className="content" onScrollCapture={(e) => setScrolled((e.target as HTMLElement).scrollTop > 2)}>
           {error && <div className="vault-error">Couldn’t open the vault: {error}</div>}
           {view.kind === 'library' && <LibraryView />}
           {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} tab={view.kind === 'class' ? view.tab : undefined} />}
-          {view.kind === 'classes' && <ClassesView archived={!!view.archived} />}
+          {view.kind === 'classes' && <ClassesView />}
           {view.kind === 'homework' && <HomeworkView filter={view.filter} />}
           {view.kind === 'review' && <ReviewView preset={view.preset} />}
-          {(view.kind === 'home' ||
-            view.kind === 'tag' ||
-            view.kind === 'favorites' ||
-            view.kind === 'recent' ||
-            view.kind === 'trash' ||
-            (view.kind === 'folder' && folderMeta[view.path]?.kind !== 'class')) && <NoteGrid view={view} />}
+          {(view.kind === 'home' || view.kind === 'trash' || (view.kind === 'folder' && folderMeta[view.path]?.kind !== 'class')) && <NotesPage view={view} />}
           {tabs
             .filter((id) => notes[id] && !notes[id].meta.trashed)
             .map((id) => (
               <NoteEditor key={id} noteId={id} active={activeNote === id} />
             ))}
+          {/* A view nothing else draws (e.g. saved by a newer version) shows the Classes page. */}
+          {!KNOWN.has(view.kind) && <ClassesView />}
         </div>
       </main>
       {showAssistant && <AssistantPanel />}
-      </div>
       <SlashMenu />
       <CommandPalette />
       <SettingsModal />

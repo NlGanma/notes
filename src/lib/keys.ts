@@ -1,4 +1,4 @@
-import { useUI } from '../state/ui';
+import { goBack, goForward, useUI } from '../state/ui';
 import {
   closeCurrentTab,
   currentNoteId,
@@ -74,7 +74,7 @@ export function runCommand(cmd: string, arg?: string) {
       zoom((arg as 'in' | 'out' | 'reset') ?? 'reset');
       break;
     case 'settings':
-      ui.openSettings('ai');
+      ui.openSettings();
       break;
     case 'shortcuts':
       ui.openSettings('shortcuts');
@@ -87,6 +87,16 @@ export function runCommand(cmd: string, arg?: string) {
       break;
     case 'reveal':
       revealCurrent();
+      break;
+    case 'back':
+      goBack();
+      break;
+    case 'forward':
+      goForward();
+      break;
+    // The window went in or out of full screen: the traffic lights come and go with it.
+    case 'fullscreen':
+      document.documentElement.classList.toggle('is-fullscreen', arg === 'on');
       break;
   }
 }
@@ -113,6 +123,8 @@ export function handleGlobalKey(e: KeyboardEvent) {
     map['+'] = () => runCommand('zoom', 'in');
     map['-'] = () => runCommand('zoom', 'out');
     map['0'] = () => runCommand('zoom', 'reset');
+    map['['] = () => runCommand('back');
+    map[']'] = () => runCommand('forward');
     if (e.shiftKey) map['l'] = () => runCommand('library');
     if (e.shiftKey) map['y'] = () => runCommand('new-homework');
     if (e.shiftKey) map['e'] = () => runCommand('review');

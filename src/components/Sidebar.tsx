@@ -1,137 +1,129 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Archive,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  FileText,
-  FolderClosed,
-  FolderPlus,
-  GraduationCap,
-  Home,
-  LibraryBig,
-  ListTodo,
-  Plus,
-  Settings,
-  Star,
-  Tag,
-  Tags,
-  Target,
-  Trash2,
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, FileText, LayoutGrid, ListChecks, MessagesSquare, MoreHorizontal, PanelLeft, Plus, Repeat, Search, Settings } from 'lucide-react';
 import { useVault } from '../state/vault';
-import { useUI, type View } from '../state/ui';
-import { FileTree, folderMenu } from './FileTree';
-import { newClass, newFolder, openClass, openReview } from '../lib/commands';
+import { useUI } from '../state/ui';
+import { useAI } from '../state/ai';
+import { folderMenu } from './FileTree';
+import { NewNotePopover } from './NewNoteMenu';
+import { openClass, openReview } from '../lib/commands';
 import { dueCount, useReview } from '../state/review';
 import { classForFolder, listClasses, themeVars, type ClassInfo } from '../lib/classes';
 import { openContextMenu } from './common/ContextMenu';
 import { cx } from '../lib/util';
-import { MOD, SHIFT } from '../lib/platform';
+import { MOD } from '../lib/platform';
 
-/** A navigation-drawer item (Google Classroom): a 48px row whose selection is a full pill. */
+const DAY = 86_400_000;
+
+/**
+ * Which sidebar row stands for the page on screen: 'classes', 'homework', 'review', 'library', 'notes'
+ * (All notes, Trash, plain folders and the notes in them) or 'cls:<path>' for anything inside a class.
+ */
+function usePlace(): string | null {
+  return useUI((s) => {
+    const v = s.view;
+    const { notes, folderMeta } = useVault.getState();
+    switch (v.kind) {
+      case 'classes':
+        return 'classes';
+      case 'homework':
+        return 'homework';
+      case 'review':
+        return 'review';
+      case 'library':
+        return 'library';
+      case 'home':
+      case 'trash':
+        return 'notes';
+      case 'class':
+      case 'folder': {
+        const c = classForFolder(v.path, folderMeta);
+        return c ? `cls:${c}` : 'notes';
+      }
+      case 'note': {
+        const n = notes[v.id];
+        const c = n ? classForFolder(n.meta.folder, folderMeta) : null;
+        return c ? `cls:${c}` : 'notes';
+      }
+    }
+    return null;
+  });
+}
+
+const isHere = (place: string | null, row: string) => place === row;
+
 function NavItem({
   icon,
   label,
-  view,
+  here,
   count,
-  hint,
+  overdue,
   onClick,
   title,
 }: {
   icon: React.ReactNode;
   label: string;
-  view: View;
+  here: boolean;
   count?: number;
-  hint?: string;
+  overdue?: boolean;
   title?: string;
-  onClick?(): void;
+  onClick(): void;
 }) {
-  const active = useUI(
-    (s) =>
-      s.view.kind === view.kind &&
-      (view.kind === 'homework' || view.kind === 'review' || view.kind === 'library' || JSON.stringify(s.view) === JSON.stringify(view)),
-  );
   return (
-    <button
-      className={cx('nav-item', active && 'is-active')}
-      onClick={() => (onClick ? onClick() : useUI.getState().setView(view))}
-      title={title ?? (hint ? `${label}  ${hint}` : label)}
-      aria-current={active ? 'page' : undefined}
-    >
+    <button className={cx('nav-item', here && 'is-active')} onClick={onClick} title={title} aria-current={here ? 'page' : undefined}>
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
-      {!!count && <span className="nav-count">{count}</span>}
+      {!!count && <span className={cx('nav-count badge-count', overdue && 'is-overdue')}>{count}</span>}
     </button>
   );
 }
 
-/** A class in the drawer: its letter on the class's light tone, the name, and its course code · term. */
-function ClassRow({ cls }: { cls: ClassInfo }) {
-  const active = useUI((s) => (s.view.kind === 'class' || s.view.kind === 'folder') && s.view.path === cls.path);
-  const section = [cls.code, cls.term].filter(Boolean).join(' · ');
+/** A class under "Classes": its colour, its name, and on hover the class menu. */
+function ClassRow({ cls, here }: { cls: ClassInfo; here: boolean }) {
   return (
-    <button
-      className={cx('nav-item nav-class tree-row is-class', active && 'is-active')}
+    <div
+      className={cx('nav-item nav-class tree-row is-class', here && 'is-active')}
       style={themeVars(cls.theme) as React.CSSProperties}
+      role="button"
+      tabIndex={0}
       onClick={() => openClass(cls.path)}
+      onKeyDown={(e) => e.key === 'Enter' && openClass(cls.path)}
       onContextMenu={(e) => openContextMenu(e, folderMenu(cls.path))}
       title={cls.name}
-      aria-current={active ? 'page' : undefined}
+      aria-current={here ? 'page' : undefined}
     >
-      <span className="nav-icon">
-        <span className="class-letter" aria-hidden>
-          {cls.name.trim().charAt(0).toUpperCase()}
-        </span>
-      </span>
-      <span className="nav-label is-two-line">
-        <span className="nav-class-name">{cls.name}</span>
-        {section && <span className="nav-class-sub">{section}</span>}
-      </span>
-    </button>
-  );
-}
-
-/** A collapsible group header (Classroom's "Enrolled ⌃"): its icon and label sit in the items' columns. */
-function Section({
-  id,
-  icon,
-  label,
-  onLabel,
-  children,
-  action,
-}: {
-  id: string;
-  icon: React.ReactNode;
-  label: string;
-  onLabel?(): void;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  const open = useUI((s) => s.expanded[`section:${id}`] !== false);
-  const toggle = () => useUI.getState().set({ expanded: { ...useUI.getState().expanded, [`section:${id}`]: !open } });
-  return (
-    <div className={cx('side-section', !open && 'is-collapsed')}>
-      <div className="side-section-head">
-        <button className="side-section-label" onClick={onLabel ?? toggle}>
-          <span className="nav-icon">{icon}</span>
-          {label}
-        </button>
-        {action}
-        <button className="side-section-chev" onClick={toggle} aria-label={open ? `Collapse ${label}` : `Expand ${label}`} aria-expanded={open}>
-          <ChevronDown size={18} className={cx('chev', open && 'is-open')} />
-        </button>
-      </div>
-      {open && <div className="side-section-body">{children}</div>}
+      <span className="nav-class-dot" aria-hidden />
+      <span className="nav-label">{cls.name}</span>
+      <button
+        className="nav-more"
+        aria-label={`${cls.name} menu`}
+        onClick={(e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          openContextMenu({ clientX: r.left, clientY: r.bottom + 4, preventDefault: () => undefined }, folderMenu(cls.path));
+        }}
+      >
+        <MoreHorizontal size={16} strokeWidth={1.5} />
+      </button>
     </div>
   );
 }
 
-export function Sidebar() {
+/**
+ * The sidebar, as in Claude: New note and Search pinned at the top, the places in the middle (classes
+ * last, since their number grows), Settings pinned at the bottom.
+ */
+export function Sidebar({ overlay }: { overlay?: boolean }) {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
   const folderMeta = useVault((s) => s.folderMeta);
-  const rail = useUI((s) => !s.sidebar);
+  const shown = useUI((s) => s.sidebar);
+  const classesOpen = useUI((s) => s.expanded['section:classes'] !== false);
+  const place = usePlace();
+  const ai = useAI((s) => s.status);
+  const chatModel = useAI((s) => s.chatModel);
+  const newBtn = useRef<HTMLButtonElement>(null);
+  const [newOpen, setNewOpen] = useState(false);
+
   // Ideas due for review: counted again when the review file or the notes change (a moment after typing
   // stops — it reads every note), and every minute, as reviews fall due.
   const reviewFile = useReview((s) => s.file);
@@ -146,127 +138,112 @@ export function Sidebar() {
     return () => clearTimeout(t);
   }, [reviewFile, notes, minute]);
 
-  const { trashed, tags, homework } = useMemo(() => {
-    const all = Object.values(notes);
-    const liveN = all.filter((n) => !n.meta.trashed);
-    const tagSet = new Set<string>();
-    for (const n of liveN) for (const t of n.meta.tags) tagSet.add(t);
-    return {
-      trashed: all.length - liveN.length,
-      tags: [...tagSet].sort((a, b) => a.localeCompare(b)),
-      homework: liveN.filter((n) => n.meta.homework && !n.meta.homework.done).length,
-    };
-  }, [notes]);
+  // Homework that needs doing soon: overdue, or due within a week.
+  const homework = useMemo(() => {
+    const now = Date.now();
+    let count = 0;
+    let overdue = false;
+    for (const n of Object.values(notes)) {
+      const hw = n.meta.homework;
+      if (n.meta.trashed || !hw || hw.done || !hw.due) continue;
+      if (hw.due < now) overdue = true;
+      if (hw.due < now + 7 * DAY) count++;
+    }
+    return { count, overdue };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, minute]);
+
   const classes = useMemo(() => listClasses(folders, folderMeta), [folders, folderMeta]);
-  const archived = useMemo(() => listClasses(folders, folderMeta, { archived: true }).filter((c) => c.archived).length, [folders, folderMeta]);
-  const otherFolders = useMemo(() => folders.filter((f) => !f.includes('/') && !classForFolder(f, folderMeta)), [folders, folderMeta]);
+  const toggleClasses = () => useUI.getState().set({ expanded: { ...useUI.getState().expanded, 'section:classes': !classesOpen } });
+  const classHere = place?.startsWith('cls:') ? place.slice(4) : null;
+
+  const aiState = ai === 'online' ? 'online' : ai === 'offline' ? 'offline' : 'loading';
+  const settingsTitle =
+    aiState === 'online' ? `Settings  ${MOD},  ·  ${chatModel || 'no model chosen'}` : aiState === 'offline' ? 'Local AI isn’t running' : 'Starting the local model…';
 
   return (
-    <aside className={cx('sidebar', rail && 'is-rail')} aria-label="Navigation">
+    <aside className={cx('sidebar', !shown && 'is-hidden', overlay && 'is-overlay')} aria-label="Navigation" aria-hidden={!shown || undefined}>
+      <div className="sidebar-head drag">
+        <span className="grow" />
+        <button className="icon-btn no-drag" onClick={() => useUI.getState().toggleSidebar()} aria-label="Hide sidebar" title={`Hide sidebar  ${MOD}\\`}>
+          <PanelLeft size={18} strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div className="sidebar-top">
+        <button ref={newBtn} className={cx('nav-item side-new', newOpen && 'is-open')} onClick={() => setNewOpen(!newOpen)} aria-haspopup="menu" aria-expanded={newOpen}>
+          <span className="side-new-circle" aria-hidden>
+            <Plus size={14} strokeWidth={2} />
+          </span>
+          <span className="nav-label">New note</span>
+        </button>
+        <button className="side-search" onClick={() => useUI.getState().setPalette(true)}>
+          <Search size={16} strokeWidth={1.5} />
+          <span className="grow">Search</span>
+          <kbd>{MOD}K</kbd>
+        </button>
+      </div>
+
       <div className="sidebar-scroll">
         <nav className="nav">
-          <NavItem icon={<Home size={20} />} label="Home" view={{ kind: 'classes' }} />
           <NavItem
-            icon={<LibraryBig size={20} />}
-            label="Ask your notes"
-            view={{ kind: 'library' }}
-            hint={`${SHIFT}${MOD}L`}
-            onClick={() => useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'all' } })}
+            icon={<ListChecks size={18} strokeWidth={1.5} />}
+            label="Homework"
+            here={isHere(place, 'homework')}
+            count={homework.count || undefined}
+            overdue={homework.overdue}
+            onClick={() => useUI.getState().setView({ kind: 'homework' })}
           />
           <NavItem
-            icon={<Target size={20} />}
+            icon={<Repeat size={18} strokeWidth={1.5} />}
             label="Review"
-            view={{ kind: 'review' }}
+            here={isHere(place, 'review')}
             count={reviewDue || undefined}
-            hint={`${SHIFT}${MOD}E`}
-            title={reviewDue ? `Review · ${reviewDue} due` : undefined}
+            title={reviewDue ? `${reviewDue} due` : undefined}
             onClick={() => openReview()}
           />
-        </nav>
+          <NavItem
+            icon={<MessagesSquare size={18} strokeWidth={1.5} />}
+            label="Ask your notes"
+            here={isHere(place, 'library')}
+            onClick={() => useUI.getState().set({ view: { kind: 'library' }, libraryScope: { kind: 'all' } })}
+          />
+          <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="All notes" here={isHere(place, 'notes')} onClick={() => useUI.getState().setView({ kind: 'home' })} />
 
-        <Section id="classes" icon={<GraduationCap size={20} />} label="Classes" onLabel={() => useUI.getState().setView({ kind: 'classes' })}>
-          <NavItem icon={<ListTodo size={20} />} label="Homework" view={{ kind: 'homework' }} count={homework || undefined} />
-          {classes.map((c) => (
-            <ClassRow key={c.path} cls={c} />
-          ))}
-          {!classes.length && (
-            <button className="nav-item" onClick={newClass}>
+          <div className={cx('nav-item nav-classes', (place === 'classes' || (classHere && !classesOpen)) && 'is-active')}>
+            <button className="nav-classes-label" onClick={() => useUI.getState().setView({ kind: 'classes' })} aria-current={place === 'classes' ? 'page' : undefined}>
               <span className="nav-icon">
-                <Plus size={20} />
+                <LayoutGrid size={18} strokeWidth={1.5} />
               </span>
-              <span className="nav-label">Create class</span>
+              <span className="nav-label">Classes</span>
             </button>
-          )}
-        </Section>
-
-        <Section
-          id="notes"
-          icon={<FolderClosed size={20} />}
-          label="Notes"
-          action={
-            <button className="side-section-chev" onClick={() => void newFolder('')} aria-label="New folder" title="New folder">
-              <FolderPlus size={18} />
-            </button>
-          }
-        >
-          <NavItem icon={<FileText size={20} />} label="All notes" view={{ kind: 'home' }} />
-          <NavItem icon={<Star size={20} />} label="Favorites" view={{ kind: 'favorites' }} />
-          <NavItem icon={<Clock size={20} />} label="Recent" view={{ kind: 'recent' }} />
-          {otherFolders.length > 0 && <FileTree roots={otherFolders} />}
-        </Section>
-
-        {tags.length > 0 && (
-          <Section id="tags" icon={<Tags size={20} />} label="Labels">
-            <TagList tags={tags} />
-          </Section>
-        )}
-
-        <nav className="nav is-end">
-          {archived > 0 && <NavItem icon={<Archive size={20} />} label="Archived classes" view={{ kind: 'classes', archived: true }} />}
-          <NavItem icon={<Trash2 size={20} />} label="Trash" view={{ kind: 'trash' }} count={trashed || undefined} />
-          <button className="nav-item" onClick={() => useUI.getState().openSettings('writing')} title={`Settings  ${MOD},`}>
-            <span className="nav-icon">
-              <Settings size={20} />
-            </span>
-            <span className="nav-label">Settings</span>
-          </button>
+            {classes.length > 0 && (
+              <button className="nav-chev" onClick={toggleClasses} aria-label={classesOpen ? 'Hide classes' : 'Show classes'} aria-expanded={classesOpen}>
+                <ChevronRight size={14} strokeWidth={1.5} className={cx('chev', classesOpen && 'is-open')} />
+              </button>
+            )}
+          </div>
+          {classesOpen && classes.map((c) => <ClassRow key={c.path} cls={c} here={classHere === c.path} />)}
         </nav>
       </div>
-    </aside>
-  );
-}
 
-/** Gmail's label list: the first few, then "More" for the rest (and whichever one is open). */
-const TAGS_SHOWN = 5;
-function TagList({ tags }: { tags: string[] }) {
-  const all = useUI((s) => !!s.expanded['section:tags-all']);
-  const current = useUI((s) => (s.view.kind === 'tag' ? s.view.tag : null));
-  const shown = all ? tags : tags.filter((t, i) => i < TAGS_SHOWN || t === current);
-  const toggle = () => useUI.getState().set({ expanded: { ...useUI.getState().expanded, 'section:tags-all': !all } });
-  return (
-    <>
-      {shown.map((t) => (
-        <TagRow key={t} tag={t} />
-      ))}
-      {tags.length > TAGS_SHOWN && (
-        <button className="nav-item is-dense" onClick={toggle} aria-expanded={all}>
-          <span className="nav-icon">{all ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
-          <span className="nav-label">{all ? 'Less' : 'More'}</span>
+      <div className="sidebar-foot">
+        <button
+          className="nav-item side-settings"
+          data-ai-status={aiState}
+          onClick={() => useUI.getState().openSettings(aiState === 'online' ? undefined : 'ai')}
+          title={settingsTitle}
+        >
+          <span className="nav-icon">
+            <Settings size={18} strokeWidth={1.5} />
+            {aiState !== 'online' && <span className={cx('side-ai-dot', `is-${aiState}`)} aria-hidden />}
+          </span>
+          <span className="nav-label">Settings</span>
+          <kbd className="side-kbd">{MOD},</kbd>
         </button>
-      )}
-    </>
-  );
-}
+      </div>
 
-/** A label (tag), Gmail-style: an outlined tag glyph and the name. */
-function TagRow({ tag }: { tag: string }) {
-  const active = useUI((s) => s.view.kind === 'tag' && s.view.tag === tag);
-  return (
-    <button className={cx('nav-item is-dense tag-pill', active && 'is-active')} onClick={() => useUI.getState().setView({ kind: 'tag', tag })} title={`#${tag}`}>
-      <span className="nav-icon">
-        <Tag size={18} />
-      </span>
-      <span className="nav-label">{tag}</span>
-    </button>
+      <NewNotePopover anchor={newBtn.current} open={newOpen} onClose={() => setNewOpen(false)} />
+    </aside>
   );
 }

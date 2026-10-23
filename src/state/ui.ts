@@ -1,21 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Scope } from '../lib/ai/rag';
+import { migrateUI, UI_VERSION } from './migrate';
 
 export type View =
-  /** Home: every class as a card (Google Classroom's home); `archived` shows archived classes. */
-  | { kind: 'classes'; archived?: boolean }
+  /** The Classes page: every class as a card. The start page. */
+  | { kind: 'classes' }
   /** All notes. */
   | { kind: 'home' }
   | { kind: 'note'; id: string }
   | { kind: 'folder'; path: string }
-  | { kind: 'tag'; tag: string }
-  | { kind: 'favorites' }
-  | { kind: 'recent' }
   | { kind: 'trash' }
   | { kind: 'library' }
   | { kind: 'class'; path: string; tab?: ClassTab }
-  /** Homework (Classroom's To-do): 'todo' is the Assigned tab. */
   | { kind: 'homework'; filter?: 'todo' | 'missing' | 'done' }
   /** Review: `preset` picks these notes when it opens. */
   | { kind: 'review'; preset?: string[] };
@@ -25,26 +22,33 @@ export type ClassTab = 'stream' | 'classwork' | 'study';
 /** Modal dialogs that several places can open. */
 export type Dialog =
   | { kind: 'class'; path: string | null }
-  /** A class's appearance (theme colour and banner icon), from the banner's "Customize". */
+  /** A class's appearance (theme colour and banner icon). */
   | { kind: 'customize'; path: string }
   | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
   | { kind: 'linkNotes'; noteId: string };
 
-export type SettingsSection = 'ai' | 'writing' | 'vault' | 'shortcuts' | 'about';
+export type SettingsSection = 'general' | 'writing' | 'ai' | 'shortcuts' | 'about';
 
 export interface UIState {
   view: View;
   tabs: string[];
+  /** The tab a note opened from a list replaces (the last one that was active). */
+  lastTab: string | null;
+  /** The last page that wasn't a note: where closing the last tab goes back to. */
+  lastPage: View;
   sidebar: boolean;
   assistant: boolean;
   palette: boolean;
   settings: SettingsSection | null;
+  /** The Settings pane last looked at this session (where ⌘, opens next). */
+  settingsPane: SettingsSection;
   zoom: number;
   expanded: Record<string, boolean>;
-  gridMode: 'grid' | 'list';
   sort: 'updated' | 'title' | 'created';
   /** A note whose title should get focus once opened (new notes). */
   focusTitle: string | null;
+  /** A new note made without picking a paper (⌘N, the palette): it offers the paper choice until written in. */
+  paperStrip: string | null;
   /** Block to scroll to & flash when a note opens (citations). */
   reveal: { noteId: string; blockId: string; at: number } | null;
   /** What "Ask your notes" searches. */
@@ -57,81 +61,130 @@ export interface UIState {
   toggleSidebar(): void;
   setAssistant(open: boolean): void;
   setPalette(open: boolean): void;
-  openSettings(section?: SettingsSection | null): void;
+  /** Opens Settings: on `section`, or on the pane last viewed (General the first time). Null closes it. */
+  openSettings(section?: SettingsSection | 'vault' | null): void;
   setZoom(z: number): void;
   toggleFolder(path: string, open?: boolean): void;
   set(p: Partial<UIState>): void;
 }
+
+const MAX_TABS = 12;
 
 export const useUI = create<UIState>()(
   persist(
     (set, get) => ({
       view: { kind: 'classes' },
       tabs: [],
+      lastTab: null,
+      lastPage: { kind: 'classes' },
       sidebar: true,
       assistant: false,
       palette: false,
       settings: null,
+      settingsPane: 'general',
       zoom: 1,
       expanded: {},
-      gridMode: 'grid',
       sort: 'updated',
       focusTitle: null,
+      paperStrip: null,
       reveal: null,
       libraryScope: { kind: 'all' },
       dialog: null,
       openDialog: (d) => set({ dialog: d }),
       openNote: (id, opts = {}) => {
-        const { tabs, view } = get();
+        const { tabs, lastTab } = get();
         let next = tabs;
         if (!tabs.includes(id)) {
-          if (opts.newTab || view.kind !== 'note' || !tabs.length) next = [...tabs, id];
+          // A note opened from a list, the palette or a citation takes the place of the last tab used;
+          // "Open in new tab", ⌘-click and new notes get a tab of their own.
+          const i = lastTab ? tabs.indexOf(lastTab) : -1;
+          if (opts.newTab || i < 0) next = [...tabs, id];
           else {
-            // Replace the current tab (Obsidian-style) unless asked for a new one.
-            const i = tabs.indexOf((view as { id: string }).id);
             next = [...tabs];
-            if (i >= 0) next[i] = id;
-            else next.push(id);
+            next[i] = id;
           }
         }
         set({
-          tabs: next.slice(-12),
+          tabs: next.slice(-MAX_TABS),
           view: { kind: 'note', id },
           focusTitle: opts.focusTitle ? id : get().focusTitle,
           reveal: opts.blockId ? { noteId: id, blockId: opts.blockId, at: Date.now() } : get().reveal,
         });
       },
       closeTab: (id) => {
-        const { tabs, view } = get();
+        const { tabs, view, lastPage } = get();
         const i = tabs.indexOf(id);
         const next = tabs.filter((t) => t !== id);
         if (view.kind === 'note' && view.id === id) {
-          const neighbour = next[Math.min(i, next.length - 1)];
-          set({ tabs: next, view: neighbour ? { kind: 'note', id: neighbour } : { kind: 'classes' } });
+          // The tab to the right takes its place, else the one to the left; the last tab goes back to the page before.
+          const neighbour = next[i] ?? next[i - 1];
+          set({ tabs: next, view: neighbour ? { kind: 'note', id: neighbour } : lastPage });
         } else set({ tabs: next });
       },
       setView: (v) => set({ view: v }),
       toggleSidebar: () => set({ sidebar: !get().sidebar }),
       setAssistant: (open) => set({ assistant: open }),
       setPalette: (open) => set({ palette: open }),
-      openSettings: (section = 'ai') => set({ settings: section }),
+      openSettings: (section) => {
+        if (section === null) return set({ settings: null });
+        const pane = section === 'vault' ? 'general' : (section ?? get().settingsPane);
+        set({ settings: pane, settingsPane: pane });
+      },
       setZoom: (z) => set({ zoom: Math.min(2.5, Math.max(0.5, Math.round(z * 100) / 100)) }),
       toggleFolder: (path, open) => set({ expanded: { ...get().expanded, [path]: open ?? !get().expanded[path] } }),
       set: (p) => set(p),
     }),
     {
       name: 'nib.ui',
+      version: UI_VERSION,
+      migrate: (s, v) => migrateUI(s, v) as unknown as UIState,
       partialize: (s) => ({
         view: s.view.kind === 'library' || s.view.kind === 'review' ? { kind: 'classes' } : s.view,
         tabs: s.tabs,
+        lastTab: s.lastTab,
         sidebar: s.sidebar,
         assistant: s.assistant,
         zoom: s.zoom,
         expanded: s.expanded,
-        gridMode: s.gridMode,
         sort: s.sort,
         libraryScope: s.libraryScope,
       }),
     },
   ),
 );
+
+// Remember the last tab used and the last page that wasn't a note, whichever way the view changed.
+useUI.subscribe((s, prev) => {
+  if (s.view === prev.view) return;
+  if (s.view.kind === 'note') {
+    if (s.lastTab !== s.view.id) useUI.setState({ lastTab: s.view.id });
+  } else useUI.setState({ lastPage: s.view });
+  recordHistory(prev.view, s.view);
+});
+
+/* Back and forward through the pages visited (⌘[ and ⌘]), like a browser. */
+const back: View[] = [];
+const forward: View[] = [];
+let travelling = false;
+const same = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
+
+function recordHistory(from: View, to: View) {
+  if (travelling || same(from, to)) return;
+  back.push(from);
+  if (back.length > 50) back.shift();
+  forward.length = 0;
+}
+
+function travel(from: View[], to: View[]) {
+  const ui = useUI.getState();
+  const v = from.pop();
+  if (!v) return;
+  to.push(ui.view);
+  travelling = true;
+  if (v.kind === 'note') ui.openNote(v.id);
+  else ui.setView(v);
+  travelling = false;
+}
+
+export const goBack = () => travel(back, forward);
+export const goForward = () => travel(forward, back);
