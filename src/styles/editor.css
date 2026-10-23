@@ -71,6 +71,7 @@
   user-select: none;
 }
 .page-meta {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -87,6 +88,10 @@
   gap: 6px;
   min-width: 0;
   flex: 0 1 auto;
+}
+/* Short of room (a new note's paper choice beside a long folder name), the folders shorten before the class. */
+.page-meta .crumb-part:has(.is-class) {
+  flex-shrink: 0;
 }
 /* A long class or folder name shortens; the date never does. */
 .page-meta .crumb {
@@ -171,7 +176,10 @@
     opacity var(--dur) var(--ease),
     visibility 0s linear var(--dur);
 }
+/* Spent, it fades where it was, out of the line, so a long place gets its room back. */
 .paper-strip.is-spent {
+  position: absolute;
+  right: 0;
   opacity: 0;
   visibility: hidden;
 }

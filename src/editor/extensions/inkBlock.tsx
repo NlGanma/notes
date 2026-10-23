@@ -84,6 +84,16 @@ export const InkBlock = Node.create({
   },
 });
 
+/** What was read, with its $…$ math typeset rather than shown as LaTeX. */
+function ReadText({ text }: { text: string }) {
+  const parts = text.split(/(\$\$[^$]+\$\$|\$[^$\n]+\$)/g);
+  return (
+    <div className="ink-transcript-text">
+      {parts.map((p, i) => (p.startsWith('$') ? <span key={i} dangerouslySetInnerHTML={{ __html: renderMath(p.replace(/^\$+|\$+$/g, '')) }} /> : p))}
+    </div>
+  );
+}
+
 function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
   const tool = useTools((s) => s.tool);
   const id = node.attrs.id as string;
@@ -227,7 +237,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
           <>
             <div className="ink-transcript-label">What was read</div>
             {transcript.latex ? <div className="ink-transcript-math" dangerouslySetInnerHTML={{ __html: renderMath(transcript.latex, true) }} /> : null}
-            {transcript.text && <div className="ink-transcript-text">{transcript.text}</div>}
+            {transcript.text && <ReadText text={transcript.text} />}
             {transcript.description && <div className="ink-transcript-desc">{transcript.description}</div>}
           </>
         )}
