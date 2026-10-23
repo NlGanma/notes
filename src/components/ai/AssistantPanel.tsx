@@ -33,6 +33,7 @@ import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
 import { NOTE_STARTERS } from '../../lib/ai/prompts';
 import { cx } from '../../lib/util';
+import { displayTitle } from '../../lib/displayTitle';
 import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
@@ -170,7 +171,7 @@ export function AssistantPanel() {
                 </>
               ) : (
                 <>
-                  Reading <b>{note.meta.title || 'Untitled'}</b>
+                  Reading <b>{displayTitle(note)}</b>
                 </>
               )
             ) : (
@@ -216,7 +217,7 @@ export function AssistantPanel() {
               <div className="asst-hw-sources">
                 {linked.slice(0, 4).map((n) => (
                   <button key={n.meta.id} className="asst-hw-source" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
-                    <FileText size={16} /> <span>{n.meta.title || 'Untitled'}</span>
+                    <FileText size={16} /> <span>{displayTitle(n)}</span>
                   </button>
                 ))}
                 {linked.length > 4 && <span className="asst-hw-more">+{linked.length - 4} more</span>}

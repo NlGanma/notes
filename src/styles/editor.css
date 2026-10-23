@@ -1325,8 +1325,13 @@
 /* --------------------------------------------------------------- paper popover (GoodNotes templates) */
 
 .tool-pop.is-paper {
-  width: 336px;
-  padding: 16px;
+  width: auto;
+  padding: 14px 10px 10px;
+}
+/* The heading lines up with the first paper's edge. */
+.tool-pop.is-paper .pp-title {
+  padding-left: 6px;
+  margin-bottom: 8px;
 }
 .pp-title {
   display: flex;
