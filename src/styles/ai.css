@@ -1208,6 +1208,11 @@
   flex: 1;
   min-width: 0;
 }
+/* A row with no detail line: its icon sits level with the one line of text. */
+.polish-row:not(:has(.polish-row-detail)) .polish-icon {
+  align-self: center;
+  margin-top: 0;
+}
 .polish-row-title {
   font-size: 14px;
   line-height: 20px;
