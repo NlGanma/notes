@@ -559,7 +559,7 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   outline-offset: 2px;
 }
 .new-note-pop .menu {
-  width: 248px;
+  width: 284px;
 }
 
 /* ------------------------------------------------------------------ lists: All notes, folders, Trash */
