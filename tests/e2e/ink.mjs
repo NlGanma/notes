@@ -1263,6 +1263,15 @@ check(
   JSON.stringify(await docJSON()) === beforeKeys && (await page.locator(`${V} .tb-tool[data-tool="lasso"].is-active`).count()) === 1,
   'under Select with nothing selected, Space and letters type nothing and Select stays',
 );
+// The handwriting's ⋯ takes the pointer on its button only: a Select box can start in the margin beside it.
+const marginHits = await page.evaluate(() => {
+  const block = document.querySelector('.note-view:not(.is-hidden) .ink-block-node')?.getBoundingClientRect();
+  const btn = document.querySelector('.note-view:not(.is-hidden) .ink-block-node .ink-more')?.getBoundingClientRect();
+  if (!block || !btn) return null;
+  const at = (x, y) => !!document.elementFromPoint(x, y)?.closest('.ink-actions');
+  return { beside: at(block.left - 4, block.top + 16), above: at(btn.left + 12, block.top + 1), button: at(btn.left + 12, btn.top + 12) };
+});
+check(marginHits && !marginHits.beside && !marginHits.above && marginHits.button, `around the handwriting's ⋯, only the button itself takes the pointer (${JSON.stringify(marginHits)})`);
 const keyBox = await boxAround(keyIds);
 await page.mouse.move(keyBox.x0, keyBox.y0);
 await page.mouse.down();
@@ -1301,6 +1310,7 @@ await page.keyboard.press('Escape');
 // 18c. ⌘Z on another page never reaches a note's text behind it.
 const keyNote = await page.evaluate(() => window.__nib.ui.getState().view.id);
 await page.keyboard.press('Alt+t');
+await page.waitForFunction(() => document.activeElement?.classList.contains('ProseMirror'));
 await page.keyboard.type('Extra words');
 await page.waitForTimeout(600);
 await showSidebar(page);
