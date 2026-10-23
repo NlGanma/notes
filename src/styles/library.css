@@ -21,15 +21,7 @@
   flex-direction: column;
 }
 
-/* ------------------------------------------------------------------ header */
-.lib-head {
-  height: 44px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px 0 20px;
-}
+/* ------------------------------------------------------------------ header (drawn in the main bar) */
 .library-title {
   display: flex;
   align-items: center;

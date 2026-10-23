@@ -12,6 +12,7 @@ import { cx } from '../../lib/util';
 import { toast } from '../common/toast';
 import { SELF_GRADES, sessionKey } from './sessionKeys';
 import { Key } from './parts';
+import { MainbarSlot } from '../MainBar';
 
 /** Enter that ends a line, not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
 const isEnter = (e: ReactKeyboardEvent<HTMLElement>) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
@@ -44,7 +45,7 @@ function useSourceName(src: { noteId: string; title: string }) {
 }
 
 /**
- * One question at a time on a quiet white card, with a thin progress line along the top bar. The answer
+ * One question at a time on a quiet white card, with a thin progress line along the main bar. The answer
  * is marked in place and the notes' own words follow it on the card.
  */
 export function ReviewSession() {
@@ -106,30 +107,31 @@ export function ReviewSession() {
 
   return (
     <div className="screen review-view rv-session">
-      <div className="rv-topbar">
-        <div className="rv-topbar-inner">
-          <div className="rv-topbar-label" title={label}>
+      <MainbarSlot>
+        <div className="rv-bar no-drag">
+          <span className="rv-topbar-label" title={label}>
             {label}
-          </div>
+          </span>
           <span className="rv-count" aria-hidden>
             {questionNumber(session, current)} / {total}
           </span>
           <button className="icon-btn rv-close" onClick={() => useReview.getState().end()} title="End the session (Esc)" aria-label="End the session">
-            <X size={18} />
+            <X size={18} strokeWidth={1.5} />
           </button>
+          {/* Along the main bar's bottom edge. */}
+          <div
+            className="rv-progress"
+            role="progressbar"
+            aria-label="Questions answered"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={done}
+            title={`${done} of ${total} answered · ${right} right`}
+          >
+            <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
+          </div>
         </div>
-        <div
-          className="rv-progress"
-          role="progressbar"
-          aria-label="Questions answered"
-          aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={done}
-          title={`${done} of ${total} answered · ${right} right`}
-        >
-          <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
-        </div>
-      </div>
+      </MainbarSlot>
 
       <div className="rv-stage" ref={stage}>
         <div className="rv-column">

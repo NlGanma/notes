@@ -17,6 +17,7 @@ import { ComposerStatus, useAvailability } from '../ai/ComposerStatus';
 import { Popover } from '../common/Popover';
 import { toast } from '../common/toast';
 import { NotePicker } from '../homework/NotePicker';
+import { MainbarSlot } from '../MainBar';
 import { parseStudyJSON, saveFlashcards } from './StudyTools';
 import { ArtifactPanel, LeftOut, ToolIcon, outputMeta, type Output } from './ArtifactPanel';
 import { conversationTitle, deleteConversation, pastConversations, reopenConversation, startConversation } from './history';
@@ -418,50 +419,51 @@ export function LibraryView() {
   return (
     <div className={cx('library', art && 'has-artifact')} ref={rootRef}>
       <div className="lib-main" ref={mainRef}>
-        <header className="lib-head">
-          <div className="library-title">
-            {scoped && (
-              <>
-                {cls && <span className="scope-dot" style={{ background: cls.color }} />}
-                <h1 title={name}>{name}</h1>
-              </>
+        <MainbarSlot>
+          <div className="lib-bar no-drag">
+            <div className="library-title">
+              {scoped && (
+                <>
+                  {cls && <span className="scope-dot" style={{ background: cls.color }} />}
+                  <h1 title={name}>{name}</h1>
+                </>
+              )}
+              {scoped && convTitle && <ChevronRight size={14} className="lib-head-sep" aria-hidden />}
+              {convTitle && (
+                <button
+                  className={cx('lib-head-conv', !scoped && 'is-only', convEl && 'is-open')}
+                  onClick={(e) => setConvEl(e.currentTarget)}
+                  aria-haspopup="menu"
+                  title={convTitle}
+                >
+                  <span className="lib-head-conv-text">{convTitle}</span>
+                  <ChevronDown size={14} />
+                </button>
+              )}
+            </div>
+            {reviewing && (
+              <button className="btn is-ghost is-small" onClick={() => useUI.getState().setView({ kind: 'review' })} title="Back to your review session">
+                <ArrowLeft size={16} /> Back to review · {reviewing}
+              </button>
             )}
-            {scoped && convTitle && <ChevronRight size={14} className="lib-head-sep" aria-hidden />}
-            {convTitle && (
+            {past.length > 0 && (
               <button
-                className={cx('lib-head-conv', !scoped && 'is-only', convEl && 'is-open')}
-                onClick={(e) => setConvEl(e.currentTarget)}
+                className={cx('icon-btn is-tiny', historyEl && 'is-on')}
+                onClick={(e) => setHistoryEl(e.currentTarget)}
+                title="History"
+                aria-label="History"
                 aria-haspopup="menu"
-                title={convTitle}
               >
-                <span className="lib-head-conv-text">{convTitle}</span>
-                <ChevronDown size={14} />
+                <History size={16} />
+              </button>
+            )}
+            {!empty && (
+              <button className="icon-btn is-tiny" onClick={newConversation} title="New conversation" aria-label="New conversation">
+                <SquarePen size={16} />
               </button>
             )}
           </div>
-          <span className="grow" />
-          {reviewing && (
-            <button className="btn is-ghost is-small" onClick={() => useUI.getState().setView({ kind: 'review' })} title="Back to your review session">
-              <ArrowLeft size={16} /> Back to review · {reviewing}
-            </button>
-          )}
-          {past.length > 0 && (
-            <button
-              className={cx('icon-btn is-tiny', historyEl && 'is-on')}
-              onClick={(e) => setHistoryEl(e.currentTarget)}
-              title="History"
-              aria-label="History"
-              aria-haspopup="menu"
-            >
-              <History size={16} />
-            </button>
-          )}
-          {!empty && (
-            <button className="icon-btn is-tiny" onClick={newConversation} title="New conversation" aria-label="New conversation">
-              <SquarePen size={16} />
-            </button>
-          )}
-        </header>
+        </MainbarSlot>
 
         <section className="lib-chat" aria-label="Conversation">
           {empty ? (

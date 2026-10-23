@@ -1,5 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { ChevronsRight, PanelLeft, PanelRight, X } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { create } from 'zustand';
+import { ChevronsRight, ClipboardList, FileText, PanelLeft, PanelRight, X } from 'lucide-react';
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
 import { toggleAssistant } from '../lib/commands';
@@ -13,6 +15,18 @@ import { MOD } from '../lib/platform';
 const TAB_MIN = 96;
 const TAB_GAP = 2;
 const MORE_W = 32;
+
+/* The right end of the bar, where a page that isn't a note puts its own controls (Ask your notes, a Review session). */
+const useSlot = create<{ el: HTMLElement | null }>(() => ({ el: null }));
+const slotRef = (el: HTMLElement | null) => useSlot.setState({ el });
+
+/** Draws its children at the right end of the main bar, so a page needs no header row of its own. */
+export function MainbarSlot({ children }: { children: ReactNode }) {
+  const el = useSlot((s) => s.el);
+  return el ? createPortal(children, el) : null;
+}
+
+const timeOf = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 /**
  * The bar above the page: the open notes as quiet tabs and, with a note open, the Assistant toggle.
@@ -48,6 +62,13 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
   // The open note always has its tab in view.
   if (activeId && open.includes(activeId) && !shown.includes(activeId)) shown = [...shown.slice(0, Math.max(0, fit - 1)), activeId];
   const hidden = open.filter((id) => !shown.includes(id));
+  // Two notes that go by the same name (two "Note · Oct 23") are told apart by the time they were made.
+  const names = new Map<string, number>();
+  for (const id of open) names.set(displayTitle(notes[id]), (names.get(displayTitle(notes[id])) ?? 0) + 1);
+  const tabName = (id: string) => {
+    const name = displayTitle(notes[id]);
+    return (names.get(name) ?? 0) > 1 && !notes[id].meta.title.trim() ? `${name}, ${timeOf(notes[id].meta.created)}` : name;
+  };
 
   return (
     <header className={cx('mainbar drag', scrolled && 'is-scrolled')}>
@@ -64,7 +85,8 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
       <div className="tabs" ref={strip} role="tablist" aria-label="Open notes">
         {shown.map((id) => {
           const n = notes[id];
-          const name = displayTitle(n);
+          const name = tabName(id);
+          const Icon = n.meta.homework ? ClipboardList : FileText;
           return (
             <div
               key={id}
@@ -76,6 +98,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
               onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
               title={name}
             >
+              <Icon className="tab-icon" size={14} strokeWidth={1.5} aria-hidden />
               <span className="tab-title">{name}</span>
               <button
                 className="tab-close"
@@ -96,6 +119,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
           </button>
         )}
       </div>
+      <div className="mainbar-slot" ref={slotRef} />
       {activeId && (
         <button
           className={cx('btn top-btn is-assistant no-drag', assistant && 'is-on')}
@@ -119,7 +143,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
                 useUI.getState().openNote(id);
               }}
             >
-              <span className="menu-label">{displayTitle(notes[id])}</span>
+              <span className="menu-label">{tabName(id)}</span>
             </button>
           ))}
         </div>

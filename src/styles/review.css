@@ -414,25 +414,16 @@
 .rv-session {
   overflow: hidden;
 }
-/* The bar: what's being reviewed, "3 / 10", close; the progress runs along its bottom edge. */
-.rv-topbar {
-  position: relative;
-  flex: none;
-  height: 52px;
-}
-/* Lined up with the card below. */
-.rv-topbar-inner {
+/* In the main bar: what's being reviewed, "3 / 10", close; the progress runs along the bar's bottom edge. */
+.rv-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 0 24px 0 32px;
+  min-width: 0;
 }
 .rv-topbar-label {
-  flex: 1;
   min-width: 0;
+  max-width: 320px;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-2);
@@ -446,13 +437,18 @@
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
+.rv-close {
+  flex: none;
+  margin-left: -4px;
+}
+/* Positioned against the main bar (the slot around it isn't), so it spans the whole bar. */
 .rv-progress {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: 2px;
-  background: var(--border);
+  box-shadow: inset 0 -1px 0 var(--hairline);
 }
 .rv-progress > span {
   display: block;

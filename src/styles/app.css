@@ -110,14 +110,16 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   padding-right: 64px;
 }
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   height: 28px;
   min-width: 96px;
   max-width: 200px;
-  flex: 0 1 200px;
-  padding: 0 4px 0 10px;
+  /* Sized to the name, so a short one doesn't hold a wide empty slot that reads like a heading. */
+  flex: 0 1 auto;
+  padding: 0 4px 0 8px;
   border-radius: 7px;
   color: var(--text-3);
   font-size: 13px;
@@ -133,6 +135,23 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 .tab.is-active {
   background: var(--bg-active);
   color: var(--text);
+}
+.tab-icon {
+  flex: none;
+  color: var(--text-4);
+}
+.tab.is-active .tab-icon {
+  color: var(--text-3);
+}
+/* A hairline between two quiet tabs, so a row of them reads as tabs and not as loose text. */
+.tab:not(.is-active):not(:hover) + .tab:not(.is-active):not(:hover)::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 7px;
+  width: 1px;
+  height: 14px;
+  background: var(--border);
 }
 .tab-title {
   flex: 1;
@@ -162,6 +181,35 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 .tab-more {
   width: 28px;
   height: 28px;
+}
+
+/* A page's own controls (Ask your notes, a Review session) at the right end of the bar. */
+.mainbar-slot {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 60%;
+}
+.mainbar-slot:empty {
+  display: none;
+}
+.mainbar-slot > * {
+  min-width: 0;
+}
+/* Ask your notes: what's being asked and the conversation, then History and New conversation. */
+.lib-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.lib-bar .library-title h1 {
+  max-width: 200px;
+}
+.lib-bar .lib-head-conv {
+  max-width: 280px;
 }
 
 /* The Assistant toggle: a quiet button, pressed while the panel is open. */
