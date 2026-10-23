@@ -95,6 +95,8 @@ await page.waitForSelector('.review-view .rv-tree');
 const groups = await page.locator('.rv-row.is-group .rv-name').allTextContents();
 check(groups.includes('Calculus I') && groups.includes('Spanish II'), `the picker lists classes (${groups.join(', ')})`);
 check(!(await page.locator('.rv-row.is-note:has-text("Problem Set")').count()), '…and homework is not offered for review');
+const dueNone = await page.waitForSelector('.rv-due-none', { timeout: 5000 }).catch(() => null);
+check((await dueNone?.textContent())?.trim() === 'Nothing due today', 'with nothing due, one quiet line above the list says so');
 
 // Chapters: Spanish II is organised by unit.
 await page.click('.rv-row.is-group:has-text("Spanish II")');
