@@ -135,6 +135,8 @@ const inkMenu = async (item) => {
 };
 await inkMenu('Read handwriting');
 await page.waitForSelector('.toast:has-text("Handwriting read")', { timeout: 20000 });
+const readToast = (await page.textContent('.toast:has-text("Handwriting read")')).replace(/\s+/g, ' ').trim();
+check(/^Handwriting read\s*\S/.test(readToast) && !/[$\\]/.test(readToast), `the toast says what was read, its math written out (${readToast})`);
 await inkMenu('Show what was read');
 await page.waitForSelector('.popover.ink-transcript');
 check(/^What was read/.test(await page.textContent('.popover.ink-transcript')), 'what was read opens from the handwriting’s ⋯');

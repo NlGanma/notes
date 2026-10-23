@@ -20,17 +20,18 @@ import { normalizePaper } from '../lib/paper';
 import { useTools } from '../state/tools';
 import { forgetNoteHistory, useUI } from '../state/ui';
 import { useAI, visionModel } from '../state/ai';
-import { useAssistant, type Attachment } from '../state/assistant';
+import { friendlyError, useAssistant, type Attachment } from '../state/assistant';
 import { TEXT_ACTIONS } from '../lib/ai/prompts';
 import { blockToText, inkTranscriptText } from '../lib/ai/context';
 import { transcribeImage, transcribeStrokes } from '../lib/ai/actions';
-import { isTransient, PreemptedError } from '../lib/ai/engine';
+import { PreemptedError } from '../lib/ai/engine';
 import { captureRegion } from '../lib/ai/vision';
 import { rasterizeStrokes } from '../lib/ink/raster';
 import type { InkTranscript, Stroke, Tool } from '../lib/ink/types';
 import { strokeBounds, translateStroke, unionBounds } from '../lib/ink/geometry';
 import { bytesToBase64, cx, debounce } from '../lib/util';
 import { toast } from '../components/common/toast';
+import { readLine } from '../lib/displayTitle';
 
 // ⌥S is Select (as the welcome note and Settings → Shortcuts say); ⌥A, once Ask about an area, selects too.
 const TOOL_KEYS: Record<string, Tool> = {
@@ -48,13 +49,13 @@ const scrollMemory = new Map<string, number>();
 /** What a Select box or a block's "Ask about this…" puts in the assistant's composer (see inkAttachments). */
 const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What was read', 'Equation']);
 
-/** Why reading handwriting failed, in one plain sentence. The model server's own words stay in Settings → Local AI → Activity. */
+/**
+ * Why reading handwriting failed, in the Assistant's words (friendlyError). Where those would be the server's
+ * own message, a plain hint instead; the message stays in Settings → Local AI → Activity.
+ */
 function readFailure(e: unknown): string {
-  const msg = String((e as Error)?.message ?? e);
-  if (isTransient(e)) return 'The local AI didn’t answer. Check that it’s running, then try again.';
-  if (/not found|no such model|pull/i.test(msg)) return 'The model chosen in Settings → Local AI isn’t installed.';
-  if (/time(d)? ?out/i.test(msg)) return 'The local AI took too long. Try again.';
-  return 'Try again, or choose another model in Settings → Local AI.';
+  const said = friendlyError(e);
+  return said === String((e as Error)?.message ?? e) || /[{}<>]/.test(said) ? 'Try again, or choose another model in Settings → Local AI.' : said;
 }
 
 /** Nothing written at all: one empty line, without even a stroke on it. */
@@ -501,7 +502,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
           toast.info('Reading handwriting…');
           const t = await transcribeStrokes(blockStrokesAbs(blockId));
           if (t) setTranscript(editor, blockId, t);
-          toast.success('Handwriting read', t?.text?.slice(0, 80));
+          toast.success('Handwriting read', t ? readLine(t.text || t.description || '') || undefined : undefined);
         } catch (e) {
           toast.error('Couldn’t read the handwriting', readFailure(e));
         }
