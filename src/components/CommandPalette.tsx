@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { HOMEWORK_SUBFOLDER, listClasses } from '../lib/classes';
+import { dueLabel } from '../lib/homework';
 import { useUI, goBack, goForward, type View } from '../state/ui';
 import { useVault } from '../state/vault';
 import { keywordSearch } from '../state/library';
@@ -99,35 +100,44 @@ function Palette() {
   useEffect(() => inputRef.current?.focus(), []);
 
   const items = useMemo<Item[]>(() => {
-    const out: Item[] = [];
     const live = Object.values(notes).filter((n) => !n.meta.trashed);
     const term = q.trim();
     const goNote = (id: string, blockId?: string) => (newTab: boolean) => useUI.getState().openNote(id, { newTab, blockId });
-    const where = (folder: string) => folder.split('/').join(' › ');
+    // A class's Homework folder is where homework is kept, not a place anyone goes: "Calculus I", not "Calculus I › Homework".
+    const isHomeworkDir = (f: string) => f.endsWith(`/${HOMEWORK_SUBFOLDER}`) && folderMeta[f.slice(0, -HOMEWORK_SUBFOLDER.length - 1)]?.kind === 'class';
+    const where = (folder: string) => (isHomeworkDir(folder) ? folder.slice(0, -HOMEWORK_SUBFOLDER.length - 1) : folder).split('/').join(' › ');
+    const when = (n: (typeof live)[number]) => {
+      const hw = n.meta.homework;
+      if (!hw) return formatRelativeTime(n.meta.updated);
+      return hw.done ? 'Done' : (dueLabel(hw.due)?.text ?? formatRelativeTime(n.meta.updated));
+    };
 
     const titled = live
       .map((n) => ({ n, s: fuzzyScore(`${displayTitle(n)} ${n.meta.folder}`, term) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s || b.n.meta.updated - a.n.meta.updated)
       .slice(0, 6);
-    for (const { n } of titled) {
-      out.push({
+    const named: { best: number; items: Item[] }[] = [];
+    named.push({
+      best: titled[0]?.s ?? 0,
+      items: titled.map(({ n }) => ({
         id: `note:${n.meta.id}`,
         group: term ? 'Notes' : 'Recent notes',
         label: displayTitle(n),
-        sub: [where(n.meta.folder), formatRelativeTime(n.meta.updated)].filter(Boolean).join(' · '),
+        sub: [where(n.meta.folder), when(n)].filter(Boolean).join(' · '),
         icon: n.meta.homework ? <ClipboardList {...ICON} /> : <FileText {...ICON} />,
         run: goNote(n.meta.id),
-      });
-    }
+      })),
+    });
 
+    const hits: Item[] = [];
     if (term.length > 2) {
       const seen = new Set(titled.map((x) => x.n.meta.id));
       for (const h of keywordSearch(term, 8)) {
         const key = `${h.chunk.noteId}:${h.chunk.section}`;
         if (seen.has(key) || !notes[h.chunk.noteId]) continue;
         seen.add(key);
-        out.push({
+        hits.push({
           id: `hit:${h.chunk.id}`,
           group: 'In your notes',
           label: snippet(h.chunk.text, term, 110),
@@ -141,29 +151,39 @@ function Palette() {
 
     if (term) {
       // A class or a folder by its name: typing "bio" finds Biology itself.
-      for (const c of listClasses(folders, folderMeta)
-        .filter((c) => fuzzyScore(c.name, term) > 20)
-        .slice(0, 3)) {
-        out.push({
+      const classes = listClasses(folders, folderMeta)
+        .map((c) => ({ c, s: fuzzyScore(c.name, term) }))
+        .filter((x) => x.s > 20)
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 3);
+      named.push({
+        best: classes[0]?.s ?? 0,
+        items: classes.map(({ c }) => ({
           id: `class:${c.path}`,
           group: 'Classes',
           label: c.name,
           icon: <span className="class-square is-palette" style={{ background: c.color }} />,
           run: () => openClass(c.path),
-        });
-      }
+        })),
+      });
       // A class's Homework folder is reached through Homework and the class page, not as a folder of its own.
-      const isHomeworkDir = (f: string) => f.endsWith(`/${HOMEWORK_SUBFOLDER}`) && folderMeta[f.slice(0, -HOMEWORK_SUBFOLDER.length - 1)]?.kind === 'class';
-      for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && !isHomeworkDir(f) && fuzzyScore(f.split('/').pop()!, term) > 20).slice(0, 3)) {
-        out.push({
+      const dirs = folders
+        .filter((f) => folderMeta[f]?.kind !== 'class' && !isHomeworkDir(f))
+        .map((f) => ({ f, s: fuzzyScore(f.split('/').pop()!, term) }))
+        .filter((x) => x.s > 20)
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 3);
+      named.push({
+        best: dirs[0]?.s ?? 0,
+        items: dirs.map(({ f }) => ({
           id: `folder:${f}`,
           group: 'Folders',
           label: f.split('/').pop()!,
           sub: f.includes('/') ? where(f) : undefined,
           icon: <Folder {...ICON} />,
           run: () => useUI.getState().setView({ kind: 'folder', path: f }),
-        });
-      }
+        })),
+      });
     }
 
     const noteId = currentNoteId();
@@ -201,8 +221,18 @@ function Palette() {
       go('All notes', <FileText {...ICON} />, { kind: 'home' }),
       go('Trash', <Trash2 {...ICON} />, { kind: 'trash' }),
     ];
-    const matches = term ? commands.filter((c) => fuzzyScore(`${c.group === 'Go to' ? 'go to ' : ''}${c.label}`, term) > 30).slice(0, 5) : commands.filter((c) => c.always);
-    out.push(...matches);
+    const scored = commands
+      .map((c, i) => ({ c, i, s: fuzzyScore(`${c.group === 'Go to' ? 'go to ' : ''}${c.label}`, term) }))
+      .filter((x) => x.s > 30)
+      .sort((a, b) => b.s - a.s || a.i - b.i)
+      .slice(0, 5);
+    named.push(term ? { best: scored[0]?.s ?? 0, items: scored.map((x) => x.c) } : { best: 0, items: commands.filter((c) => c.always) });
+
+    // What matches by name comes first, the closest match's group at the top: "new hom" runs New homework rather
+    // than opening a note that happens to mention it. Words found inside notes follow.
+    const out: Item[] = [];
+    for (const g of term ? [...named].sort((a, b) => b.best - a.best) : named) out.push(...g.items);
+    out.push(...hits);
 
     if (term.length > 2 && live.length) {
       out.push({
@@ -219,7 +249,9 @@ function Palette() {
     return out;
   }, [q, notes, folders, folderMeta]);
 
-  useEffect(() => setIndex(0), [q]);
+  // With nothing found, "Ask your notes" is offered but not picked: Enter shouldn't send gibberish to the model.
+  const found = items.some((it) => it.id !== 'ask-library');
+  useEffect(() => setIndex(found ? 0 : -1), [q, found]);
   useEffect(() => {
     listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
   }, [index]);
@@ -260,7 +292,7 @@ function Palette() {
           />
         </div>
         <div className="palette-list" ref={listRef}>
-          {items.length === 0 && <div className="palette-empty">No matches</div>}
+          {!found && <div className="palette-empty">No matches</div>}
           {items.map((it, i) => {
             const header = it.group !== lastGroup ? it.group : null;
             lastGroup = it.group;

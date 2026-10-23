@@ -160,6 +160,22 @@ check(await page.locator('.class-view .class-homework .hw-row-item:has-text("Pro
   check(!(await page.locator('.drop-hint').count()), '…and the drop overlay goes away');
 }
 
+// ⌘K runs a command typed by name, even though the Welcome note mentions the same words; nothing found says so.
+await page.keyboard.press('Meta+k');
+await page.fill('.palette-input input', 'new hom');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.hw-dialog', { timeout: 3000 }).catch(() => undefined);
+check(await page.locator('.hw-dialog').count(), '⌘K “new hom” and Enter opens New homework, not a note that mentions it');
+await page.click('.hw-dialog .btn:has-text("Cancel")');
+await page.keyboard.press('Meta+k');
+await page.fill('.palette-input input', 'zzqx');
+await page.waitForTimeout(200);
+check(
+  (await page.locator('.palette-empty:has-text("No matches")').count()) && !(await page.locator('.palette-item.is-active').count()),
+  '…and a query nothing matches says No matches, with nothing picked for Enter',
+);
+await page.keyboard.press('Escape');
+
 // ---------------------------------------------------------------- homework from a photo (OCR)
 await page.click('.nav-item:has-text("Homework")');
 await page.click('.homework-view .btn.is-primary:has-text("New homework")');
