@@ -5,7 +5,7 @@ import { ChevronsRight, ClipboardList, FileText, PanelLeft, PanelRight, X } from
 import { useUI } from '../state/ui';
 import { useVault } from '../state/vault';
 import { toggleAssistant } from '../lib/commands';
-import { displayTitle } from '../lib/displayTitle';
+import { tabLabels } from '../lib/tabLabels';
 import { Popover } from './common/Popover';
 import { noteMenu } from './FileTree';
 import { openContextMenu } from './common/ContextMenu';
@@ -25,8 +25,6 @@ export function MainbarSlot({ children }: { children: ReactNode }) {
   const el = useSlot((s) => s.el);
   return el ? createPortal(children, el) : null;
 }
-
-const timeOf = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 /**
  * The bar above the page: the open notes as quiet tabs and, with a note open, the Assistant toggle.
@@ -63,12 +61,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
   if (activeId && open.includes(activeId) && !shown.includes(activeId)) shown = [...shown.slice(0, Math.max(0, fit - 1)), activeId];
   const hidden = open.filter((id) => !shown.includes(id));
   // Two notes that go by the same name (two "Note · Oct 23") are told apart by the time they were made.
-  const names = new Map<string, number>();
-  for (const id of open) names.set(displayTitle(notes[id]), (names.get(displayTitle(notes[id])) ?? 0) + 1);
-  const tabName = (id: string) => {
-    const name = displayTitle(notes[id]);
-    return (names.get(name) ?? 0) > 1 && !notes[id].meta.title.trim() ? `${name}, ${timeOf(notes[id].meta.created)}` : name;
-  };
+  const labels = tabLabels(open.map((id) => notes[id]));
 
   return (
     <header className={cx('mainbar drag', scrolled && 'is-scrolled')}>
@@ -85,7 +78,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
       <div className="tabs" ref={strip} role="tablist" aria-label="Open notes">
         {shown.map((id) => {
           const n = notes[id];
-          const name = tabName(id);
+          const { label, full } = labels.get(id)!;
           const Icon = n.meta.homework ? ClipboardList : FileText;
           return (
             <div
@@ -96,17 +89,17 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
               onClick={() => useUI.getState().openNote(id)}
               onAuxClick={(e) => e.button === 1 && useUI.getState().closeTab(id)}
               onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
-              title={name}
+              title={full}
             >
               <Icon className="tab-icon" size={14} strokeWidth={1.5} aria-hidden />
-              <span className="tab-title">{name}</span>
+              <span className="tab-title">{label}</span>
               <button
                 className="tab-close"
                 onClick={(e) => {
                   e.stopPropagation();
                   useUI.getState().closeTab(id);
                 }}
-                aria-label={`Close ${name}`}
+                aria-label={`Close ${full}`}
               >
                 <X size={12} strokeWidth={2} />
               </button>
@@ -143,7 +136,7 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
                 useUI.getState().openNote(id);
               }}
             >
-              <span className="menu-label">{tabName(id)}</span>
+              <span className="menu-label">{labels.get(id)!.full}</span>
             </button>
           ))}
         </div>
