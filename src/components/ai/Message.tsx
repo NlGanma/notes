@@ -318,7 +318,8 @@ export const MessageView = memo(function MessageView({
 /** Sentences in the boxes of the AI's own knowledge (the sentences the check boxed itself are `contained`). */
 function ownSentences(md: string): number {
   let n = 0;
-  for (const m of normalizeOutside(md).matchAll(/^:::outside\n([\s\S]*?)\n:::[ \t]*$/gm)) n += Math.max(1, splitSentences(m[1]).filter((x) => /\p{L}/u.test(x)).length);
+  for (const m of normalizeOutside(md).matchAll(/^:::outside\n([\s\S]*?)\n:::[ \t]*$/gm))
+    n += Math.max(1, splitSentences(m[1]).filter((x) => /\p{L}/u.test(x)).length);
   return n;
 }
 
@@ -345,7 +346,11 @@ function CheckBar({ check, own, showWeak, onToggle }: { check: CheckSummary; own
         </span>
       )}
       {check.weak > 0 && (
-        <button className={cx('grounding-item is-uncited', showWeak && 'is-on')} onClick={onToggle} title="Related to the cited note, but not clearly the same. Check these.">
+        <button
+          className={cx('grounding-item is-uncited', showWeak && 'is-on')}
+          onClick={onToggle}
+          title="Related to the cited note, but not clearly the same. Check these."
+        >
           {check.weak} loosely matched · {showWeak ? 'Hide' : 'Show'}
         </button>
       )}

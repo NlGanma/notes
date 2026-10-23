@@ -1,5 +1,18 @@
 import { tokenize } from './rag';
-import { AUTO_HEAD, boxBody, isCitation, mergeBoxes, normalizeOutside, OWN_CLOSE, OWN_END, OWN_HEAD, OWN_OPEN, OWN_TAG, WEAK_CLOSE, WEAK_OPEN } from './markdown';
+import {
+  AUTO_HEAD,
+  boxBody,
+  isCitation,
+  mergeBoxes,
+  normalizeOutside,
+  OWN_CLOSE,
+  OWN_END,
+  OWN_HEAD,
+  OWN_OPEN,
+  OWN_TAG,
+  WEAK_CLOSE,
+  WEAK_OPEN,
+} from './markdown';
 import { needsCitation } from './grounding';
 import { findQuote, isSpanOf, unitsOf } from './quote';
 

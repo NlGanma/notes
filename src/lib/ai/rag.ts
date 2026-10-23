@@ -99,6 +99,13 @@ const STOP = new Set(
   ).split(' '),
 );
 
+/** The words the app wraps handwriting in (see blockToText): never something the student wrote. */
+const INK_WRAPPER = /\[Handwritten notes — not transcribed yet\]|\[Handwritten: /g;
+/** TeX commands that only lay math out ("\frac", "\left"); "\lim" or "\sin" stay words. */
+const TEX_LAYOUT = new Set(
+  'frac dfrac tfrac left right cdot cdots ldots dots mathrm mathbf mathit mathcal text textbf textit operatorname displaystyle quad qquad begin end'.split(' '),
+);
+
 /**
  * Words for matching: lowercased, accents folded ("niño" → "nino", "está" →
  * "esta") so typed answers and notes match with or without them, any
@@ -107,10 +114,11 @@ const STOP = new Set(
 export function tokenize(text: string): string[] {
   const out: string[] = [];
   for (let w of text
+    .replace(INK_WRAPPER, ' ')
     .normalize('NFD')
     .replace(/\p{M}+/gu, '')
     .toLowerCase()
-    .replace(/\\([a-z]+)/g, ' $1 ')
+    .replace(/\\([a-z]+)/g, (_, c: string) => (TEX_LAYOUT.has(c) ? ' ' : ` ${c} `))
     .split(/[^\p{L}\p{N}]+/u)) {
     if (!w || STOP.has(w) || (w.length < 2 && !/\d/.test(w))) continue;
     // Light stemming so "limits" matches "limit" and "derivatives" matches "derivative".
@@ -243,7 +251,24 @@ export function formatExcerpts(hits: Hit[], start = 1, nameOf: (c: Chunk) => str
     .join('\n\n');
 }
 
-/** Short snippet around the best-matching words, for search results. */
+const TEX_SYMBOL: Record<string, string> = Object.fromEntries(
+  'le:≤ leq:≤ ge:≥ geq:≥ ne:≠ neq:≠ to:→ rightarrow:→ Rightarrow:⇒ implies:⇒ infty:∞ cdot:· times:× pm:± approx:≈ in:∈ pi:π theta:θ alpha:α beta:β gamma:γ delta:δ Delta:Δ epsilon:ε varepsilon:ε lambda:λ mu:μ sigma:σ sum:Σ int:∫ sqrt:√'
+    .split(' ')
+    .map((p) => p.split(':')),
+);
+
+/** TeX as plain text for a one-line preview: "$\lim_{x \to a} f(x) = L$" → "lim x → a f(x) = L". */
+export function plainMath(s: string): string {
+  return s
+    .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
+    .replace(/\\(?:left|right|displaystyle|mathrm|mathbf|mathit|text|operatorname)(?![a-zA-Z])/g, '')
+    .replace(/\\[,;:! ]/g, ' ')
+    .replace(/\\([a-zA-Z]+)/g, (_, c: string) => TEX_SYMBOL[c] ?? c)
+    .replace(/_\{/g, ' {')
+    .replace(/[{}$]/g, '');
+}
+
+/** Short snippet around the best-matching words, for search results: plain text, no Markdown or TeX. */
 export function snippet(text: string, query: string, len = 160): string {
   const q = tokenize(query);
   const lower = text.toLowerCase();
@@ -253,8 +278,13 @@ export function snippet(text: string, query: string, len = 160): string {
     if (i >= 0 && (at < 0 || i < at)) at = i;
   }
   const clean = (s: string) =>
-    s
-      .replace(/[*=`#>]/g, '')
+    plainMath(
+      s
+        .replace(/\[Handwritten notes — not transcribed yet\]/g, '')
+        .replace(/\[Handwritten: ([^\]]*)\]?/g, '$1')
+        .replace(/\*\*|==|[*`]/g, '')
+        .replace(/^[ \t]*(?:#{1,6}|>)[ \t]*/gm, ''),
+    )
       .replace(/\s+/g, ' ')
       .trim();
   if (at < 0) return clean(text.slice(0, len));

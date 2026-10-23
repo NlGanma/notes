@@ -93,3 +93,19 @@ test('notes written by the AI are never retrieved as class material unless picke
   assert.ok(!chunkVault([...v.list, cards], { kind: 'folder', path: 'Calculus I' }).some((c) => c.title === 'Flashcards'));
   assert.ok(chunkVault([cards], { kind: 'note', id: cards.meta.id }).length > 0);
 });
+
+test('search words leave out what the app wrote around handwriting and TeX that only lays math out', () => {
+  assert.deepEqual(tokenize('[Handwritten notes — not transcribed yet]'), []);
+  assert.deepEqual(tokenize('[Handwritten: find $\\frac{dy}{dx}$ where I got stuck]'), ['find', 'dy', 'dx', 'got', 'stuck']);
+  assert.deepEqual(tokenize('$\\left( \\lim_{x \\to a} \\sin x \\right)$'), ['lim', 'sin']);
+  // The words themselves still count when a student types them.
+  assert.ok(tokenize('My handwritten notes on fractions').includes('handwritten'));
+});
+
+test('a search snippet shows math as plain text, not TeX', async () => {
+  const { snippet } = await import('../../src/lib/ai/rag');
+  assert.equal(snippet('- Sum: $\\lim (f+g) = \\lim f + \\lim g$', 'lim'), '- Sum: lim (f+g) = lim f + lim g');
+  assert.equal(snippet('**Definition.** $\\lim_{x \\to a} f(x) = L$ when ==close==', 'lim'), 'Definition. lim x → a f(x) = L when close');
+  assert.equal(snippet('Quotient: $\\frac{f}{g} \\le 1$', 'quotient'), 'Quotient: f/g ≤ 1');
+  assert.equal(snippet('[Handwritten: x^2 + 1]', 'x'), 'x^2 + 1');
+});
