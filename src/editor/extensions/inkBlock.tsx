@@ -163,7 +163,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
       data-id={id}
       onPointerDown={onPointerDown}
     >
-      {!ink.length && <div className="ink-block-hint">Handwriting area — pick a pen and write, or click to type</div>}
+      {!ink.length && <div className="ink-block-hint">Handwriting area — pick the marker and write, or click to type</div>}
 
       {/* One hover-only handle in the left gutter (Notion's block handle) instead of a column of icons. */}
       <div className="ink-actions" data-ui contentEditable={false}>

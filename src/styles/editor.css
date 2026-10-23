@@ -1180,6 +1180,13 @@
 .fmt-seg:disabled {
   color: var(--text-4);
 }
+/* In a narrow window the bar's checklist, math and sketch buttons sit here. */
+.fmt-more {
+  display: flex;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
 
 /* ⋯ More: the note's paper on top, then its actions. */
 .more-menu {

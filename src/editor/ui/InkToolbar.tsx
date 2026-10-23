@@ -77,6 +77,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
   const [slot, setSlot] = useState<{ kind: InkKind; index: number } | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLButtonElement>(null);
   /** Which tools' settings are folded into one button, and the width their bar needed when they folded. */
   const [foldedFor, setFoldedFor] = useState<Record<string, boolean>>({});
   const needed = useRef<Record<string, number>>({});
@@ -91,7 +92,8 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
   });
 
   const open = (which: Pop, el: HTMLElement | null) => {
-    anchorRef.current = el;
+    // Opened from inside the folded settings, which close: hang it from the folded button instead.
+    anchorRef.current = el?.closest('.tool-pop.is-summary') ? summaryRef.current : el;
     setPop((p) => (p === which ? null : which));
   };
   const close = () => setPop(null);
@@ -230,10 +232,20 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
               ))}
             </div>
             <div className="tb-seg seg" role="radiogroup" aria-label="Erase">
-              <button role="radio" aria-checked={t.eraser.mode === 'stroke'} className={cx(t.eraser.mode === 'stroke' && 'is-active')} onClick={() => t.setEraser({ mode: 'stroke' })}>
+              <button
+                role="radio"
+                aria-checked={t.eraser.mode === 'stroke'}
+                className={cx(t.eraser.mode === 'stroke' && 'is-active')}
+                onClick={() => t.setEraser({ mode: 'stroke' })}
+              >
                 Whole stroke
               </button>
-              <button role="radio" aria-checked={t.eraser.mode === 'precise'} className={cx(t.eraser.mode === 'precise' && 'is-active')} onClick={() => t.setEraser({ mode: 'precise' })}>
+              <button
+                role="radio"
+                aria-checked={t.eraser.mode === 'precise'}
+                className={cx(t.eraser.mode === 'precise' && 'is-active')}
+                onClick={() => t.setEraser({ mode: 'precise' })}
+              >
                 Part
               </button>
             </div>
@@ -250,29 +262,43 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
       case 'text':
         return (
           <>
-            <button className={cx('tb-btn tb-aa', pop === 'format' && 'is-open')} onClick={(e) => open('format', e.currentTarget)} aria-label="Text style">
-              <span className="tb-aa-label">Aa</span>
-              <ChevronDown size={13} strokeWidth={2} />
-              <Tip label="Text style" />
-            </button>
-            <button className={cx('tb-btn', ed.task && 'is-on')} onClick={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist" aria-pressed={ed.task}>
-              <ListChecks {...ICON} />
-              <Tip label="Checklist" kbd="[]" />
-            </button>
-            <button className="tb-btn" onClick={() => editor.chain().focus().insertMathInline('').run()} aria-label="Insert math">
-              <Sigma {...ICON} />
-              <Tip label="Math" kbd="$x$" />
-            </button>
-            <button className="tb-btn" onClick={() => editorBus.emit('inlineInk:open', { editor })} aria-label="Sketch inline">
-              <Signature {...ICON} />
-              <Tip label="Sketch inline" kbd={`${MOD}D`} />
-            </button>
+            {aa}
+            {textTools}
           </>
         );
       default:
         return null;
     }
   };
+
+  const aa = (
+    <button className={cx('tb-btn tb-aa', pop === 'format' && 'is-open')} onClick={(e) => open('format', e.currentTarget)} aria-label="Text style">
+      <span className="tb-aa-label">Aa</span>
+      <ChevronDown size={13} strokeWidth={2} />
+      <Tip label="Text style" />
+    </button>
+  );
+  const textTools = (
+    <>
+      <button
+        className={cx('tb-btn', ed.task && 'is-on')}
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        aria-label="Checklist"
+        aria-pressed={ed.task}
+      >
+        <ListChecks {...ICON} />
+        <Tip label="Checklist" kbd="[]" />
+      </button>
+      <button className="tb-btn" onClick={() => editor.chain().focus().insertMathInline('').run()} aria-label="Insert math">
+        <Sigma {...ICON} />
+        <Tip label="Math" kbd="$x$" />
+      </button>
+      <button className="tb-btn" onClick={() => editorBus.emit('inlineInk:open', { editor })} aria-label="Sketch inline">
+        <Signature {...ICON} />
+        <Tip label="Sketch inline" kbd={`${MOD}D`} />
+      </button>
+    </>
+  );
 
   let context: ReactNode;
   if (dropHint) context = <div className="tb-hint is-drop">{dropHint}</div>;
@@ -281,22 +307,29 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
   const foldable = !dropHint && t.tool !== 'lasso';
   const fold = !!foldedFor[foldKey] && foldable;
 
-  const summary = (
-    <button className={cx('tb-btn tb-summary', pop === 'summary' && 'is-open')} onClick={(e) => open('summary', e.currentTarget)} aria-label="Tool options">
-      {t.tool === 'eraser' ? (
-        <span className="tb-ring" style={{ width: 5 + t.eraser.size / 3.4, height: 5 + t.eraser.size / 3.4 }} />
-      ) : t.tool === 'text' ? (
-        <span className="tb-aa-label">Aa</span>
-      ) : (
-        <>
-          <span className={cx('tb-summary-dot', isLight(current(inkKind).color) && 'is-light')} style={{ background: current(inkKind).color }} />
-          <span className={cx('tb-line', inkKind === 'highlighter' && 'is-hl')} style={{ height: lineFor(inkKind, current(inkKind).size) }} />
-        </>
-      )}
-      <ChevronDown size={13} strokeWidth={2} />
-      <Tip label="Tool options" />
-    </button>
-  );
+  // (Type folds into its own Aa button: checklist, math and sketch join the style panel.)
+  const summary =
+    t.tool === 'text' ? (
+      aa
+    ) : (
+      <button
+        ref={summaryRef}
+        className={cx('tb-btn tb-summary', pop === 'summary' && 'is-open')}
+        onClick={(e) => open('summary', e.currentTarget)}
+        aria-label="Tool options"
+      >
+        {t.tool === 'eraser' ? (
+          <span className="tb-ring" style={{ width: 5 + t.eraser.size / 3.4, height: 5 + t.eraser.size / 3.4 }} />
+        ) : (
+          <>
+            <span className={cx('tb-summary-dot', isLight(current(inkKind).color) && 'is-light')} style={{ background: current(inkKind).color }} />
+            <span className={cx('tb-line', inkKind === 'highlighter' && 'is-hl')} style={{ height: lineFor(inkKind, current(inkKind).size) }} />
+          </>
+        )}
+        <ChevronDown size={13} strokeWidth={2} />
+        <Tip label="Tool options" />
+      </button>
+    );
 
   const slotValue = slot ? (slot.kind === 'highlighter' ? t.highlighterSizes : t.penSizes)[slot.index] : 0;
   const range = slot?.kind === 'highlighter' ? HIGHLIGHTER_RANGE : MARKER_RANGE;
@@ -409,7 +442,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
       </Popover>
 
       <Popover anchor={anchorRef.current} open={pop === 'format'} onClose={close} align="start" className="tool-pop is-format">
-        <FormatPanel editor={editor} onDone={close} />
+        <FormatPanel editor={editor} onDone={close} more={fold && t.tool === 'text' ? <div className="fmt-more">{textTools}</div> : undefined} />
       </Popover>
 
       <Popover anchor={anchorRef.current} open={pop === 'more'} onClose={close} align="end" className="menu-pop">

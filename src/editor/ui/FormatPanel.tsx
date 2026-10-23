@@ -14,7 +14,7 @@ const STYLES = [
  * The Aa panel, Apple Notes' Format sheet: the paragraph style (each name drawn in its own style), then lists,
  * indent and quote. Bold, colour and highlight are in the bubble over selected text, and ⌘B/I/U.
  */
-export function FormatPanel({ editor, onDone }: { editor: Editor; onDone(): void }) {
+export function FormatPanel({ editor, onDone, more }: { editor: Editor; onDone(): void; more?: React.ReactNode }) {
   const st = useEditorState({
     editor,
     selector: ({ editor: e }) => {
@@ -74,6 +74,7 @@ export function FormatPanel({ editor, onDone }: { editor: Editor; onDone(): void
           </Seg>
         </span>
       </div>
+      {more}
     </div>
   );
 }
