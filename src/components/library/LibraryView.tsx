@@ -417,7 +417,12 @@ export function LibraryView() {
   const scoped = scope.kind !== 'all' && scope.kind !== 'tag';
   const convTitle = empty ? '' : conversationTitle(messages);
   return (
-    <div className={cx('library', art && 'has-artifact')} ref={rootRef}>
+    <div
+      className={cx('library', art && 'has-artifact')}
+      ref={rootRef}
+      // Over a narrow page, a click on the conversation left showing closes the output (the conversation itself is inert).
+      onPointerDown={(e) => overlay && art && e.target === e.currentTarget && setArtifact(null)}
+    >
       <div className="lib-main" ref={mainRef}>
         <header className="lib-head">
           <div className="library-title">

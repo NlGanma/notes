@@ -82,13 +82,14 @@ export function ArtifactPanel({
 }) {
   const [order, setOrder] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { msg, tool, parsed } = output;
   const sources = msg.sources ?? [];
   const json = tool === 'flashcards' || tool === 'quiz';
   const ready = !!parsed || (msg.status === 'done' && !output.failed);
   return (
     <section className={cx('lib-artifact', overlay && 'is-overlay')} aria-label={output.title} tabIndex={-1}>
-      <header className="art-head">
+      <header className={cx('art-head', scrolled && 'is-scrolled')}>
         <span className="art-icon">
           <ToolIcon tool={tool} />
         </span>
@@ -131,7 +132,7 @@ export function ArtifactPanel({
           <X size={16} />
         </button>
       </header>
-      <div className="art-body">
+      <div className="art-body" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}>
         <div className="art-column">
           {parsed?.kind === 'flashcards' && (
             <Flashcards cards={parsed.cards} sources={sources} order={order} onOpen={openSource} onExplain={(front) => onExplain(`Explain: ${front}`)} />
@@ -154,7 +155,7 @@ export function ArtifactPanel({
             <div className="art-prose" {...citeHover(sources)}>
               {json && msg.status === 'done' && msg.dropped ? (
                 <div className="msg-added">
-                  None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+                  None of what the AI wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
                 </div>
               ) : (
                 <MessageView
