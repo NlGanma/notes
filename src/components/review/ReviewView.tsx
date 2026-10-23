@@ -54,7 +54,8 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const opts = useReview((s) => s.opts);
   const reading = useReview((s) => s.reading);
   const file = useReview((s) => s.file);
-  const online = useAI((s) => s.status === 'online');
+  // As the sidebar's Settings row reads it: online, offline, or still starting.
+  const ai = useAI((s) => (s.status === 'online' ? 'online' : s.status === 'offline' ? 'offline' : 'loading'));
   const tree = useMemo(() => buildReviewTree(notes, folders, folderMeta), [notes, folders, folderMeta]);
   // Picked notes that can still be reviewed (not trashed since).
   const selected = useMemo(() => new Set(selection.filter((id) => notes[id] && isReviewable(notes[id]))), [selection, notes]);
@@ -232,9 +233,11 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                   Start review
                 </button>
                 {/* Review works offline: questions are built from the notes and short answers are checked by code. */}
-                {!online && (
+                {ai !== 'online' && (
                   <div className="rv-promise">
-                    The local AI is offline. Questions come straight from your notes, and you check some answers yourself.{' '}
+                    {ai === 'offline'
+                      ? 'The local AI is offline. Questions come straight from your notes, and you check some answers yourself.'
+                      : 'Starting the local model…'}{' '}
                     <button className="rv-promise-link" onClick={() => useUI.getState().openSettings('ai')}>
                       Open settings
                     </button>
