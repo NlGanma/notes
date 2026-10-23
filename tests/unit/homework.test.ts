@@ -83,7 +83,7 @@ test('the Homework list groups by days from today, whatever the weekday, and lea
     groups.map((g) => [g.label, g.items.map((n) => n.meta.title)]),
     [
       ['Overdue', ['overdue']],
-      ['Next 7 days', ['in three days']],
+      ['This week', ['in three days']],
       ['Later', ['later']],
       ['No due date', ['no date, newer', 'no date, older']],
     ],

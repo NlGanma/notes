@@ -14,7 +14,7 @@ const isScan = (f: File) => SCAN_TYPES.includes(f.name.split('.').pop()?.toLower
 
 /**
  * Every homework, as Things or Reminders list to-dos: one list grouped by when it's due (Overdue, Today,
- * Tomorrow, Next 7 days, Later, No due date), finished ones folded into Done at the bottom. Groups never
+ * Tomorrow, This week, Later, No due date), finished ones folded into Done at the bottom. Groups never
  * fold, so nothing due is ever out of sight. A class filter narrows it to one class.
  */
 export function HomeworkView() {

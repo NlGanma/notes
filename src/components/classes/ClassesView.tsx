@@ -98,30 +98,34 @@ export function ClassesView() {
     <div className="screen classes-view">
       <div className="screen-scroll">
         <div className="classes-col">
-          <header className="classes-head">
-            <h1 className="page-h1">Classes</h1>
-            <span className="grow" />
-            {/* With no classes the empty state has the one New class button. */}
-            {classes.length > 0 && (
-              <button className="btn is-primary" onClick={newClass}>
-                <Plus size={16} strokeWidth={2} /> New class
-              </button>
-            )}
-          </header>
           {classes.length > 0 ? (
+            // The header spans the grid's columns, so New class sits over the right edge of the last one.
             <div className="class-grid">
+              <header className="classes-head">
+                <h1 className="page-h1">Classes</h1>
+                <span className="grow" />
+                <button className="btn is-primary" onClick={newClass}>
+                  <Plus size={16} strokeWidth={2} /> New class
+                </button>
+              </header>
               {classes.map((c) => (
                 <ClassCard key={c.path} cls={c} notes={notes} />
               ))}
             </div>
           ) : (
-            <div className="page-empty">
-              <div className="page-empty-title">No classes yet</div>
-              <div className="page-empty-sub">Classes keep a subject’s notes and homework together.</div>
-              <button className="btn is-primary" onClick={newClass}>
-                <Plus size={16} strokeWidth={2} /> New class
-              </button>
-            </div>
+            <>
+              <header className="classes-head">
+                <h1 className="page-h1">Classes</h1>
+              </header>
+              {/* With no classes, the empty state has the one New class button. */}
+              <div className="page-empty">
+                <div className="page-empty-title">No classes yet</div>
+                <div className="page-empty-sub">Classes keep a subject’s notes and homework together.</div>
+                <button className="btn is-primary" onClick={newClass}>
+                  <Plus size={16} strokeWidth={2} /> New class
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>

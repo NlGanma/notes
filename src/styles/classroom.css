@@ -128,8 +128,13 @@
 }
 .class-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, 280px);
+  justify-content: center;
   gap: 20px;
+}
+.class-grid > .classes-head {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
 }
 
 /* A class card: the class-colour header (name, counts, art, ⋯), then what's due and what changed. */

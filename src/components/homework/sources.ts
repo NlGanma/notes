@@ -48,7 +48,8 @@ export const DUE_GROUPS: { key: DueGroup; label: string }[] = [
   { key: 'overdue', label: 'Overdue' },
   { key: 'today', label: 'Today' },
   { key: 'tomorrow', label: 'Tomorrow' },
-  { key: 'week', label: 'Next 7 days' },
+  // The next seven days from today, whatever the weekday (a calendar week once hid a deadline two days out).
+  { key: 'week', label: 'This week' },
   { key: 'later', label: 'Later' },
   { key: 'none', label: 'No due date' },
 ];
