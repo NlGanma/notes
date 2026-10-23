@@ -1,7 +1,8 @@
 /*
- * Pages in Google Classroom's language (2025–26, Material 3): a white panel,
- * a title row, primary tabs, centred columns, items as rows with a coloured
- * circle, quiet grey details. Sizes and colours are measured from Classroom.
+ * Classes: the class-card grid (the one place that keeps Google Classroom's look: coloured card headers,
+ * New class at the top right), the New / Edit class dialog, and a class's page, laid out as Claude lays
+ * out a project, with Reminders' to-dos and Apple Notes' rows under it. Each class carries its colour
+ * as --class (and --class-banner, --class-light, …) from themeVars().
  */
 
 /* ------------------------------------------------------------------ page frame */
@@ -71,303 +72,97 @@
   z-index: 20;
 }
 
-/* Breadcrumb: "Classes › Calculus I / MATH 1A · Fall 2026". */
-.crumbs {
-  display: flex;
-  align-items: center;
+
+/* ------------------------------------------------------------------ shared page bits */
+
+/* A page's serif title (Classes, a class's name). */
+.page-h1 {
+  margin: 0;
   min-width: 0;
-  gap: 4px;
-}
-.crumb-root {
-  height: 40px;
-  padding: 0 8px;
-  margin-left: -8px;
-  border-radius: var(--radius-s);
-  font-size: 22px;
-  line-height: 28px;
-  color: var(--text-2);
-}
-.crumb-root:hover {
-  background: var(--bg-hover);
-}
-.crumb-sep {
-  color: var(--text-2);
-  flex: none;
-}
-.crumb-here {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.crumb-name {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 500;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.crumb-sub {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-
-/* ------------------------------------------------------------------ primary tabs */
-
-.gtabs {
-  height: 40px;
-  flex: none;
+/* An empty page: one serif line, at most one muted line, at most one button. */
+.page-empty {
   display: flex;
-  align-items: stretch;
-  padding: 0 8px 0 24px;
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.gtabs-list {
-  display: flex;
-  gap: 4px;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.gtab {
-  position: relative;
-  height: 40px;
-  padding: 0 10px;
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-.gtab:hover {
-  color: var(--text);
-}
-.gtab.is-active {
-  color: var(--text);
-  font-weight: 500;
-}
-.gtab.is-active::after {
-  content: '';
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--text);
-}
-.gtab-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 4.5px;
-  background: var(--danger-soft);
-  color: var(--danger-strong);
-  font-size: 11px;
-  font-weight: 500;
-  display: inline-grid;
-  place-items: center;
-}
-.gtabs-end {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ------------------------------------------------------------------ shared item pieces */
-
-/* The coloured circle that marks every item (class colour, white glyph). */
-.item-circle {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  flex: none;
-  background: var(--class-main, var(--text-2));
-  color: #fff;
-}
-.item-circle.is-40 {
-  width: 40px;
-  height: 40px;
-}
-.is-done > .item-circle {
-  background: #e3e3e3;
-  color: var(--text-2);
-}
-
-/* Big filled "+ Create" (48px pill with a shadow — the one elevated element on a page). */
-.btn.is-create {
-  height: 48px;
-  padding: 0 24px 0 16px !important;
-  border-radius: 24px;
-  font-size: 14px;
-  box-shadow: var(--shadow-s);
-}
-.btn.is-create:hover:not(:disabled) {
-  box-shadow: var(--shadow);
-}
-.btn.is-primary.is-class {
-  background: var(--class-main, var(--accent));
-}
-.btn.is-ghost.is-class {
-  color: var(--class-dark, var(--accent));
-}
-.btn.is-ghost.is-class:hover {
-  background: color-mix(in srgb, var(--class-dark, var(--accent)) 8%, transparent);
-}
-.btn.is-quiet {
-  color: var(--text-2);
-}
-
-/* ------------------------------------------------------------------ Classes page (Classroom home) */
-
-.classes-view {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-shell);
-}
-.classes-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 24px 32px 0;
-}
-.module {
-  background: var(--bg);
-  border-radius: var(--radius-2xl);
-  padding: 20px 24px 24px;
-}
-.module + .module {
-  margin-top: 24px;
-}
-.module-head {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  gap: 8px;
-}
-.module-title {
-  margin: 0;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  color: var(--text);
-}
-.due-module {
-  width: 416px;
-  max-width: 100%;
-  padding: 12px 12px 12px 24px;
-  border-radius: 32px;
-}
-.due-module.is-open {
-  width: auto;
-  padding: 20px 24px 12px;
-  border-radius: var(--radius-2xl);
-}
-.due-list {
-  margin-top: 8px;
-}
-.due-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  min-height: 56px;
-  padding: 8px 8px 8px 0;
-  text-align: left;
-  border-radius: var(--radius-s);
-}
-.due-row:hover {
-  background: var(--bg-hover);
-}
-.due-row-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.due-row-title {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.due-row-class,
-.due-row-when {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.due-row-when.is-missing,
-.is-missing {
-  color: var(--danger);
-}
-.due-empty {
-  padding: 16px 0;
-  font-size: 14px;
-  color: var(--text-2);
-}
-.due-foot {
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* The card grid: fixed 296px cards, 16px gaps, ragged right edge. */
-.class-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 16px;
-}
-.module-empty {
-  padding: 48px 0 24px;
+  padding: 72px 16px;
   text-align: center;
 }
-.module-empty-title {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
+.page-empty-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 28px;
+  color: var(--text-2);
 }
-.module-empty-actions {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 12px;
+.page-empty-sub {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-3);
+}
+.page-empty .btn {
+  margin-top: 14px;
 }
 
-/* A class card (Google Classroom). */
+/* ------------------------------------------------------------------ Classes page */
+
+.classes-col {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 40px 64px;
+}
+.classes-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  margin-bottom: 24px;
+}
+.class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+/* A class card: the class-colour header (name, counts, art, ⋯), then what's due and what changed. */
 .class-card {
   position: relative;
-  width: 296px;
-  height: 296px;
+  height: 200px;
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-l);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
   background: var(--bg);
+  border-radius: var(--radius-l);
   overflow: hidden;
-  transition: box-shadow 0.2s var(--ease);
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+/* The ring sits over the header too, so the coloured top has an edge like the rest of the card. */
+.class-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.1);
+  pointer-events: none;
 }
 .class-card:hover {
-  box-shadow:
-    inset 0 0 0 1px var(--outline-variant),
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-s);
+}
+.class-card:hover::after {
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.16);
 }
 .class-card-head {
   position: relative;
-  height: 100px;
+  height: 96px;
   flex: none;
-  padding: 16px 16px 12px;
+  padding: 16px 52px 0 16px;
   background: var(--class-banner);
   color: #fff;
   overflow: hidden;
@@ -375,97 +170,30 @@
 }
 .class-card-name {
   position: relative;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  max-width: 230px;
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .class-card-head:hover .class-card-name {
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
-.class-card-section,
-.class-card-teacher {
+.class-card-meta {
   position: relative;
-  font-size: 14px;
-  line-height: 20px;
-  max-width: 172px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.class-card-teacher {
-  font-size: 13px;
   margin-top: 2px;
-}
-.class-card-avatar {
-  position: absolute;
-  top: 64px;
-  right: 16px;
-  width: 75px;
-  height: 75px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--class-light);
-  color: var(--class-dark);
-  font-size: 32px;
-  font-weight: 400;
-  box-shadow: 0 0 0 2px #fff;
-  pointer-events: none;
-}
-.class-card-body {
-  flex: 1;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-.class-card-body.has-avatar .class-card-due:first-child {
-  max-width: 180px;
-}
-.class-card-due {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  min-width: 0;
-}
-.class-card-due-when {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 500;
-  color: var(--text);
-}
-.class-card-due-title {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.class-card-due:hover .class-card-due-title {
-  text-decoration: underline;
-}
-.class-card-foot {
-  height: 56px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 8px;
-  box-shadow: inset 0 1px 0 var(--outline-variant);
-}
-.class-card-foot .icon-btn {
-  width: 40px;
-  height: 40px;
-}
-
-/* Banner art: a darker circle arcing in from the right, with the class icon on it. */
 .class-art {
   position: absolute;
   inset: 0;
@@ -474,670 +202,328 @@
 .class-art-circle {
   position: absolute;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--class-banner) 78%, #000);
+  background: rgba(20, 20, 19, 0.14);
 }
 .class-art-icon {
   position: absolute;
   display: grid;
-  place-items: center;
-  color: var(--class-light);
-  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.62);
 }
 .class-art-icon svg {
   stroke-width: 1.5;
 }
-
-/* ------------------------------------------------------------------ class page */
-
-.stream {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 24px 24px 64px;
-}
-.banner {
-  position: relative;
-  height: 240px;
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  background: var(--class-banner);
+.icon-btn.class-card-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   color: #fff;
-  overflow: hidden;
 }
-.banner-name {
-  position: relative;
-  max-width: 60%;
-  font-size: 36px;
-  line-height: 44px;
-  font-weight: 400;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.icon-btn.class-card-more:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
-.banner-section {
-  position: relative;
-  font-size: 22px;
-  line-height: 28px;
-  margin-top: 4px;
-}
-.banner-customize {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  height: 36px;
-  padding: 0 16px 0 12px;
-  border-radius: 18px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #fff;
-  color: var(--class-dark);
-  font-size: 14px;
-  font-weight: 500;
-}
-.banner-customize:hover {
-  background: color-mix(in srgb, var(--class-dark) 8%, #fff);
-}
-.banner-info {
-  position: absolute !important;
-  right: 6px;
-  bottom: 6px;
-  color: #fff !important;
-  width: 44px !important;
-  height: 44px !important;
-}
-.banner-info:hover {
-  background: rgba(255, 255, 255, 0.16) !important;
-}
-.class-info-pop {
-  padding: 16px 20px;
-}
-.class-info {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 24px;
-  margin: 0;
-  font-size: 14px;
-  line-height: 20px;
-}
-.class-info dt {
-  color: var(--text-2);
-}
-.class-info dd {
-  margin: 0;
-  color: var(--text);
-}
-
-.stream-grid {
-  display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
-  gap: 24px;
-  margin-top: 24px;
-  align-items: start;
-}
-.upcoming {
-  border-radius: var(--radius-l);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  padding: 16px 16px 8px;
-}
-.upcoming-title {
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 12px;
-}
-.upcoming-empty {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.upcoming-item {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  text-align: left;
-  margin-bottom: 12px;
-}
-.upcoming-when {
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.upcoming-name {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text);
-}
-.upcoming-item:hover .upcoming-name {
-  text-decoration: underline;
-}
-.upcoming-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-.stream-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-.stream-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.stream-actions .btn {
-  height: 40px;
-}
-.stream-actions .btn.is-tonal {
-  padding: 0 24px 0 16px !important;
-  color: var(--text);
-}
-.stream-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 72px;
-  padding: 16px 12px 16px 24px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-subtle);
-  cursor: pointer;
-}
-.stream-card:hover {
-  background: var(--bg-subtle);
-}
-.stream-card.is-empty {
-  display: block;
-  padding: 24px;
-  cursor: default;
-}
-.stream-card.is-empty:hover {
-  background: var(--bg-subtle);
-}
-.stream-card-text {
+.class-card-body {
   flex: 1;
-  min-width: 0;
-}
-.stream-card-title {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.stream-card-date {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.stream-empty-title {
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--text);
-}
-.stream-empty-sub {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
-  margin-top: 4px;
-}
-.stream-more {
-  align-self: flex-start;
-}
-
-/* Classwork: a topic list on the left, "+ Create", topics as big coloured headings, items as rows. */
-.classwork {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 720px);
-  gap: 24px;
-  justify-content: center;
-  padding: 24px 24px 64px;
-}
-.topic-list {
-  position: sticky;
-  top: 24px;
-  align-self: start;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-top: 72px;
+  padding: 10px 8px;
 }
-.topic-link {
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 20px;
-  text-align: left;
-  font-size: 14px;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topic-link:hover {
-  background: var(--bg-hover);
-}
-.topic-link.is-active {
-  background: var(--class-light, var(--accent-soft));
-  color: var(--class-dark, var(--accent));
-  font-weight: 500;
-}
-/* The rail's narrow-window stand-in; compound selector so it beats the later .gselect { display: block }. */
-.gselect.cw-topic-select {
-  display: none;
-}
-@media (max-width: 1100px) {
-  .classwork {
-    grid-template-columns: minmax(0, 720px);
-  }
-  .topic-list {
-    display: none;
-  }
-  .gselect.cw-topic-select {
-    display: block;
-  }
-}
-.gselect.cw-topic-select select:focus {
-  box-shadow: inset 0 0 0 2px var(--class-main, var(--accent));
-}
-.gselect.cw-topic-select:focus-within .gselect-label {
-  color: var(--class-dark, var(--accent));
-}
-.cw-toolbar {
+.class-card-row {
   display: flex;
   align-items: center;
-  margin-bottom: 24px;
-}
-.topic {
-  margin-bottom: 40px;
-}
-.topic-head {
-  display: flex;
-  align-items: center;
-  min-height: 56px;
-  /* Titles and row icons share a 24px inset; 10px on the right puts the topic ⋮ on the row ⋮ axis. */
-  padding: 0 10px 0 24px;
-  box-shadow: inset 0 -1px 0 var(--border);
-  margin-bottom: 4px;
-}
-.topic-title {
-  flex: 1;
-  margin: 0;
-  font-size: 32px;
-  line-height: 40px;
-  font-weight: 400;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topic-more {
-  color: var(--text-2) !important;
-}
-.topic-empty {
-  padding: 16px 24px;
-  font-size: 14px;
-  color: var(--text-2);
-}
-.cw-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 56px;
-  padding: 0 8px 0 24px;
-  cursor: pointer;
-}
-.cw-row:hover {
-  background: rgba(20, 20, 19, 0.04);
-}
-.cw-row + .cw-row {
-  box-shadow: inset 0 1px 0 var(--border);
-}
-.cw-row-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cw-row-meta {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.cw-row-meta.is-done {
-  color: var(--success);
-}
-.cw-row-more {
-  opacity: 0;
-  width: 40px !important;
-  height: 40px !important;
-}
-.cw-row:hover .cw-row-more,
-.cw-row:focus-within .cw-row-more {
-  opacity: 1;
-}
-.study-page {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 24px 24px 64px;
-}
-.study-intro {
-  font-size: 14px;
-  color: var(--text-2);
-  margin-bottom: 16px;
-}
-/* NotebookLM's Studio tiles (shared with Ask your notes), larger here as the page's whole content. */
-.study-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.study-tiles .studio-tile {
-  height: 80px;
-}
-.study-tiles .study-tool {
-  padding: 14px 16px;
-}
-.study-tiles .study-tool-name {
-  display: block;
-  font-size: 14px;
-  line-height: 20px;
-}
-
-/* ------------------------------------------------------------------ Homework (Classroom's To-do) */
-
-.hw-toolbar {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
-/* Outlined select with a floating label (Classroom's "Topic filter"). */
-.gselect {
-  position: relative;
-  display: block;
-  width: 334px;
-  max-width: 100%;
-  height: 56px;
-  margin-bottom: 24px;
-}
-.gselect select {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  height: 100%;
-  padding: 0 44px 0 16px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  font-size: 16px;
-  color: var(--text);
-  outline: none;
-}
-.gselect select:hover {
-  box-shadow: inset 0 0 0 1px var(--text);
-}
-.gselect select:focus {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.gselect-label {
-  position: absolute;
-  top: -8px;
-  left: 12px;
-  padding: 0 4px;
-  background: var(--bg);
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-  pointer-events: none;
-}
-.gselect:focus-within .gselect-label {
-  color: var(--accent);
-}
-.gselect::after {
-  content: '';
-  position: absolute;
-  right: 19px;
-  top: 50%;
-  margin-top: -2px;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid var(--text-2);
-  pointer-events: none;
-}
-
-.hw-sections {
-  border-top: 1px solid var(--border);
-}
-.hw-section {
-  border-bottom: 1px solid var(--border);
-}
-.hw-section-head {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 56px;
-  padding: 0 8px 0 0;
-  text-align: left;
-}
-.hw-section-head:disabled {
-  opacity: 1;
-}
-.hw-section-label {
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--text);
-}
-.hw-section-count {
-  font-size: 14px;
-  color: var(--text-2);
-  margin-right: 8px;
-}
-.hw-section-chev {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-  border-radius: 50%;
-}
-.hw-section-head:hover:not(:disabled) .hw-section-chev {
-  background: var(--bg-hover);
-}
-.hw-section-chev .chev.is-open {
-  transform: rotate(180deg);
-}
-.hw-section-list {
-  padding-bottom: 8px;
-}
-.hw-row-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 64px;
-  padding: 12px 4px 12px 0;
-  border-radius: 14px;
-  cursor: pointer;
-}
-.hw-row-item:hover {
-  background: var(--bg-hover);
-}
-.hw-row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.hw-row-title {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hw-row-meta {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.hw-row-when {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.hw-row-more {
-  opacity: 0;
-  width: 40px !important;
-  height: 40px !important;
-}
-.hw-row-item:hover .hw-row-more,
-.hw-row-item:focus-within .hw-row-more {
-  opacity: 1;
-}
-/* Google Calendar's schedule gutter: day number, then month over weekday. */
-.hw-gutter {
-  width: 88px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 8px;
-}
-.hw-gutter-day {
-  min-width: 32px;
+  gap: 10px;
   height: 32px;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  line-height: 28px;
-  color: var(--text);
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  text-align: left;
+  min-width: 0;
 }
-.hw-gutter.is-today .hw-gutter-day {
+.class-card-row:hover {
+  background: var(--bg-hover);
+}
+.class-card-ring {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 16px;
+  box-shadow: inset 0 0 0 1.5px var(--class);
+  flex: none;
 }
-.hw-gutter.is-past .hw-gutter-day {
+.class-card-glyph {
+  color: var(--text-3);
+  flex: none;
+}
+.class-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.class-card-when {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.class-card-when.is-overdue {
+  color: var(--danger);
+}
+.class-card-empty {
+  padding: 6px 8px;
+  font-size: 13px;
   color: var(--text-3);
 }
-.hw-gutter-caps {
+
+/* ------------------------------------------------------------------ New / Edit class dialog */
+
+.class-form .dialog-body {
   display: flex;
   flex-direction: column;
-  font-size: 12px;
-  line-height: 16px;
+  gap: 18px;
+}
+.class-form .dialog-title {
+  margin: 0;
+}
+.class-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.class-field-label {
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 500;
-  letter-spacing: 0.1px;
   color: var(--text-2);
 }
-
-/* ------------------------------------------------------------------ fields and dialogs */
-
-.gdialog {
-  padding: 20px 24px 20px;
-}
-.gdialog-title {
-  margin: 0 0 16px;
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 600;
-  color: var(--text);
-}
-.gdialog-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.gdialog-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.customize-preview {
-  position: relative;
-  height: 128px;
-  border-radius: var(--radius-xl);
-  background: var(--class-banner);
-  color: #fff;
-  padding: 20px;
-  overflow: hidden;
-}
-.customize-preview-name {
-  position: relative;
-  font-size: 28px;
-  line-height: 36px;
-}
-.customize-label {
-  margin: 20px 0 12px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-}
-.theme-swatches {
+.class-swatches {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+  padding: 2px;
 }
-.theme-swatch {
-  width: 32px;
-  height: 32px;
+.class-swatch {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
+  transition: box-shadow var(--dur-fast) var(--ease);
 }
-.theme-swatch.is-active {
-  box-shadow:
-    0 0 0 2px #fff,
-    0 0 0 4px var(--ring);
+.class-swatch:hover {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-strong);
 }
-.icon-picks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.class-swatch.is-active {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
+}
+.class-icons {
+  display: grid;
+  grid-template-columns: repeat(8, 36px);
+  gap: 6px;
 }
 .icon-pick {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
   display: grid;
   place-items: center;
   color: var(--text-2);
 }
 .icon-pick:hover {
   background: var(--bg-hover);
+  color: var(--text);
 }
 .icon-pick.is-active {
   background: var(--class-light);
-  color: var(--class-main);
-  box-shadow: inset 0 0 0 2px var(--class-main);
+  color: var(--class);
+  box-shadow: inset 0 0 0 1.5px var(--class);
+}
+.btn.class-to-folder {
+  color: var(--text-3);
+  margin-left: -10px;
+}
+.btn.class-to-folder:hover {
+  color: var(--text);
 }
 
-/* Dropping a scan or file on a class or the Homework page. */
-.class-view.is-drop,
-.homework-view.is-drop {
-  box-shadow: inset 0 0 0 3px var(--accent);
+/* ------------------------------------------------------------------ a class's page */
+
+.class-col {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 32px 80px;
+}
+.class-head-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+.class-head-square {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--class);
+  flex: none;
+}
+.class-head-meta {
+  padding-left: 26px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-3);
+}
+.class-head-more {
+  margin-right: -6px;
+}
+
+/* Claude's project composer: one line until it's used. */
+.class-ask {
+  margin-top: 24px;
+  padding: 10px 10px 10px 16px;
+  background: var(--bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-composer);
+  cursor: text;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+.class-ask:focus-within {
+  box-shadow: var(--shadow-composer-focus);
+}
+.class-ask-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.class-ask textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  max-height: 200px;
+  padding: 4px 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
+  user-select: text;
+}
+.class-ask textarea::placeholder {
+  color: var(--text-4);
+}
+.class-ask.is-open textarea {
+  min-height: 60px;
+}
+.class-ask-send {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--clay-strong);
+  color: #fff;
+  transition: background var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.class-ask-send:hover:not(:disabled) {
+  background: var(--clay-hover);
+}
+.class-ask-send:disabled {
+  opacity: 0.4;
+}
+.class-ask-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.class-ask-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--danger);
+}
+.class-ask-dot.is-loading {
+  background: var(--warning-line);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.class-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.class-review .badge-count {
+  margin-left: 2px;
+}
+
+.class-section {
+  margin-top: 32px;
+}
+.class-section-row {
+  display: flex;
+  align-items: center;
+}
+.class-section-head {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-size: 15px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--text);
+}
+.class-section-row .class-section-head {
+  margin-bottom: 0;
+}
+.class-section-empty {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.class-notes .list-caption {
+  margin: 12px 0 2px;
+}
+.class-notes .folder-row + .list-caption {
+  margin-top: 16px;
+}
+.class-empty {
+  margin-top: 40px;
+  padding: 48px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* Narrow windows: the grid keeps two columns as long as it can, then one; the page keeps its gutters. */
+@media (max-width: 1100px) {
+  .classes-col {
+    padding: 24px 32px 56px;
+  }
+}
+@media (max-width: 700px) {
+  .classes-col,
+  .class-col {
+    padding: 20px 16px 48px;
+  }
+  .class-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
 }

@@ -5,7 +5,7 @@ import { NotesPage } from './components/NoteGrid';
 import { LibraryView } from './components/library/LibraryView';
 import { ClassView } from './components/classes/ClassView';
 import { ClassesView } from './components/classes/ClassesView';
-import { ClassDialog, CustomizeDialog } from './components/classes/ClassDialog';
+import { ClassDialog } from './components/classes/ClassDialog';
 import { HomeworkView } from './components/homework/HomeworkView';
 import { ReviewView } from './components/review/ReviewView';
 import { NewHomeworkDialog } from './components/homework/NewHomeworkDialog';
@@ -231,9 +231,9 @@ export function App() {
         <div className="content" onScrollCapture={(e) => setScrolled((e.target as HTMLElement).scrollTop > 2)}>
           {error && <div className="vault-error">Couldn’t open the vault: {error}</div>}
           {view.kind === 'library' && <LibraryView />}
-          {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} tab={view.kind === 'class' ? view.tab : undefined} />}
+          {(view.kind === 'class' || (view.kind === 'folder' && folderMeta[view.path]?.kind === 'class')) && <ClassView key={view.path} path={view.path} />}
           {view.kind === 'classes' && <ClassesView />}
-          {view.kind === 'homework' && <HomeworkView filter={view.filter} />}
+          {view.kind === 'homework' && <HomeworkView />}
           {view.kind === 'review' && <ReviewView preset={view.preset} />}
           {(view.kind === 'home' || view.kind === 'trash' || (view.kind === 'folder' && folderMeta[view.path]?.kind !== 'class')) && <NotesPage view={view} />}
           {tabs
@@ -250,7 +250,6 @@ export function App() {
       <CommandPalette />
       <SettingsModal />
       <ClassDialog />
-      <CustomizeDialog />
       <NewHomeworkDialog />
       <LinkNotesDialog />
       <DialogHost />

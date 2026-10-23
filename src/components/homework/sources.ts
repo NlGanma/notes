@@ -3,6 +3,11 @@ import { classInfo, inFolder } from '../../lib/classes';
 import { dueTime } from '../../lib/homework';
 import { plural } from '../../lib/util';
 
+/*
+ * Homework helpers for the lists and dialogs: what a homework answers from, and when it's due, in the
+ * words the lists use ("Overdue · Oct 20", never "Missing").
+ */
+
 /** What a homework's answers may come from: single notes plus whole folders (classes or units). */
 export interface SourceSelection {
   sources: string[];
@@ -14,7 +19,7 @@ export function folderName(path: string, folderMeta: Record<string, FolderMeta>)
   return folderMeta[path]?.kind === 'class' ? classInfo(path, folderMeta[path]).name : path.split('/').pop() || path;
 }
 
-/** Classroom-style summary of a selection: "All Calculus I notes + 1 note", "3 notes", or ''. */
+/** A selection in words: "All Calculus I notes + 1 note", "3 notes", or ''. */
 export function summarize(sel: SourceSelection, notes: Record<string, NoteDoc>, folderMeta: Record<string, FolderMeta>): string {
   const loose = sel.sources.filter((id) => {
     const n = notes[id];
@@ -25,29 +30,67 @@ export function summarize(sel: SourceSelection, notes: Record<string, NoteDoc>, 
   return parts.join(' + ');
 }
 
-export const sameSelection = (a: SourceSelection, b: SourceSelection) =>
-  a.sources.length === b.sources.length &&
-  a.folders.length === b.folders.length &&
-  a.sources.every((s) => b.sources.includes(s)) &&
-  a.folders.every((f) => b.folders.includes(f));
-
 const DAY = 86_400_000;
 const startOfDay = (t: number) => new Date(t).setHours(0, 0, 0, 0);
 
-/** "Due today", "Due tomorrow", "Due Sat, Oct 25" (+ ", 3:00 PM" unless it's the default end of day). */
-export function dueLine(due: number, now = Date.now()): string {
-  const days = Math.floor((startOfDay(due) - startOfDay(now)) / DAY);
-  const day =
-    days === 0 ? 'today' : days === 1 ? 'tomorrow' : new Date(due).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const time = dueTime(due);
-  return `Due ${day}${time ? `, ${time}` : ''}`;
-}
-
 export const shortDate = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
-/** Drive's "Last modified": the time for today, else the date. */
+/** When a note was last edited: the time today, else the date. */
 export function editedLabel(t: number, now = Date.now()): string {
   if (startOfDay(t) === startOfDay(now)) return new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const sameYear = new Date(t).getFullYear() === new Date(now).getFullYear();
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+}
+
+/** The homework list's groups, in order (Things / Reminders). Done homework is listed apart from these. */
+export type DueGroup = 'overdue' | 'today' | 'tomorrow' | 'week' | 'later' | 'none';
+export const DUE_GROUPS: { key: DueGroup; label: string }[] = [
+  { key: 'overdue', label: 'Overdue' },
+  { key: 'today', label: 'Today' },
+  { key: 'tomorrow', label: 'Tomorrow' },
+  { key: 'week', label: 'Next 7 days' },
+  { key: 'later', label: 'Later' },
+  { key: 'none', label: 'No due date' },
+];
+
+/** Which group a due date falls in. The days count from today, whatever the weekday. */
+export function dueGroup(due: number | undefined, now = Date.now()): DueGroup {
+  if (!due) return 'none';
+  const days = Math.round((startOfDay(due) - startOfDay(now)) / DAY);
+  if (days < 0) return 'overdue';
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 7) return 'week';
+  return 'later';
+}
+
+/** Soonest due first; homework without a date last, newest first. */
+export function byDue(a: NoteDoc, b: NoteDoc): number {
+  const da = a.meta.homework?.due ?? Infinity;
+  const db = b.meta.homework?.due ?? Infinity;
+  if (da !== db) return da - db;
+  return b.meta.created - a.meta.created;
+}
+
+/** Unfinished homework in its non-empty groups, each soonest first. */
+export function groupHomework(list: NoteDoc[], now = Date.now()): { key: DueGroup; label: string; items: NoteDoc[] }[] {
+  const todo = list.filter((n) => n.meta.homework && !n.meta.homework.done).sort(byDue);
+  return DUE_GROUPS.map((g) => ({ ...g, items: todo.filter((n) => dueGroup(n.meta.homework!.due, now) === g.key) })).filter((g) => g.items.length);
+}
+
+/**
+ * A row's due text inside its group, saying only what the group doesn't: the time today and tomorrow,
+ * the weekday this week, the date later on or when overdue.
+ */
+export function dueInGroup(due: number | undefined, now = Date.now()): { text: string; overdue?: boolean } | null {
+  if (!due) return null;
+  const g = dueGroup(due, now);
+  const time = dueTime(due);
+  const d = new Date(due);
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+  if (g === 'overdue') return { text: date, overdue: true };
+  if (g === 'today' || g === 'tomorrow') return time ? { text: time } : null;
+  if (g === 'week') return { text: [d.toLocaleDateString(undefined, { weekday: 'long' }), time].filter(Boolean).join(', ') };
+  return { text: date };
 }

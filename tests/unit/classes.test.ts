@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classForFolder, classInfo, classNotes, classHomework, guessClassIcon, homeworkFolderFor, listClasses } from '../../src/lib/classes';
+import { classCounts, classForFolder, classInfo, classNotes, classHomework, countLine, guessClassIcon, homeworkFolderFor, listClasses, settleClassName } from '../../src/lib/classes';
 import { CLASSES, vault } from './fixtures';
 
 test('a folder belongs to its nearest class ancestor', () => {
@@ -31,6 +31,31 @@ test('class info fills in a colour and guesses an icon from the name', () => {
   assert.equal(guessClassIcon('Intro to Programming'), 'code');
   assert.equal(guessClassIcon('Spanish 2'), 'languages');
   assert.equal(guessClassIcon('Underwater Basket Weaving'), 'cap');
+});
+
+test('a class name is settled without errors: blank is Untitled class, a taken name gets a number in any case', () => {
+  const folders = ['Biology', 'Calculus I', 'Calculus I/Homework', 'Reading list', 'Untitled class'];
+  assert.equal(settleClassName('', folders), 'Untitled class 2');
+  assert.equal(settleClassName('  ...  ', folders), 'Untitled class 2');
+  assert.equal(settleClassName('Chemistry', folders), 'Chemistry');
+  assert.equal(settleClassName('biology', folders), 'biology 2');
+  // A plain folder's name is taken too: the class gets its own folder.
+  assert.equal(settleClassName('Reading List', folders), 'Reading List 2');
+  // Subfolders don't clash with top-level names.
+  assert.equal(settleClassName('Homework', folders), 'Homework');
+  // Renaming a class may keep its own name or change only its case.
+  assert.equal(settleClassName('Biology', folders, 'Biology'), 'Biology');
+  assert.equal(settleClassName('BIOLOGY', folders, 'Biology'), 'BIOLOGY');
+  assert.equal(settleClassName('Calculus i', folders, 'Biology'), 'Calculus i 2');
+});
+
+test('a class counts its notes and homework', () => {
+  const v = vault();
+  assert.deepEqual(classCounts('Calculus I', v.notes), { notes: 2, homework: 1 });
+  assert.equal(countLine({ notes: 2, homework: 1 }), '2 notes · 1 homework');
+  assert.equal(countLine({ notes: 1, homework: 0 }), '1 note');
+  assert.equal(countLine({ notes: 0, homework: 3 }), '3 homework');
+  assert.equal(countLine({ notes: 0, homework: 0 }), '');
 });
 
 test('homework lives in the class Homework folder', () => {

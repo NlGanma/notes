@@ -1,6 +1,7 @@
 import type { FolderMeta, NoteDoc } from './vault/types';
 import { bm25Scores, buildBm25, chunkVault, tokenize } from './ai/rag';
 import { docToText } from './ai/context';
+import { plural, sanitizeFolderName } from './util';
 
 /**
  * Classes are top-level folders flagged in the vault's folder metadata. On
@@ -229,6 +230,31 @@ export function classNotes(path: string, notes: Record<string, NoteDoc>): NoteDo
 
 export function classHomework(path: string, notes: Record<string, NoteDoc>): NoteDoc[] {
   return Object.values(notes).filter((n) => !n.meta.trashed && !!n.meta.homework && inFolder(n, path));
+}
+
+/** How much a class holds: its notes (not homework) and its homework, done or not. */
+export function classCounts(path: string, notes: Record<string, NoteDoc>): { notes: number; homework: number } {
+  return { notes: classNotes(path, notes).length, homework: classHomework(path, notes).length };
+}
+
+/** "12 notes · 2 homework", leaving out what there is none of ('' for an empty class). */
+export function countLine(c: { notes: number; homework: number }): string {
+  return [c.notes ? plural(c.notes, 'note') : '', c.homework ? `${c.homework} homework` : ''].filter(Boolean).join(' · ');
+}
+
+/**
+ * The name a class is saved under, so the dialog never has to show an error: a blank name becomes
+ * "Untitled class", and a name another top-level folder already has (in any case, since the Mac's disk
+ * ignores case) gets " 2", " 3"… `self` is the class being renamed, which may keep its own name.
+ */
+export function settleClassName(input: string, folders: string[], self?: string | null): string {
+  const base = sanitizeFolderName(input) || 'Untitled class';
+  const taken = new Set(folders.filter((f) => !f.includes('/') && f !== self).map((f) => f.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let i = 2; ; i++) {
+    const name = `${base} ${i}`;
+    if (!taken.has(name.toLowerCase())) return name;
+  }
 }
 
 /** Where new homework for a class is stored. */

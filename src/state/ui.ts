@@ -12,18 +12,14 @@ export type View =
   | { kind: 'folder'; path: string }
   | { kind: 'trash' }
   | { kind: 'library' }
-  | { kind: 'class'; path: string; tab?: ClassTab }
-  | { kind: 'homework'; filter?: 'todo' | 'missing' | 'done' }
+  | { kind: 'class'; path: string }
+  | { kind: 'homework' }
   /** Review: `preset` picks these notes when it opens. */
   | { kind: 'review'; preset?: string[] };
-
-export type ClassTab = 'stream' | 'classwork' | 'study';
 
 /** Modal dialogs that several places can open. */
 export type Dialog =
   | { kind: 'class'; path: string | null }
-  /** A class's appearance (theme colour and banner icon). */
-  | { kind: 'customize'; path: string }
   | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
   | { kind: 'linkNotes'; noteId: string };
 

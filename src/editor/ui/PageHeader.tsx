@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
-import { ClipboardList } from 'lucide-react';
 import type { NoteDoc } from '../../lib/vault/types';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
-import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, themeVars } from '../../lib/classes';
+import { classForFolder, classInfo, HOMEWORK_SUBFOLDER } from '../../lib/classes';
 import { HomeworkBar } from './HomeworkBar';
 import { displayTitle, isDateTitle } from '../../lib/displayTitle';
 import { PaperPicker } from '../../components/PaperPicker';
@@ -147,53 +146,39 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
   );
 
   return (
-    <header
-      className={cx('page-header', note.meta.homework && 'is-homework')}
-      style={note.meta.homework && cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
-      data-ui
-    >
-      {/* Homework shows its class, teacher and dates in its own Classroom-style meta line. */}
-      {!note.meta.homework && (
-        <div className="page-meta">
-          {cls ? (
-            <>
-              <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })} title={`Open ${cls.name}`}>
-                {cls.name}
-              </button>
-              {subPath && subPath !== HOMEWORK_SUBFOLDER && (
-                <>
-                  <span className="crumb-sep">/</span>
-                  <button className="crumb" onClick={() => useUI.getState().setView({ kind: 'folder', path: note.meta.folder })}>
-                    {subPath.split('/').join(' / ')}
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <button
-              className="crumb"
-              onClick={() => useUI.getState().setView(note.meta.folder ? { kind: 'folder', path: note.meta.folder } : { kind: 'home' })}
-            >
-              {folderLabel}
+    <header className={cx('page-header', note.meta.homework && 'is-homework')} data-ui>
+      <div className="page-meta">
+        {/* Homework names its class in the row under its title, so here it shows only the date. */}
+        {note.meta.homework ? null : cls ? (
+          <>
+            <button className="crumb is-class" onClick={() => useUI.getState().setView({ kind: 'class', path: cls.path })} title={`Open ${cls.name}`}>
+              {cls.name}
             </button>
-          )}
+            {subPath && subPath !== HOMEWORK_SUBFOLDER && (
+              <>
+                <span className="crumb-sep">/</span>
+                <button className="crumb" onClick={() => useUI.getState().setView({ kind: 'folder', path: note.meta.folder })}>
+                  {subPath.split('/').join(' / ')}
+                </button>
+              </>
+            )}
+          </>
+        ) : (
+          <button
+            className="crumb"
+            onClick={() => useUI.getState().setView(note.meta.folder ? { kind: 'folder', path: note.meta.folder } : { kind: 'home' })}
+          >
+            {folderLabel}
+          </button>
+        )}
+        {!note.meta.homework && (
           <span className="crumb-dot" aria-hidden>
             ·
           </span>
-          <span className="crumb-date">{editedAt(note.meta.updated)}</span>
-        </div>
-      )}
-      {note.meta.homework ? (
-        // Classroom's assignment page: the class-colour circle beside the title.
-        <div className="hw-title-row">
-          <span className="item-circle is-40">
-            <ClipboardList size={24} />
-          </span>
-          {titleEl}
-        </div>
-      ) : (
-        titleEl
-      )}
+        )}
+        <span className="crumb-date">{editedAt(note.meta.updated)}</span>
+      </div>
+      {titleEl}
       {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       {note.meta.homework && <HomeworkBar note={note} />}
     </header>
