@@ -108,4 +108,8 @@ test('a search snippet shows math as plain text, not TeX', async () => {
   assert.equal(snippet('**Definition.** $\\lim_{x \\to a} f(x) = L$ when ==close==', 'lim'), 'Definition. lim x → a f(x) = L when close');
   assert.equal(snippet('Quotient: $\\frac{f}{g} \\le 1$', 'quotient'), 'Quotient: f/g ≤ 1');
   assert.equal(snippet('[Handwritten: x^2 + 1]', 'x'), 'x^2 + 1');
+  assert.equal(snippet('Ex. Find $\\lim_{x\\to 3} \\frac{x^2 - 9}{x - 3}$', 'find'), 'Ex. Find lim x → 3 (x^2 - 9)/(x - 3)');
+  // A long passage is cut around the match, never inside a formula.
+  const long = `${'Intro words here. '.repeat(12)}Then $\\frac{a+b}{c}$ and the squeeze theorem.`;
+  assert.ok(!/frac|[{}$\\]/.test(snippet(long, 'squeeze', 60)), snippet(long, 'squeeze', 60));
 });

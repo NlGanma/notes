@@ -252,42 +252,46 @@ export function formatExcerpts(hits: Hit[], start = 1, nameOf: (c: Chunk) => str
 }
 
 const TEX_SYMBOL: Record<string, string> = Object.fromEntries(
-  'le:≤ leq:≤ ge:≥ geq:≥ ne:≠ neq:≠ to:→ rightarrow:→ Rightarrow:⇒ implies:⇒ infty:∞ cdot:· times:× pm:± approx:≈ in:∈ pi:π theta:θ alpha:α beta:β gamma:γ delta:δ Delta:Δ epsilon:ε varepsilon:ε lambda:λ mu:μ sigma:σ sum:Σ int:∫ sqrt:√'
+  'pi:π theta:θ alpha:α beta:β gamma:γ delta:δ Delta:Δ epsilon:ε varepsilon:ε lambda:λ mu:μ sigma:σ infty:∞ sum:Σ int:∫ sqrt:√'
     .split(' ')
     .map((p) => p.split(':')),
 );
+/** Relations and operators, spaced as they read ("x → a"). */
+const TEX_OP: Record<string, string> = Object.fromEntries(
+  'le:≤ leq:≤ ge:≥ geq:≥ ne:≠ neq:≠ to:→ rightarrow:→ Rightarrow:⇒ implies:⇒ cdot:· times:× pm:± approx:≈ in:∈'.split(' ').map((p) => p.split(':')),
+);
+const group = (s: string) => (/^[\w.]+$/.test(s.trim()) ? s.trim() : `(${s.trim()})`);
 
 /** TeX as plain text for a one-line preview: "$\lim_{x \to a} f(x) = L$" → "lim x → a f(x) = L". */
 export function plainMath(s: string): string {
   return s
-    .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
+    .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, (_, a: string, b: string) => `${group(a)}/${group(b)}`)
     .replace(/\\(?:left|right|displaystyle|mathrm|mathbf|mathit|text|operatorname)(?![a-zA-Z])/g, '')
     .replace(/\\[,;:! ]/g, ' ')
-    .replace(/\\([a-zA-Z]+)/g, (_, c: string) => TEX_SYMBOL[c] ?? c)
+    .replace(/\\([a-zA-Z]+)/g, (_, c: string) => (TEX_OP[c] ? ` ${TEX_OP[c]} ` : (TEX_SYMBOL[c] ?? c)))
     .replace(/_\{/g, ' {')
     .replace(/[{}$]/g, '');
 }
 
 /** Short snippet around the best-matching words, for search results: plain text, no Markdown or TeX. */
 export function snippet(text: string, query: string, len = 160): string {
-  const q = tokenize(query);
-  const lower = text.toLowerCase();
+  // Made plain first, so the cut never lands inside a formula.
+  const plain = plainMath(
+    text
+      .replace(/\[Handwritten notes — not transcribed yet\]/g, '')
+      .replace(/\[Handwritten: ([^\]]*)\]?/g, '$1')
+      .replace(/\*\*|==|[*`]/g, '')
+      .replace(/^[ \t]*(?:#{1,6}|>)[ \t]*/gm, ''),
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+  const lower = plain.toLowerCase();
   let at = -1;
-  for (const t of q) {
+  for (const t of tokenize(query)) {
     const i = lower.indexOf(t);
     if (i >= 0 && (at < 0 || i < at)) at = i;
   }
-  const clean = (s: string) =>
-    plainMath(
-      s
-        .replace(/\[Handwritten notes — not transcribed yet\]/g, '')
-        .replace(/\[Handwritten: ([^\]]*)\]?/g, '$1')
-        .replace(/\*\*|==|[*`]/g, '')
-        .replace(/^[ \t]*(?:#{1,6}|>)[ \t]*/gm, ''),
-    )
-      .replace(/\s+/g, ' ')
-      .trim();
-  if (at < 0) return clean(text.slice(0, len));
+  if (at < 0) return plain.slice(0, len).trim();
   const start = Math.max(0, at - len / 3);
-  return (start > 0 ? '…' : '') + clean(text.slice(start, start + len)) + (start + len < text.length ? '…' : '');
+  return (start > 0 ? '…' : '') + plain.slice(start, start + len).trim() + (start + len < plain.length ? '…' : '');
 }
