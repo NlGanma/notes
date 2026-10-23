@@ -19,6 +19,11 @@ const waitIdle = async () => {
 };
 const mock = (faults) => fetch(`${MOCK}/__mock`, { method: 'POST', body: JSON.stringify(faults) }).then((r) => r.json());
 const lastBot = () => page.locator('.assistant .msg.is-bot').last();
+/** Opens the Homework page's folded sections: which one holds the seed's "in two days" deadline depends on the weekday. */
+const unfoldHomework = async () => {
+  await page.waitForSelector('.homework-view');
+  for (const head of await page.locator('.hw-section:not(.is-open) .hw-section-head:not([disabled])').all()) await head.click();
+};
 
 // A worksheet as a real PDF (with a text layer) and as a photo (no text).
 const sheet = `<html><body style="font: 18px Georgia; padding: 48px"><h1>Problem Set 5</h1><ol>
@@ -111,6 +116,7 @@ await page.waitForSelector(`${V} .hw-bar`);
 await page.waitForFunction((v) => /Problem Set 5/.test(document.querySelector(`${v} .ProseMirror img`)?.getAttribute('alt') ?? ''), V, { timeout: 15000 });
 check(true, 'a photographed worksheet is read by the vision model');
 await page.click('.nav-item:has-text("Homework")');
+await unfoldHomework();
 check((await page.locator('.hw-row-item').count()) === 3, 'the Homework page lists all three assignments');
 await shot(page, 'hw-02-list');
 
@@ -222,8 +228,10 @@ check(!repeated && /\[\d\]\.$/.test(joinedText.trim()), 'the continued reply joi
 // ---------------------------------------------------------------- done
 await page.click(`${V} .hw-done`);
 await page.click('.nav-item:has-text("Homework")');
+await unfoldHomework();
 check(!(await page.locator('.hw-row-item:has-text("Problem Set 4")').count()), 'marking done removes it from To do');
 await page.click('.homework-view .gtab:has-text("Done")');
+await unfoldHomework();
 check(await page.locator('.hw-row-item.is-done:has-text("Problem Set 4")').count(), '…and lists it under Done');
 
 // ---------------------------------------------------------------- class-scoped Q&A and study tools
@@ -325,6 +333,20 @@ await page.click('.gtab:has-text("Classwork")');
 check((await page.locator('.class-view .topic:has(.topic-title:has-text("Homework")) .cw-row').count()) === 2, 'renaming the class keeps its homework');
 await page.click('.class-view .cw-row:has-text("Problem Set 5")');
 check(/All Orgo notes/.test(await page.textContent(`${V} .hw-source-chip`)), 'homework links follow the renamed class');
+
+// ---------------------------------------------------------------- deleting a class can be undone
+const orgoLive = () => page.evaluate(() => Object.values(window.__nib.vault.getState().notes).filter((n) => !n.meta.trashed && n.meta.folder.startsWith('Orgo')).length);
+const orgoBefore = await orgoLive();
+await showSidebar(page);
+await page.click('.sidebar .nav-class:has-text("Orgo")', { button: 'right' });
+await page.click('.context-menu .menu-item:has-text("Delete class")');
+await page.click('.modal .btn:has-text("Delete class")');
+await page.waitForSelector('.toast:has-text("Deleted Orgo")');
+check((await orgoLive()) === 0 && !(await page.locator('.sidebar .nav-class:has-text("Orgo")').count()), `Delete class moves its ${orgoBefore} notes and homework to Trash`);
+await page.click('.toast:has-text("Deleted Orgo") .toast-action:has-text("Undo")');
+await page.waitForSelector('.sidebar .nav-class:has-text("Orgo")');
+await page.waitForTimeout(300);
+check((await orgoLive()) === orgoBefore && (await page.evaluate(() => window.__nib.vault.getState().folderMeta.Orgo?.kind)) === 'class', '…and Undo brings the class back with all of them');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.
