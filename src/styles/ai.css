@@ -1,9 +1,11 @@
-/* ------------------------------------------------------------------ assistant panel
- * Gemini's side panel in Docs (2025), in Nib's colours: docked on the shell colour to the right of
- * the white page, a plain title with icon buttons, a greeting with assist chips, the same chat as
- * Ask your notes, and a fully rounded input at the bottom. */
+/*
+ * The AI's surfaces, in Claude's manner: the Assistant beside the note, the chat anatomy shared with Ask
+ * your notes, and one quiet system for what the notes-only check found. The question sits in a tinted
+ * bubble on the right; the answer is serif text with small grey citation chips; anything from the AI's
+ * own knowledge is in an amber box that says so. Amber means exactly that and nothing else.
+ */
 
-/* Like Gemini's side panel and Drive's details pane: its own white panel on the shell colour, beside the page. */
+/* ------------------------------------------------------------------ assistant panel */
 .assistant {
   width: var(--assistant-w);
   flex: none;
@@ -12,7 +14,7 @@
   background: var(--bg-canvas);
   box-shadow: inset 1px 0 0 var(--hairline);
   overflow: hidden;
-  animation: slide-in 0.2s var(--ease);
+  animation: slide-in var(--dur) var(--ease);
   min-height: 0;
 }
 @keyframes slide-in {
@@ -22,23 +24,23 @@
   }
 }
 .assistant-head {
-  height: 56px;
+  height: 52px;
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 0 8px 0 20px;
+  padding: 0 10px 0 16px;
 }
 .assistant-title {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 .assistant-name {
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 400;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 580;
   color: var(--text);
 }
 /* The note's name gives way (ellipsis) before the buttons do, in a narrow panel. */
@@ -56,204 +58,346 @@
 }
 .assistant-head-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex: none;
-}
-.assistant-head-actions .icon-btn {
-  width: 40px;
-  height: 40px;
-}
-/* Only shown when the model isn't running (the app bar shows it when it is). */
-.model-chip {
-  margin: 0 16px 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 8px 12px;
-  border-radius: var(--radius-s);
-  background: var(--warning-soft);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--warning);
-  text-align: left;
-  flex: none;
-}
-.model-chip.is-checking {
-  background: var(--bg-subtle);
-  color: var(--text-2);
-}
-.model-chip:hover {
-  text-decoration: underline;
 }
 
 .assistant-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 20px 16px;
+  padding: 8px 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 24px;
   min-height: 0;
   user-select: text;
 }
+/* With nothing asked yet, the greeting sits in the middle of the panel. */
+.assistant-list.is-empty {
+  justify-content: center;
+}
 .assistant-empty {
-  padding: 16px 0 8px;
+  padding: 0 4px 24px;
+  animation: fade-in var(--dur) var(--ease);
 }
 .assistant-empty-title {
+  font-family: var(--font-display);
   font-size: 22px;
   line-height: 28px;
   font-weight: 400;
   color: var(--text);
 }
 .assistant-empty-sub {
-  color: var(--text-2);
-  font-size: 14px;
-  line-height: 20px;
-  margin: 8px 0 16px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 18px;
+  margin: 6px 0 20px;
 }
-/* Gemini side-panel suggestion cards: a full-width connected list, big outer
-   corners and small inner ones, each with a white icon tile. */
 .starters {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: 6px;
 }
 .starter {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 10px 16px 10px 10px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-subtle);
-  text-align: left;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 12px 7px 10px;
+  border-radius: var(--radius);
   font-size: 14px;
   line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-  transition: background 0.15s var(--ease);
-}
-.starter:first-child {
-  border-top-left-radius: var(--radius-xl);
-  border-top-right-radius: var(--radius-xl);
-}
-.starter:last-child {
-  border-bottom-left-radius: var(--radius-xl);
-  border-bottom-right-radius: var(--radius-xl);
+  text-align: left;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 .starter svg {
   flex: none;
-  box-sizing: content-box;
-  padding: 9px;
-  border-radius: var(--radius-s);
-  background: var(--bg);
-  color: var(--text-2);
+  color: var(--text-3);
 }
 .starter:hover:not(:disabled) {
-  background: var(--accent-soft);
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .starter:disabled {
-  opacity: 0.38;
+  opacity: 0.45;
 }
-/* Homework: what "strictly from your notes" means, and which notes. */
-.asst-hw-card {
-  margin: 16px 0 24px;
-}
-.asst-hw-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-}
-.asst-hw-head svg {
-  color: var(--text-2);
-}
-.asst-hw-sources {
+
+/* Tutor follow-ups: small ringed chips after a hint. */
+.followups {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.asst-hw-source {
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
-  height: 32px;
-  max-width: 100%;
-  padding: 0 12px 0 8px;
-  border-radius: var(--radius-s);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
+  margin-top: -12px;
+}
+.followup {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
   font-size: 13px;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.followup:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text);
 }
-.asst-hw-source span {
+.followup:disabled {
+  opacity: 0.45;
+}
+
+/* ------------------------------------------------------------------ composers (the Assistant's and Ask your notes') */
+.composer,
+.library-composer {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-composer);
+  padding: 8px;
+  transition: box-shadow var(--dur) var(--ease);
+  cursor: text;
+}
+.composer:focus-within,
+.library-composer:focus-within {
+  box-shadow: var(--shadow-composer-focus);
+}
+.composer {
+  margin: 0 12px 12px;
+  flex: none;
+  min-height: 96px;
+}
+.composer-input {
+  display: block;
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  font-size: 15px;
+  line-height: 22px;
+  max-height: 180px;
+  padding: 6px 8px 4px;
+  background: transparent;
+  color: var(--text);
+  user-select: text;
+  flex: 1;
+}
+.composer-input::placeholder {
+  color: var(--text-4);
+}
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  flex: none;
+  cursor: default;
+}
+
+/* The line a composer shows while the local model can't answer yet. */
+.composer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 4px 8px 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-2);
+  box-shadow: 0 1px 0 var(--hairline);
+  cursor: default;
+}
+.composer-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--danger);
+}
+.composer-status.is-loading .composer-status-dot {
+  background: var(--warning-line);
+  animation: breathe 0.9s ease-in-out infinite alternate;
+}
+.composer-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.composer-status-link {
+  color: var(--link);
+  font-size: 13px;
+  flex: none;
+}
+.composer-status-link:hover {
+  text-decoration: underline;
+}
+
+/* Attachments: a picture of part of the page, a pasted image, or selected text, as small chips. */
+.composer-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  cursor: default;
+}
+.att {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  max-width: 100%;
+  padding: 4px 4px 4px 4px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+}
+.att-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+}
+.att-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #fff;
+}
+.att-label {
+  min-width: 0;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.asst-hw-source svg {
-  color: var(--accent);
+.att-x {
+  width: 22px;
+  height: 22px;
   flex: none;
-}
-.asst-hw-source:hover {
-  background: var(--bg-hover);
-}
-.asst-hw-more {
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
   color: var(--text-3);
 }
+.att-x:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 
-/* messages */
+/* Tutor: a toggle chip, blue while on (blue is for things that are switched on). */
+.tutor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-2);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.tutor-chip:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tutor-chip.is-on,
+.tutor-chip.is-on:hover {
+  background: var(--info-soft);
+  color: var(--info-text);
+}
+.tutor-chip:disabled {
+  opacity: 0.4;
+}
+
+/* Send is clay (one of clay's few places); Stop stays ink. */
+.send-btn {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  background: var(--clay-strong);
+  color: #fff;
+  transition:
+    background var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+.send-btn:hover:not(:disabled) {
+  background: var(--clay-hover);
+}
+.send-btn:disabled {
+  opacity: 0.4;
+}
+.send-btn.is-stop {
+  background: var(--accent);
+}
+.send-btn.is-stop:hover {
+  background: var(--accent-hover);
+}
+
+/* ------------------------------------------------------------------ messages */
 .msg {
   display: flex;
   flex-direction: column;
-  animation: fade-in 0.2s var(--ease);
+  min-width: 0;
 }
 .msg.is-user {
   align-items: flex-end;
+  gap: 6px;
 }
 .msg-bubble {
   max-width: 85%;
+  padding: 10px 16px;
+  border-radius: 16px;
   background: var(--bg-subtle);
-  border-radius: 20px;
-  padding: 12px 20px;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.assistant .msg-bubble {
+  font-size: 15px;
+  line-height: 22px;
+  padding: 8px 14px;
 }
 .msg-attachments {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  margin-bottom: 6px;
-  max-width: 92%;
+  max-width: 85%;
 }
 .msg-att-img {
   max-width: 220px;
-  max-height: 150px;
-  border-radius: 10px;
-  box-shadow:
-    0 0 0 1px var(--border),
-    var(--shadow-s);
+  max-height: 140px;
+  border-radius: var(--radius);
   background: #fff;
+  box-shadow: inset 0 0 0 1px var(--border);
   object-fit: contain;
 }
 .msg-att-chip {
-  font-size: 11.5px;
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: var(--radius-s);
+  background: rgba(20, 20, 19, 0.06);
+  font-size: 12px;
+  line-height: 18px;
   color: var(--text-2);
-  background: #fff;
-  box-shadow: inset 0 0 0 1px var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  max-width: min(280px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,179 +406,198 @@
   align-items: stretch;
 }
 .msg-thinking {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  align-self: flex-start;
+  gap: 4px;
   height: 24px;
-  padding: 0 9px;
-  border-radius: 12px;
-  background: var(--bg-subtle);
-  font-size: 11.5px;
-  color: var(--text-3);
   margin-bottom: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  color: var(--text-3);
+}
+.msg-thinking:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.msg-thinking .chev {
+  transition: transform var(--dur-fast) var(--ease);
 }
 .msg-thinking.is-open .chev {
   transform: rotate(90deg);
 }
 .msg-thinking-body {
-  font-size: 12px;
+  margin: 0 0 12px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--border);
+  font-size: 13px;
+  line-height: 20px;
   color: var(--text-3);
   white-space: pre-wrap;
-  border-left: 2px solid var(--border-strong);
-  padding: 2px 0 2px 10px;
-  margin: 0 0 8px 4px;
-  max-height: 220px;
-  overflow-y: auto;
+}
+
+/* Streaming: Claude's single clay dot, breathing. */
+@keyframes breathe {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .msg-typing {
   display: flex;
-  gap: 4px;
-  padding: 8px 2px;
+  height: 26px;
+  align-items: center;
 }
-.msg-typing span {
-  width: 6px;
-  height: 6px;
+.msg-typing span,
+.making-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--clay-strong);
-  opacity: 0.3;
-  animation: typing 1.2s infinite;
+  background: var(--clay);
+  animation: breathe 0.9s ease-in-out infinite alternate;
+  flex: none;
 }
-.msg-typing span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.msg-typing span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-@keyframes typing {
-  30% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
+.msg-typing span + span {
+  display: none;
 }
 .caret {
   display: inline-block;
-  width: 7px;
-  height: 15px;
-  background: var(--clay-strong);
-  border-radius: 2px;
-  margin-top: 2px;
-  animation: blink 1s steps(2) infinite;
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--clay);
+  vertical-align: 1px;
+  animation: breathe 0.9s ease-in-out infinite alternate;
 }
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
+.msg-phase {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+.msg-phase .spinner {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--clay);
+  animation: breathe 0.9s ease-in-out infinite alternate;
+}
+.msg-phase.is-retrying {
+  color: var(--warning);
 }
 .msg-error {
   display: flex;
-  gap: 10px;
   align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--danger-soft);
-  color: #a52323;
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--danger-strong);
 }
 .msg-error svg {
   flex: none;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 .msg-error-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0 14px;
+  gap: 14px;
 }
 .msg-stopped {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 11.5px;
-  color: var(--text-4);
-  margin-top: 4px;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
 }
 .msg-stopped .link-btn {
   margin-top: 0;
 }
-.msg-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 12px;
-}
-.msg-act {
+.msg-continue {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 8px;
+  gap: 6px;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 10px;
   border-radius: 7px;
-  font-size: 12px;
-  color: var(--text-3);
-  white-space: nowrap;
-  flex: none;
+  font-size: 13px;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
-.msg-act:hover {
+.msg-continue:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
-/* Icon-only actions (copy, retry): 36px circles with a tooltip. */
-.msg-act.is-icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  justify-content: center;
-  border-radius: 50%;
-  color: var(--text-2);
+
+/* Under a reply: quiet icon actions plus one labelled one (Insert into note / Save as note). They wait
+   for the pointer, except under the newest reply. */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 8px 0 0 -6px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
 }
-/* NotebookLM's "Save to note": the one labelled action, an outlined pill at the start of the row. */
+.msg:hover > .msg-actions,
+.msg:focus-within > .msg-actions,
+.lib-turn:last-child .msg-actions,
+.lib-tool-turn .msg-actions,
+.assistant-turn:nth-last-child(1 of .assistant-turn) .msg-actions {
+  opacity: 1;
+}
+.msg-act,
 .msg-save {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 14px 0 10px;
-  margin-right: 4px;
-  border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--accent);
-  white-space: nowrap;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-3);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.msg-act:hover:not(:disabled),
+.msg-save:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.msg-act.is-icon {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+.msg-act svg,
+.msg-save svg {
+  width: 16px;
+  height: 16px;
   flex: none;
 }
-/* Also beats .msg-act:hover, which the Assistant's Insert button (.msg-act.msg-save) carries. */
-.msg-save:hover:not(:disabled) {
-  background: var(--accent-tint);
-  color: var(--accent);
+.msg-save {
+  color: var(--text-2);
 }
 .msg-save:disabled {
-  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
   color: var(--text-3);
 }
-.followups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.followup {
-  height: 32px;
-  padding: 0 16px;
-  border-radius: var(--radius-s);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-2);
-  transition: background 0.15s var(--ease);
-}
-.followup:hover {
-  background: var(--bg-hover);
-}
 
-/* markdown in answers */
+/* ------------------------------------------------------------------ markdown (answers, and the review cards) */
 .md {
-  font-size: 13.75px;
+  font-size: 14px;
   line-height: 1.62;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -449,10 +612,9 @@
   margin: 0 0 10px;
 }
 .md :is(h1, h2, h3, h4) {
-  font-size: 14.5px;
-  font-weight: 680;
+  font-size: 15px;
+  font-weight: 580;
   margin: 16px 0 6px;
-  letter-spacing: -0.01em;
 }
 .md :is(ul, ol) {
   margin: 0 0 10px;
@@ -467,14 +629,14 @@
 .md code {
   font-family: var(--font-mono);
   font-size: 0.86em;
-  background: #f2f2ef;
+  background: var(--bg-subtle);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-s);
 }
 .md pre {
-  background: #f7f7f5;
+  background: var(--bg-canvas);
   box-shadow: inset 0 0 0 1px var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 10px 12px;
   overflow-x: auto;
   font-size: 12.5px;
@@ -490,12 +652,12 @@
   color: var(--text-2);
 }
 .md a {
-  color: var(--accent-text);
+  color: var(--link);
 }
 .md table {
   border-collapse: collapse;
   margin: 0 0 10px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 .md :is(td, th) {
   border: 1px solid var(--border);
@@ -511,8 +673,41 @@
   margin: 0;
 }
 .md strong {
-  font-weight: 650;
+  font-weight: 600;
 }
+
+/* A reply reads like Claude's: serif, full width, a little air between paragraphs. */
+:is(.library, .assistant) .msg.is-bot > .md {
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 24px;
+}
+:is(.library, .assistant) .msg.is-bot > .md p {
+  margin: 0 0 12px;
+}
+:is(.library, .assistant) .msg.is-bot > .md :is(h1, h2, h3, h4) {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 580;
+  margin: 20px 0 6px;
+}
+:is(.library, .assistant) .msg.is-bot > .md :is(ul, ol) {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+:is(.library, .assistant) .msg.is-bot > .md li {
+  margin: 4px 0;
+}
+:is(.library, .assistant) .msg.is-bot > .md table {
+  font-family: var(--font-ui);
+}
+/* While a grounded answer streams it hasn't been checked yet: it looks provisional. */
+.md.is-unchecked {
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------------ citations */
 .cite {
   display: inline-grid;
   place-items: center;
@@ -520,278 +715,157 @@
   height: 18px;
   padding: 0 5px;
   margin: 0 1px 0 3px;
-  border-radius: 9px;
-  background: #e1e6ee;
+  border-radius: 4.5px;
+  background: rgba(20, 20, 19, 0.06);
   color: var(--text-2);
+  font-family: var(--font-ui);
   font-size: 11px;
   line-height: 18px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  vertical-align: 1px;
+  vertical-align: 2px;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--dur-fast) var(--ease);
 }
 .cite:hover,
 .cite.is-active {
-  background: #cdd3dd;
+  background: rgba(20, 20, 19, 0.14);
   color: var(--text);
 }
 .cite-run {
   white-space: nowrap;
 }
-
-/* composer: a fully rounded field (Gemini's and NotebookLM's input) */
-.composer {
-  margin: 0 16px 16px;
-  border-radius: 20px;
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--border);
-  padding: 8px 8px 8px 20px;
-  flex: none;
-  transition: box-shadow 0.15s var(--ease);
-}
-.composer:focus-within {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, white);
-}
-.composer-atts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 0 4px;
-}
-.att {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
+/* The number of a passage, in lists of sources. */
+.cite-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
   padding: 0 4px;
-  border-radius: var(--radius-s);
-  background: var(--bg-subtle);
-  font-size: 13px;
+  border-radius: 4.5px;
+  background: rgba(20, 20, 19, 0.06);
   color: var(--text-2);
-  max-width: 240px;
-}
-.att img {
-  width: 24px;
-  height: 24px;
-  object-fit: cover;
-  border-radius: 4px;
-  background: #fff;
-}
-.att-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.att button {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--text-2);
-}
-.att button:hover {
-  background: var(--bg-hover);
-}
-.composer-input {
-  width: 100%;
-  border: 0;
-  outline: none;
-  resize: none;
-  font-size: 16px;
-  line-height: 24px;
-  max-height: 180px;
-  padding: 8px 12px 4px 0;
-  background: transparent;
-  color: var(--text);
-  user-select: text;
-}
-.composer-input::placeholder {
-  color: var(--text-3);
-}
-.composer-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: -12px;
-}
-.composer-row .icon-btn {
-  width: 40px;
-  height: 40px;
-}
-/* Ask / Tutor: a small GM3 segmented button. */
-.mode-toggle {
-  display: inline-flex;
-  position: relative;
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  flex: none;
-}
-/* The outline sits above the segments so the selected fill can't cover it. */
-.mode-toggle::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  pointer-events: none;
-}
-.mode-toggle button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--text-2);
-}
-.mode-toggle button + button {
-  box-shadow: inset 1px 0 0 var(--outline-variant);
-}
-.mode-toggle button:hover:not(.is-active) {
-  background: var(--bg-hover);
-}
-.mode-toggle button.is-active {
-  background: var(--bg-selected);
-  color: var(--on-selected);
-}
-/* Send: a round clay button (one of clay's few places), grey until there's something to send. */
-.send-btn {
-  width: 40px;
-  height: 40px;
+  font-variant-numeric: tabular-nums;
   flex: none;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--clay-strong);
-  color: #fff;
-  transition: background 0.15s var(--ease);
-}
-.send-btn:hover:not(:disabled) {
-  background: var(--clay-hover);
-}
-/* Stop, like Claude's, stays ink. */
-.send-btn.is-stop {
-  background: var(--accent);
-}
-.send-btn.is-stop:hover {
-  background: var(--accent-hover);
-}
-.send-btn:disabled {
-  background: var(--bg-hover);
-  color: var(--text-3);
 }
 
-/* ------------------------------------------------------------------ sources & citation popover (shared) */
+/* "From your notes": the notes an answer used, as quiet rows under it. */
 .sources {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 .sources-label {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
   color: var(--text-3);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .sources-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
 }
 .source {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 6px 7px;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: inset 0 0 0 1px var(--border);
+  max-width: 100%;
+  min-height: 28px;
+  padding: 4px 8px 4px 4px;
+  margin-left: -4px;
+  border-radius: 7px;
   text-align: left;
-  max-width: min(340px, 100%);
 }
 .source:hover {
-  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--bg-hover);
 }
 .source-text {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
 }
 .source-title {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .source-sec {
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 16px;
   color: var(--text-3);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
-.cite-n {
-  display: inline-grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 700;
-  flex: none;
+/* In the narrow panel the section goes under the note's name. */
+.assistant .source-text {
+  flex-direction: column;
+  gap: 0;
 }
-/* NotebookLM's citation card: the section, the passage, then the note it's from (which opens it). */
+
+/* A citation's card: the section, the passage itself, and the note it's from (which opens it). */
 .cite-pop {
-  width: 380px;
-  border-radius: var(--radius-l);
-  overflow: hidden;
+  max-width: calc(100vw - 32px);
 }
 .cite-preview {
-  display: flex;
-  flex-direction: column;
+  width: 320px;
+  padding: 12px 12px 8px;
 }
 .cite-preview-body {
-  padding: 20px 24px 16px;
+  padding: 0 4px;
 }
 .cite-preview-head {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 580;
   color: var(--text);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .cite-preview-text {
+  font-family: var(--font-display);
   font-size: 14px;
   line-height: 22px;
-  color: var(--text);
-  max-height: 220px;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   user-select: text;
 }
 .cite-preview-text.md p {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 .cite-preview .cite-preview-foot.btn {
   width: 100%;
-  height: 48px;
-  border-radius: 0;
-  border-top: 1px solid var(--border);
   justify-content: flex-start;
-  gap: 8px;
-  padding: 0 24px;
-  color: var(--text);
+  height: 30px;
+  margin-top: 8px;
+  padding: 0 6px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 400;
+  color: var(--link);
+  box-shadow: 0 -1px 0 var(--hairline);
+  border-radius: 0 0 6px 6px;
 }
 .cite-preview .cite-preview-foot.btn:hover {
-  background: var(--bg-subtle);
+  background: var(--bg-hover);
 }
 .cite-preview-foot svg {
-  color: var(--accent);
-  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
 }
 .cite-preview-title {
   min-width: 0;
@@ -800,68 +874,47 @@
   white-space: nowrap;
 }
 .cite-preview-sec {
-  flex: none;
-  font-size: 12px;
   color: var(--text-3);
+  flex: none;
 }
+
 .spinner {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(20, 20, 19, 0.12);
-  border-top-color: var(--ai);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--text-2);
   animation: spin 0.8s linear infinite;
+  flex: none;
 }
 
-/* ------------------------------------------------------------ harness status */
-.msg-phase {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--text-3);
-  padding: 4px 0;
-}
-.msg-phase.is-retrying {
-  color: var(--warning);
-}
-.msg-continue {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
-.msg-continue:hover {
-  background: #dce8fd;
-}
+/* ------------------------------------------------------------------ what the notes-only check found
+ * One system: the amber box (with its label) is the AI's own knowledge; "not in your notes" tags and
+ * the pills use the same amber; the banner above an answer is a calm line with an amber dot. */
 
-/* ------------------------------------------------------------ grounding */
+/* The AI's own knowledge, boxed and labelled by the app. */
 .md .outside-notes {
   margin: 12px 0;
-  padding: 12px 16px;
-  border-radius: var(--radius-l);
+  padding: 10px 14px 12px;
+  border-radius: 10px;
   background: var(--warning-soft);
+  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.35);
 }
 .md .outside-head {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
   line-height: 18px;
   font-weight: 500;
   color: var(--warning);
   margin-bottom: 4px;
 }
 .md .outside-icon {
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
   flex: none;
   background: currentColor;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E")
@@ -872,173 +925,186 @@
 .md .outside-notes > :last-child {
   margin-bottom: 0;
 }
-.md.show-uncited .uncited:not(:has(ul, ol, blockquote)) {
-  background: linear-gradient(transparent 60%, rgba(232, 160, 20, 0.22) 60%);
-  border-radius: 2px;
-}
-.md.show-uncited li.uncited:has(ul, ol, blockquote) {
-  box-shadow: inset 2px 0 0 rgba(232, 160, 20, 0.6);
-}
-.md.show-uncited li.uncited::marker {
-  color: #c98a04;
-}
-.cite.is-weak {
-  background: var(--warning-soft);
-  color: #8a5d00;
-  box-shadow: inset 0 0 0 1px rgba(201, 138, 4, 0.35);
-}
-.cite.is-weak:hover {
-  background: var(--warning);
-  color: #fff;
-}
-.grounding {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-.grounding-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-.grounding-item.is-cited {
-  background: var(--success-soft);
-  color: #17733a;
-}
-.grounding-item.is-outside {
-  background: #fbf3e2;
-  color: #94600a;
-}
-.grounding-item.is-uncited {
-  background: var(--warning-soft);
-  color: #8a5d00;
-  cursor: pointer;
-}
-.grounding-item.is-uncited:hover,
-.grounding-item.is-uncited.is-on {
-  box-shadow: inset 0 0 0 1px rgba(201, 138, 4, 0.45);
-}
-
-/* ------------------------------------------------------------ notes-only check */
-/* Boxes Nib made itself: sentences it couldn't match to the notes. */
-/* Same callout; the label says Nib moved these ("Not found in your notes"). */
+/* Sentences Nib moved out of the answer itself ("Not found in your notes"): the same box. */
 .md .outside-notes.is-auto {
   background: var(--warning-soft);
 }
 /* List items, quote lines and table rows it couldn't match (lists stay intact). */
 .md .own-inline {
-  background: linear-gradient(transparent 8%, rgba(232, 160, 20, 0.14) 8%, rgba(232, 160, 20, 0.14) 92%, transparent 92%);
+  background: linear-gradient(transparent 8%, rgba(250, 178, 25, 0.16) 8%, rgba(250, 178, 25, 0.16) 92%, transparent 92%);
   border-radius: 2px;
 }
 .md .own-tag {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 8px;
+  padding: 0 7px;
   border-radius: 999px;
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
   font-weight: 500;
   line-height: 18px;
   vertical-align: 1px;
   color: var(--warning);
   background: var(--warning-soft);
+  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.35);
   cursor: help;
   /* Never broken mid-word in a narrow table column. */
   white-space: nowrap;
 }
+.md.show-uncited .uncited:not(:has(ul, ol, blockquote)),
 .md.show-uncited .weak-claim {
-  background: linear-gradient(transparent 60%, rgba(232, 160, 20, 0.22) 60%);
+  background: linear-gradient(transparent 60%, rgba(250, 178, 25, 0.28) 60%);
   border-radius: 2px;
 }
+.md.show-uncited li.uncited:has(ul, ol, blockquote) {
+  box-shadow: inset 2px 0 0 rgba(250, 178, 25, 0.7);
+}
+.md.show-uncited li.uncited::marker {
+  color: var(--warning);
+}
 .md .weak-claim {
-  text-decoration: underline dotted rgba(201, 138, 4, 0.5);
+  text-decoration: underline dotted rgba(135, 90, 8, 0.45);
   text-underline-offset: 3px;
 }
-/* While a grounded answer streams it hasn't been checked yet: it looks provisional. */
-.md.is-unchecked {
-  color: var(--text-2);
+.cite.is-weak {
+  background: var(--warning-soft);
+  color: var(--warning);
+  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.4);
 }
+.cite.is-weak:hover {
+  background: rgba(250, 178, 25, 0.3);
+}
+
+/* The pills under an answer: how much came from the notes, and what didn't. */
+.grounding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.grounding-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+}
+.grounding-item svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.grounding-item.is-cited {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.grounding-item.is-outside {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.grounding-item.is-uncited {
+  color: var(--warning);
+  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.5);
+  cursor: pointer;
+}
+.grounding-item.is-uncited:hover,
+.grounding-item.is-uncited.is-on {
+  background: var(--warning-soft);
+}
+/* The double-check's own lines ("Every sentence is checked…", "Double-checking…"). */
 .msg-checking {
-  margin-top: 6px;
-  font-size: 11.5px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 16px;
   color: var(--text-3);
 }
 .msg-added {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  margin-top: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #8a5d00;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--warning);
   background: var(--warning-soft);
 }
 .msg-added svg {
   flex: none;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
-/* "Your notes don't cover this" — written by the app, above the answer. */
+/* "Your notes don't cover this": the app's own words above the answer — a calm line with an amber dot,
+   the reason under it, then what's closest in the notes. */
 .coverage-banner {
-  margin: 0 0 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius-l);
-  font-size: 14px;
-  line-height: 22px;
-}
-/* Google's caution callout: pale yellow, no border, a calm label. */
-.coverage-banner.is-none {
-  background: var(--warning-soft);
-  color: var(--text);
-}
-/* "Only part of this is in your notes": one quiet line above the answer. */
-.coverage-banner.is-partial {
-  padding: 0;
+  position: relative;
+  margin: 0 0 14px;
+  padding-left: 16px;
   font-size: 13px;
   line-height: 20px;
-  color: var(--text-3);
+  color: var(--text-2);
+}
+.coverage-banner::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning-line);
 }
 .coverage-title {
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 500;
-  color: var(--warning);
+  color: var(--text);
   margin-bottom: 2px;
 }
+.coverage-banner.is-partial .coverage-text {
+  color: var(--text-2);
+}
 .coverage-gaps {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   padding-left: 16px;
 }
 .coverage-gaps li {
-  margin: 1px 0;
+  margin: 2px 0;
+}
+.coverage-gaps li::marker {
+  color: var(--warning-line);
 }
 .coverage-nearest {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   margin-top: 8px;
 }
 .coverage-nearest-label {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-3);
   margin-right: 2px;
 }
 .coverage-chip {
-  height: 22px;
+  height: 24px;
+  max-width: 220px;
   padding: 0 8px;
-  border-radius: 999px;
-  border: 0;
-  font-size: 11.5px;
+  border-radius: var(--radius-s);
+  font-size: 12px;
   color: var(--text-2);
-  background: #fff;
+  background: var(--bg);
   box-shadow: inset 0 0 0 1px var(--border);
-  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .coverage-chip:hover {
   color: var(--text);
@@ -1046,176 +1112,113 @@
 }
 .coverage-force,
 .coverage-link {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 8px;
+  font-size: 13px;
 }
 
-/* ------------------------------------------------------------------ answers (Ask your notes and the Assistant)
- * NotebookLM's chat anatomy, shared so both chat surfaces look the same: the question in a
- * tinted bubble on the right, the answer as plain text with grey citation circles, then one
- * labelled pill and icon buttons. */
-:is(.library, .assistant) .md {
-  font-size: 14px;
-  line-height: 24px;
-}
-:is(.library, .assistant) .md p {
-  margin: 0 0 12px;
-}
-:is(.library, .assistant) .md :is(h1, h2, h3, h4) {
-  font-size: 14px;
-  line-height: 24px;
-  font-weight: 600;
-  letter-spacing: 0;
-  margin: 16px 0 4px;
-}
-:is(.library, .assistant) .md :is(ul, ol) {
-  margin: 0 0 12px;
-  padding-left: 20px;
-}
-:is(.library, .assistant) .md li {
-  margin: 6px 0;
-}
-:is(.library, .assistant) .md strong {
-  font-weight: 600;
-}
-:is(.library, .assistant) .cite.is-weak {
-  background: var(--warning-soft);
-  color: var(--warning);
-  box-shadow: none;
-}
-:is(.library, .assistant) .msg-checking {
-  font-size: 12px;
-}
-/* What the notes-only check found: a quiet meta line, not coloured badges. */
-:is(.library, .assistant) .grounding {
-  gap: 4px 16px;
-  margin-top: 12px;
-}
-:is(.library, .assistant) .grounding-item {
+/* ------------------------------------------------------------------ polish (a sheet from the note's ⋯ menu) */
+.menu.polish-sheet {
+  width: 400px;
+  max-width: calc(100vw - 32px);
   padding: 0;
-  background: none;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-3);
 }
-:is(.library, .assistant) .grounding-item.is-uncited {
-  color: var(--warning);
+.polish {
+  padding: 4px 0 0;
 }
-:is(.library, .assistant) .grounding-item.is-uncited:hover,
-:is(.library, .assistant) .grounding-item.is-uncited.is-on {
-  box-shadow: none;
-  text-decoration: underline;
-}
-/* The notes it used, as one compact row under the answer. */
-:is(.library, .assistant) .sources {
-  margin-top: 12px;
+.polish-head {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
+  padding: 14px 16px 6px;
 }
-:is(.library, .assistant) .sources-label {
-  margin: 0 2px 0 0;
+.polish-title {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 580;
+  color: var(--text);
+}
+.polish-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 16px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.polish-empty svg {
+  color: var(--success);
+}
+.polish-group {
+  padding: 4px 6px 6px;
+}
+.polish-group + .polish-group {
+  box-shadow: 0 -1px 0 var(--hairline);
+  margin: 0 0;
+  padding-top: 8px;
+}
+.polish-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 4px 0 10px;
   font-size: 12px;
-  font-weight: 400;
+  line-height: 16px;
+  font-weight: 500;
   color: var(--text-3);
 }
-:is(.library, .assistant) .sources-list {
-  gap: 8px;
+.polish-all {
+  margin-right: -2px;
 }
-:is(.library, .assistant) .source {
-  height: 28px;
-  padding: 0 12px 0 5px;
-  gap: 6px;
-  border-radius: 14px;
-  background: none;
-  box-shadow: inset 0 0 0 1px var(--border);
-  max-width: 100%;
+.polish-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 6px 8px 10px;
+  border-radius: var(--radius);
 }
-:is(.library, .assistant) .source:hover {
-  background: var(--bg-subtle);
-  box-shadow: inset 0 0 0 1px var(--border);
+.polish-row:hover {
+  background: var(--bg-hover);
 }
-:is(.library, .assistant) .source .cite-n {
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  background: #e1e6ee;
-  color: var(--text-2);
-  font-weight: 500;
+.polish-row.is-done {
+  opacity: 0.45;
 }
-:is(.library, .assistant) .source-text {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 6px;
+.polish-icon {
+  width: 16px;
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  margin-top: 2px;
+  color: var(--text-3);
+  flex: none;
 }
-:is(.library, .assistant) .source-title {
-  font-size: 13px;
-  font-weight: 400;
+.polish-text {
+  flex: 1;
+  min-width: 0;
 }
-:is(.library, .assistant) .source-sec {
-  font-size: 12px;
-}
-/* The Assistant's sources: one 48px row each, title over section (Gemini's side panel source rows). */
-.assistant .sources-list {
-  flex-direction: column;
-  gap: 4px;
-}
-.assistant .source {
-  height: auto;
-  min-height: 48px;
-  padding: 6px 12px 6px 8px;
-  border-radius: var(--radius-l);
-}
-.assistant .source-text {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-}
-.assistant .source-title {
+.polish-row-title {
   font-size: 14px;
   line-height: 20px;
+  color: var(--text);
 }
-.assistant .source-sec {
+.polish-row-detail {
+  font-size: 12px;
   line-height: 16px;
+  color: var(--text-3);
 }
-:is(.library, .assistant) .msg-typing span {
-  background: var(--text-3);
+.polish-foot {
+  padding: 10px 16px 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
+  box-shadow: 0 -1px 0 var(--hairline);
 }
-:is(.library, .assistant) .caret {
-  background: var(--text-2);
-  width: 2px;
-  border-radius: 1px;
+.polish-foot-link {
+  margin-left: 6px;
+  color: var(--link);
+  font-size: 12px;
 }
-
-/* "Your notes don't cover this": said in plain words above the answer (NotebookLM answers this way);
-   the amber box below holds the AI's own answer, so the caution colour appears once. */
-:is(.library, .assistant) .coverage-banner.is-none {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  column-gap: 8px;
-  padding: 0;
-  background: none;
-  color: var(--text-2);
+.polish-foot-link:hover {
+  text-decoration: underline;
 }
-:is(.library, .assistant) .coverage-banner.is-none::before {
-  content: '';
-  grid-row: 1;
-  grid-column: 1;
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  background: var(--warning);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-:is(.library, .assistant) .coverage-banner.is-none > * {
-  grid-column: 2;
-  justify-self: start;
-}
-:is(.library, .assistant) .coverage-title {
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--warning);
-}
-

@@ -1,63 +1,68 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import {
-  ArrowRight,
+  ArrowUp,
   BookOpenCheck,
+  Compass,
+  FileText,
   GraduationCap,
   Lightbulb,
   ListChecks,
-  MessageSquarePlus,
-  ScanSearch,
-  MessageCircleQuestion,
-  Square,
-  X,
-  ImageIcon,
-  FileText,
+  ListOrdered,
+  Plus,
   Quote,
+  SearchCheck,
+  Square,
+  SquarePen,
   Target,
+  X,
 } from 'lucide-react';
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
+import type { JSONContent } from '@tiptap/core';
 import { findBlock } from '../../editor/ink/ops';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
 import { useAI } from '../../state/ai';
 import { useAssistant, type ChatMsg } from '../../state/assistant';
-import { useTools } from '../../state/tools';
 import { MessageView, shownMarkdown } from './Message';
 import { SourcesList, useCitePreview } from './Citations';
+import { ComposerStatus, useAvailability } from './ComposerStatus';
 import { homeworkSources } from '../../lib/homework';
 import { linkNotes, reviewNote } from '../../lib/commands';
 import { isReviewable } from '../../lib/review/tree';
-import { ClipboardList, Compass, Link2, ListOrdered, SearchCheck } from 'lucide-react';
 import { editors } from '../../editor/registry';
 import { markdownToEditorHTML } from '../../lib/ai/markdown';
 import { NOTE_STARTERS } from '../../lib/ai/prompts';
-import { cx } from '../../lib/util';
+import type { NoteDoc } from '../../lib/vault/types';
+import { cx, plural } from '../../lib/util';
 import { displayTitle } from '../../lib/displayTitle';
 import { MOD } from '../../lib/platform';
 import { toast } from '../common/toast';
 
-const STARTERS = [
-  { icon: <Lightbulb size={18} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain },
-  { icon: <ListChecks size={18} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz },
-  { icon: <BookOpenCheck size={18} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam },
-  { icon: <Quote size={18} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets },
-];
+type Starter = { icon: React.ReactNode; label: string; prompt?: string; mode?: 'explain' | 'tutor' | 'check' | 'solve'; review?: boolean };
+
+const EXPLAIN: Starter = { icon: <Lightbulb size={16} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain };
+const QUIZ: Starter = { icon: <ListChecks size={16} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz };
+const EXAM: Starter = { icon: <BookOpenCheck size={16} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam };
+const BULLETS: Starter = { icon: <Quote size={16} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets };
+const REVIEW: Starter = { icon: <Target size={16} />, label: 'Review this note', review: true };
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
 
 /** Homework quick actions — each one answers strictly from the linked notes. */
-const HOMEWORK_STARTERS: { icon: React.ReactNode; label: string; mode: 'explain' | 'tutor' | 'check' | 'solve'; prompt: string }[] = [
-  {
-    icon: <Compass size={18} />,
-    label: 'How do I approach this?',
-    mode: 'explain',
-    prompt: 'How should I approach this problem, using the method from my notes?',
-  },
-  { icon: <Lightbulb size={18} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
-  { icon: <SearchCheck size={18} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
-  { icon: <ListOrdered size={18} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
+const HOMEWORK_STARTERS: Starter[] = [
+  { icon: <Compass size={16} />, label: 'How do I approach this?', mode: 'explain', prompt: 'How should I approach this problem, using the method from my notes?' },
+  { icon: <Lightbulb size={16} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
+  { icon: <SearchCheck size={16} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
+  { icon: <ListOrdered size={16} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
 ];
+
+/** Nothing typed, drawn or pasted yet: there's nothing to ask about. */
+function isBlank(note: NoteDoc): boolean {
+  const empty = (b: JSONContent): boolean =>
+    b.type === 'paragraph' && !(b.content?.length ?? 0) && !(Array.isArray(b.attrs?.ink) && b.attrs.ink.length > 0);
+  return (note.content.content ?? []).every(empty);
+}
 
 /** Inserts a reply into the note as an "assistant" callout, right after the block it was about. */
 export function insertReply(noteId: string, md: string, anchor?: string, maxCite?: number) {
@@ -95,11 +100,32 @@ function anchorFor(messages: ChatMsg[], bot: ChatMsg): string | undefined {
   return undefined;
 }
 
+/** A picked or pasted picture, as the PNG the vision model gets (long side at most 1600px). */
+async function imageAttachment(file: File): Promise<string | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/png').split(',')[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Assistant, Claude's side panel beside the note: a header with New conversation and Close, a
+ * short greeting with starters, the conversation, and a composer with attachments, Tutor and Send.
+ * A Select box released on the page while it's open arrives as an attached picture (see the editor).
+ */
 export function AssistantPanel() {
   const view = useUI((s) => s.view);
   const noteId = view.kind === 'note' ? view.id : null;
   const note = useVault((s) => (noteId ? s.notes[noteId] : null));
-  const ai = useAI();
+  const outsideKnowledge = useAI((s) => s.outsideKnowledge);
+  const availability = useAvailability();
   const key = noteId ?? '__none__';
   const thread = useAssistant((s) => s.threads[key]);
   const draft = useAssistant((s) => s.drafts[key]) ?? { attachments: [], text: '', mode: 'chat' as const };
@@ -107,6 +133,7 @@ export function AssistantPanel() {
   const focusTick = useAssistant((s) => s.focusTick);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const stick = useRef(true);
   const allNotes = useVault((s) => s.notes);
   const isHomework = !!note?.meta.homework;
@@ -147,142 +174,128 @@ export function AssistantPanel() {
     return () => window.removeEventListener('nib:assistant', on);
   }, [noteId]);
 
+  const answerable = availability !== 'offline' && availability !== 'nomodel';
+  const hasInput = !!draft.text.trim() || draft.attachments.length > 0;
   const send = (prompt?: string) => {
-    if (!noteId) return;
+    if (!noteId || !answerable) return;
     const text = (prompt ?? draft.text).trim();
     if (!text && !draft.attachments.length) return;
     stick.current = true;
     void useAssistant.getState().ask(noteId, { prompt: text || undefined, mode: draft.mode === 'tutor' ? 'tutor' : undefined });
   };
+  const start = (s: Starter) => {
+    if (!note) return;
+    if (s.review) return reviewNote(note.meta.id);
+    if (!answerable) return;
+    stick.current = true;
+    if (s.mode) void useAssistant.getState().ask(note.meta.id, { prompt: s.prompt, mode: s.mode });
+    else send(s.prompt);
+  };
+  const addImages = async (files: Iterable<File>) => {
+    for (const f of files) {
+      if (!f.type.startsWith('image/')) continue;
+      const image = await imageAttachment(f);
+      if (image) useAssistant.getState().attach(key, { kind: 'image', label: f.name && f.name !== 'image.png' ? f.name : 'Pasted image', image });
+    }
+    inputRef.current?.focus();
+  };
 
   const lastBot = [...messages].reverse().find((m) => m.role === 'assistant');
-  const tutorActive = draft.mode === 'tutor' || lastBot?.mode === 'tutor' || lastBot?.mode === 'check';
+  const tutorOn = draft.mode === 'tutor';
+  const tutorActive = tutorOn || lastBot?.mode === 'tutor' || lastBot?.mode === 'check';
+  const blank = !!note && !isHomework && isBlank(note);
+  const starters = isHomework ? HOMEWORK_STARTERS : note && isReviewable(note) ? [EXPLAIN, EXAM, REVIEW] : [EXPLAIN, QUIZ, BULLETS];
 
   return (
-    <aside className="assistant">
+    <aside className="assistant" aria-label={isHomework ? 'Homework helper' : 'Assistant'}>
       <div className="assistant-head drag">
         <div className="assistant-title no-drag">
           <div className="assistant-name">{isHomework ? 'Homework helper' : 'Assistant'}</div>
           <div className="assistant-sub">
-            {note ? (
-              isHomework ? (
+            {!note ? (
+              'Open a note to ask about it'
+            ) : isHomework ? (
+              linked.length ? (
                 <>
-                  Answers only from <b>{linked.length === 1 ? '1 linked note' : `${linked.length} linked notes`}</b>
+                  Answers only from <b>{plural(linked.length, 'linked note')}</b>
                 </>
               ) : (
-                <>
-                  Reading <b>{displayTitle(note)}</b>
-                </>
+                'No notes linked yet'
               )
             ) : (
-              'Open a note to ask about it'
+              <>
+                Reading <b>{displayTitle(note)}</b>
+              </>
             )}
           </div>
         </div>
         <div className="no-drag assistant-head-actions">
           {messages.length > 0 && (
-            <button className="icon-btn" onClick={() => noteId && useAssistant.getState().clear(noteId)} title="New conversation" aria-label="New conversation">
-              <MessageSquarePlus size={20} />
+            <button className="icon-btn is-tiny" onClick={() => noteId && useAssistant.getState().clear(noteId)} title="New conversation" aria-label="New conversation">
+              <SquarePen size={16} />
             </button>
           )}
-          <button className="icon-btn" onClick={() => useUI.getState().setAssistant(false)} title={`Close  ${MOD}J`} aria-label="Close">
-            <X size={20} />
+          <button className="icon-btn is-tiny" onClick={() => useUI.getState().setAssistant(false)} title={`Close  ${MOD}J`} aria-label="Close">
+            <X size={16} />
           </button>
         </div>
       </div>
 
-      {/* The app bar shows the model when it's running; here only what needs doing when it isn't. */}
-      {ai.status !== 'online' && (
-        <button className={cx('model-chip', `is-${ai.status}`)} onClick={() => useUI.getState().openSettings('ai')}>
-          <span className="ai-dot" />
-          {ai.status === 'checking' ? 'Connecting to your local model…' : 'No local model connected — set up'}
-        </button>
-      )}
-
       <div
-        className="assistant-list"
+        className={cx('assistant-list', !messages.length && 'is-empty')}
         ref={listRef}
         onScroll={(e) => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
       >
-        {!messages.length && isHomework && note && (
-          <div className="assistant-empty is-homework">
-            <div className="assistant-empty-title">Get help with this homework</div>
-            <div className="asst-hw-card">
-              <div className="asst-hw-head">
-                <ClipboardList size={18} /> Strictly from your notes
-              </div>
-              <div className="asst-hw-sources">
-                {linked.slice(0, 4).map((n) => (
-                  <button key={n.meta.id} className="asst-hw-source" onClick={() => useUI.getState().openNote(n.meta.id, { newTab: true })}>
-                    <FileText size={16} /> <span>{displayTitle(n)}</span>
+        {!messages.length && note && (
+          <div className={cx('assistant-empty', isHomework && 'is-homework')}>
+            <div className="assistant-empty-title">{isHomework ? 'Get help with this homework' : 'Ask about this note'}</div>
+            <div className="assistant-empty-sub">
+              {blank
+                ? 'Write or draw something, then ask about it.'
+                : isHomework
+                  ? 'Click into a problem or select it on the page, then pick one.'
+                  : outsideKnowledge === 'never'
+                    ? 'Answers come only from your notes.'
+                    : 'Answers come from your notes. Anything else is marked.'}
+            </div>
+            {!blank && (
+              <div className="starters">
+                {starters.map((s) => (
+                  <button
+                    key={s.label}
+                    className="starter"
+                    onClick={() => start(s)}
+                    disabled={!s.review && !answerable}
+                    title={s.review ? 'Practise this note with questions from it' : undefined}
+                  >
+                    {s.icon}
+                    <span>{s.label}</span>
                   </button>
                 ))}
-                {linked.length > 4 && <span className="asst-hw-more">+{linked.length - 4} more</span>}
-                <button className="btn is-ghost is-small asst-hw-link" onClick={() => linkNotes(note.meta.id)}>
-                  <Link2 size={16} /> {linked.length ? 'Change' : 'Link notes'}
-                </button>
               </div>
-            </div>
-            <div className="assistant-empty-sub">Select a problem (or lasso your handwriting) to point at it, then pick:</div>
-            <div className="starters">
-              {HOMEWORK_STARTERS.map((s) => (
-                <button
-                  key={s.label}
-                  className="starter"
-                  onClick={() => {
-                    stick.current = true;
-                    void useAssistant.getState().ask(note.meta.id, { prompt: s.prompt, mode: s.mode });
-                  }}
-                >
-                  {s.icon}
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {!messages.length && !isHomework && (
-          <div className="assistant-empty">
-            <div className="assistant-empty-title">Ask about this note</div>
-            <div className="assistant-empty-sub">
-              It reads the whole note — typed text, math and handwriting. Select text or lasso ink to point at something specific.
-            </div>
-            <div className="starters">
-              {STARTERS.slice(0, note && isReviewable(note) ? 3 : 4).map((s) => (
-                <button key={s.label} className="starter" onClick={() => send(s.prompt)} disabled={!noteId}>
-                  {s.icon}
-                  {s.label}
-                </button>
-              ))}
-              {note && isReviewable(note) && (
-                <button className="starter" onClick={() => reviewNote(note.meta.id)} title="Practise this note until you know it — questions and answers come only from it">
-                  <Target size={18} />
-                  Review this note
-                </button>
-              )}
-            </div>
+            )}
           </div>
         )}
         {messages.map((m) => (
           <div key={m.id} className="assistant-turn" {...cite.hover(m.sources)}>
-          <MessageView
-            msg={m}
-            iconActions
-            citations={!!m.grounding && m.grounding !== 'transform'}
-            onCite={(n, el) => cite.show(n, el, m.sources)}
-            onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, shownMarkdown(m), anchorFor(messages, m), m.sources?.length) : undefined}
-            onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
-            onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
-            onForce={m === lastBot && noteId ? () => useAssistant.getState().forceNotes(noteId) : undefined}
-            onLink={m === lastBot && isHomework && noteId ? () => linkNotes(noteId) : undefined}
-          >
-            {(m.grounding === 'homework' || m.grounding === 'note') && m.status !== 'streaming' && !m.ownOnly && m.sources && m.sources.length > 0 && (
-              <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />
-            )}
-          </MessageView>
+            <MessageView
+              msg={m}
+              iconActions
+              citations={!!m.grounding && m.grounding !== 'transform'}
+              onCite={(n, el) => cite.show(n, el, m.sources)}
+              onInsert={m.role === 'assistant' && noteId ? () => insertReply(noteId, shownMarkdown(m), anchorFor(messages, m), m.sources?.length) : undefined}
+              onRegenerate={m.role === 'assistant' && m === lastBot && noteId ? () => useAssistant.getState().regenerate(noteId) : undefined}
+              onContinue={noteId ? () => useAssistant.getState().continueReply(noteId, m.id) : undefined}
+              onForce={m === lastBot && noteId ? () => useAssistant.getState().forceNotes(noteId) : undefined}
+              onLink={m === lastBot && isHomework && noteId ? () => linkNotes(noteId) : undefined}
+            >
+              {(m.grounding === 'homework' || m.grounding === 'note') && m.status !== 'streaming' && !m.ownOnly && m.sources && m.sources.length > 0 && (
+                <SourcesList content={shownMarkdown(m)} sources={m.sources.filter((x) => !x.visual)} label="From your notes" />
+              )}
+            </MessageView>
           </div>
         ))}
         {tutorActive && !streaming && lastBot && lastBot.status === 'done' && (
@@ -291,6 +304,7 @@ export function AssistantPanel() {
               <button
                 key={f}
                 className="followup"
+                disabled={!answerable}
                 onClick={() =>
                   noteId &&
                   void useAssistant.getState().ask(noteId, {
@@ -308,21 +322,16 @@ export function AssistantPanel() {
         )}
       </div>
 
-      <div className="composer">
+      <div className="composer" onPointerDown={(e) => e.target === e.currentTarget && (e.preventDefault(), inputRef.current?.focus())}>
+        <ComposerStatus availability={availability} />
         {draft.attachments.length > 0 && (
           <div className="composer-atts">
             {draft.attachments.map((a) => (
-              <span key={a.id} className="att">
-                {a.kind === 'image' && a.image ? (
-                  <img src={`data:image/png;base64,${a.image}`} alt="" />
-                ) : a.kind === 'image' ? (
-                  <ImageIcon size={13} />
-                ) : (
-                  <FileText size={13} />
-                )}
+              <span key={a.id} className={cx('att', a.image ? 'is-image' : 'is-text')} title={a.text ? `${a.label}: ${a.text.slice(0, 200)}` : a.label}>
+                <span className="att-thumb">{a.image ? <img src={`data:image/png;base64,${a.image}`} alt="" /> : <FileText size={16} />}</span>
                 <span className="att-label">{a.label}</span>
-                <button onClick={() => useAssistant.getState().detach(key, a.id)} aria-label="Remove">
-                  <X size={11} />
+                <button className="att-x" onClick={() => useAssistant.getState().detach(key, a.id)} aria-label={`Remove ${a.label}`} title="Remove">
+                  <X size={12} />
                 </button>
               </span>
             ))}
@@ -334,16 +343,14 @@ export function AssistantPanel() {
           rows={1}
           value={draft.text}
           disabled={!noteId}
-          placeholder={
-            !noteId
-              ? 'Open a note to start'
-              : draft.mode === 'tutor'
-                ? 'Describe where you’re stuck…'
-                : isHomework
-                  ? 'Ask about a problem…'
-                  : 'Ask about this note…'
-          }
+          placeholder={!noteId ? 'Open a note to start' : tutorOn ? 'Tell me where you’re stuck' : isHomework ? 'Ask about a problem' : 'Ask about this note'}
           onChange={(e) => useAssistant.getState().setDraft(key, { text: e.target.value })}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+            if (!files.length) return;
+            e.preventDefault();
+            void addImages(files);
+          }}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -353,31 +360,38 @@ export function AssistantPanel() {
           }}
         />
         <div className="composer-row">
-          <div className="mode-toggle" role="radiogroup" aria-label="Mode">
-            <button role="radio" aria-checked={draft.mode === 'chat'} className={cx(draft.mode === 'chat' && 'is-active')} onClick={() => useAssistant.getState().setDraft(key, { mode: 'chat' })}>
-              <MessageCircleQuestion size={16} /> Ask
-            </button>
-            <button
-              role="radio"
-              aria-checked={draft.mode === 'tutor'}
-              className={cx(draft.mode === 'tutor' && 'is-active')}
-              onClick={() => useAssistant.getState().setDraft(key, { mode: 'tutor' })}
-              title="Guides you step by step instead of giving the answer"
-            >
-              <GraduationCap size={16} /> Tutor
-            </button>
-          </div>
-          <button className="icon-btn" title="Point at part of the page (Ask tool)" aria-label="Point at part of the page" onClick={() => useTools.getState().setTool('ask')} disabled={!noteId}>
-            <ScanSearch size={20} />
+          <button className="icon-btn is-tiny" onClick={() => fileRef.current?.click()} disabled={!noteId} title="Add a picture" aria-label="Add a picture">
+            <Plus size={16} />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = [...(e.target.files ?? [])];
+              e.target.value = '';
+              void addImages(files);
+            }}
+          />
+          <button
+            className={cx('tutor-chip', tutorOn && 'is-on')}
+            aria-pressed={tutorOn}
+            disabled={!noteId}
+            onClick={() => useAssistant.getState().setDraft(key, { mode: tutorOn ? 'chat' : 'tutor' })}
+            title="Guides you step by step instead of giving the answer"
+          >
+            <GraduationCap size={14} /> Tutor
           </button>
           <span className="grow" />
           {streaming ? (
             <button className="send-btn is-stop" onClick={() => useAssistant.getState().stop()} aria-label="Stop" title="Stop">
-              <Square size={12} fill="currentColor" />
+              <Square size={10} fill="currentColor" />
             </button>
           ) : (
-            <button className="send-btn" onClick={() => send()} disabled={!noteId || (!draft.text.trim() && !draft.attachments.length)} aria-label="Send" title="Send">
-              <ArrowRight size={20} />
+            <button className="send-btn" onClick={() => send()} disabled={!noteId || !hasInput || !answerable} aria-label="Send" title={answerable ? 'Send' : 'Local AI isn’t running'}>
+              <ArrowUp size={16} strokeWidth={2} />
             </button>
           )}
         </div>
