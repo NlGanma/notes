@@ -8,6 +8,7 @@ import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
 import { sourceTitle } from '../ai/Citations';
+import { toast } from '../common/toast';
 
 export { parseStudyJSON };
 export type { Card, QuizQ };
@@ -57,7 +58,8 @@ export function saveFlashcards(cards: Card[], title = 'Flashcards', folder = '')
     content.push({ type: 'paragraph', content: [{ type: 'text', text: c.back }] });
   }
   const doc = useVault.getState().createNote({ folder, title, tags: ['flashcards'], content: { type: 'doc', content }, generated: true });
-  useUI.getState().openNote(doc.meta.id, { newTab: true });
+  // Like every other output: the student stays with the cards, and the note is one click away.
+  toast.info('Saved as a note', title, { label: 'Open', run: () => useUI.getState().openNote(doc.meta.id) });
 }
 
 type Mark = 'got' | 'missed';
@@ -145,7 +147,7 @@ export function Flashcards({
           </button>
           {missed.length > 0 && (
             <button className="btn is-primary" onClick={() => restart(missed)}>
-              Practise the {missed.length} missed
+              Practice the {missed.length} missed
             </button>
           )}
         </div>

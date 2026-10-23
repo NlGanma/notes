@@ -44,7 +44,7 @@ type Starter = { icon: React.ReactNode; label: string; prompt?: string; mode?: '
 const EXPLAIN: Starter = { icon: <Lightbulb size={16} />, label: 'Explain the key ideas on this page', prompt: NOTE_STARTERS.explain };
 const QUIZ: Starter = { icon: <ListChecks size={16} />, label: 'Quiz me on this note', prompt: NOTE_STARTERS.quiz };
 const EXAM: Starter = { icon: <BookOpenCheck size={16} />, label: 'What should I review before the exam?', prompt: NOTE_STARTERS.exam };
-const BULLETS: Starter = { icon: <Quote size={16} />, label: 'Summarise in 5 bullets', prompt: NOTE_STARTERS.bullets };
+const BULLETS: Starter = { icon: <Quote size={16} />, label: 'Summarize in 5 bullets', prompt: NOTE_STARTERS.bullets };
 const REVIEW: Starter = { icon: <Target size={16} />, label: 'Review this note', review: true };
 
 const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show just the next step', 'Solve it fully'];
@@ -303,7 +303,7 @@ export function AssistantPanel() {
                     className="starter"
                     onClick={() => start(s)}
                     disabled={!s.review && !answerable}
-                    title={s.review ? 'Practise this note with questions from it' : undefined}
+                    title={s.review ? 'Practice this note with questions from it' : undefined}
                   >
                     {s.icon}
                     <span>{s.label}</span>
