@@ -113,12 +113,25 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
           const ids = g.chapters.flatMap((c) => c.notes.map((n) => n.meta.id));
           const isOpen = open[g.key] ?? false;
           const state = checkOf(ids, selected);
+          const flip = () => setOpen({ ...open, [g.key]: !isOpen });
           return (
             <div key={g.key} className="rv-group" role="treeitem" aria-expanded={isOpen}>
-              <div className={cx('rv-row is-group', state === 'all' && 'is-checked')} onClick={() => setOpen({ ...open, [g.key]: !isOpen })}>
+              <div className={cx('rv-row is-group', state === 'all' && 'is-checked')} onClick={flip}>
                 <span className="rv-cell-main">
                   <Box state={state} label={`Review all of ${g.name}`} onToggle={() => toggle(ids)} />
-                  <ChevronRight size={16} strokeWidth={1.75} className={cx('rv-chev', isOpen && 'is-open')} />
+                  {/* The row opens on a click; the chevron is its keyboard way in. */}
+                  <button
+                    type="button"
+                    className="rv-chev-btn"
+                    aria-expanded={isOpen}
+                    aria-label={`Show notes in ${g.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      flip();
+                    }}
+                  >
+                    <ChevronRight size={16} strokeWidth={1.75} className={cx('rv-chev', isOpen && 'is-open')} />
+                  </button>
                   <span className="rv-mark">
                     <GroupMark color={g.cls?.color} />
                   </span>
