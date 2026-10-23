@@ -156,16 +156,7 @@
 
 /* ------------------------------------------------------------------ the row under a homework's title */
 
-/* A homework's page header reads like any note's. (editor.css still carries the old assignment-page rules
-   for .hw-title-row and a bigger, class-coloured title; these win over them.) */
-.page-header.is-homework {
-  padding-top: 32px;
-}
-.page-header.is-homework .page-title {
-  font-size: 28px;
-  line-height: 36px;
-  color: var(--text);
-}
+/* The chips' 8px inner padding hangs outside the title's left edge, so their text lines up with it. */
 .hw-bar > .hw-meta-row {
   margin-left: -8px;
 }

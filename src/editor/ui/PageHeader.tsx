@@ -146,7 +146,8 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
   );
 
   return (
-    <header className={cx('page-header', note.meta.homework && 'is-homework')} data-ui>
+    // No is-homework class: a homework's header is any note's, without the old assignment-page title.
+    <header className="page-header" data-ui>
       {/* Homework names its class in the row under its title (HomeworkBar), so its meta line is just the date. */}
       {note.meta.homework && (
         <div className="page-meta">
