@@ -94,7 +94,7 @@ test('New conversation keeps the old one in History, and History brings it back 
   );
 });
 
-test('History keeps the newest twenty, and a reply cut short by New conversation reads as stopped', () => {
+test('History keeps the newest ten, and a reply cut short by New conversation reads as stopped', () => {
   const threads: Record<string, { key: string; messages: Msg[] }> = {};
   for (let i = 0; i < 25; i++) threads[`${LIBRARY_KEY}:old${i}`] = { key: `${LIBRARY_KEY}:old${i}`, messages: ask(`o${i}`, `Question ${i}`, 100 + i) };
   const live = ask('n', 'Still answering', 1000);
@@ -102,7 +102,7 @@ test('History keeps the newest twenty, and a reply cut short by New conversation
   useAssistant.setState({ threads: { ...threads, [LIBRARY_KEY]: { key: LIBRARY_KEY, messages: live } }, streaming: null });
   startConversation();
   const past = pastConversations(useAssistant.getState().threads);
-  assert.equal(past.length, 20);
+  assert.equal(past.length, 10);
   assert.equal(past[0].title, 'Still answering');
   assert.ok(!past.some((x) => x.title === 'Question 0'), 'the oldest went');
   const parked = useAssistant.getState().threads[past[0].key].messages;

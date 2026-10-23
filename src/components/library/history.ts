@@ -10,7 +10,8 @@ import { uid } from '../../lib/util';
  */
 
 const PREFIX = `${LIBRARY_KEY}:`;
-const KEEP = 20;
+// Each answer carries the passages it cites, and all of it lives in localStorage: keep the history short.
+const KEEP = 10;
 
 export interface PastConversation {
   key: string;

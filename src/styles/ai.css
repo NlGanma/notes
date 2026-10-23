@@ -556,7 +556,10 @@
 .msg:hover > .msg-actions,
 .msg:focus-within > .msg-actions,
 .lib-turn:last-child .msg-actions,
-.lib-tool-turn .msg-actions,
+.lib-tool-turn .msg-actions {
+  opacity: 1;
+}
+/* On its own: an engine without "of S" drops just this rule, not the ones above. */
 .assistant-turn:nth-last-child(1 of .assistant-turn) .msg-actions {
   opacity: 1;
 }
