@@ -620,10 +620,16 @@ textarea.input {
   flex-direction: column;
   gap: 12px;
 }
+.folder-pick-head {
+  padding-bottom: 0;
+}
+.folder-pick-head .dialog-title {
+  margin-bottom: 4px;
+}
 .folder-pick {
   max-height: 340px;
   overflow-y: auto;
-  padding: 8px 16px 0;
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
   gap: 2px;

@@ -1,20 +1,9 @@
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
-import {
-  CLASS_COLORS,
-  CLASS_ICONS,
-  CLASS_THEMES,
-  classInfo,
-  guessClassIcon,
-  listClasses,
-  settleClassName,
-  themeFor,
-  themeVars,
-  type ClassIconName,
-} from '../../lib/classes';
+import { CLASS_COLORS, CLASS_ICONS, CLASS_THEMES, classInfo, freeClassColor, guessClassIcon, settleClassName, themeFor, themeVars, type ClassIconName } from '../../lib/classes';
 import { ClassGlyph } from './ClassIcon';
 import { cx } from '../../lib/util';
 import { openClass } from '../../lib/commands';
@@ -27,16 +16,17 @@ const isIcon = (s: string | undefined): s is ClassIconName => (CLASS_ICONS as re
 /**
  * New class / Edit class: a name (optional), a colour and an icon. Nothing is required and nothing is an
  * error: a blank name becomes "Untitled class" and a taken one gets a number. Until an icon is picked,
- * the icon follows the name (a chemistry class gets the flask).
+ * the icon follows the name (a chemistry class gets the flask). "Make this a class" opens it on a plain
+ * folder, which only becomes a class when the dialog is saved.
  */
 export function ClassDialog() {
   const dialog = useUI((s) => s.dialog);
   const open = dialog?.kind === 'class';
   const path = open ? dialog.path : null;
+  const make = open && !!dialog.make;
   const folderMeta = useVault((s) => s.folderMeta);
   const folders = useVault((s) => s.folders);
   const existing = path ? classInfo(path, folderMeta[path]) : null;
-  const classCount = useMemo(() => listClasses(folders, folderMeta, { archived: true }).length, [folders, folderMeta]);
 
   const [name, setName] = useState('');
   // null: keep the class's stored colour as it is (older versions stored other hexes; they are never rewritten).
@@ -49,13 +39,13 @@ export function ClassDialog() {
   useLayoutEffect(() => {
     if (!open) return;
     setName(existing?.name ?? '');
-    setColor(existing ? null : CLASS_COLORS[classCount % CLASS_COLORS.length]);
+    setColor(existing && !(make && !folderMeta[path!]?.color) ? null : freeClassColor(folders, folderMeta));
     const stored = path ? folderMeta[path]?.icon : undefined;
     setIcon(isIcon(stored) ? stored : 'auto');
     setIconTouched(false);
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, path]);
+  }, [open, path, make]);
 
   if (!open) return null;
   const close = () => useUI.getState().openDialog(null);
@@ -74,9 +64,11 @@ export function ClassDialog() {
         if (next !== existing.name) patch.name = next;
         if (color) patch.color = color;
         if (iconTouched) patch.icon = icon === 'auto' ? undefined : icon;
+        if (make) vault.setIsClass(path, true);
         const moved = await vault.updateClass(path, patch);
         const v = useUI.getState().view;
-        if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: moved });
+        if (make) openClass(moved);
+        else if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: moved });
         close();
         return;
       }
@@ -116,7 +108,7 @@ export function ClassDialog() {
         }}
       >
         <div className="dialog-body">
-          <h2 className="dialog-title">{path ? 'Edit class' : 'New class'}</h2>
+          <h2 className="dialog-title">{make && existing ? `Make ${short(existing.name)} a class` : path ? 'Edit class' : 'New class'}</h2>
           <div className="class-name-input">
             <input
               className="input"
@@ -131,10 +123,10 @@ export function ClassDialog() {
             />
           </div>
           <div className="class-field">
-            <div className="class-field-label" id="class-colour-label">
-              Colour
+            <div className="class-field-label" id="class-color-label">
+              Color
             </div>
-            <div className="class-swatches" role="radiogroup" aria-labelledby="class-colour-label">
+            <div className="class-swatches" role="radiogroup" aria-labelledby="class-color-label">
               {CLASS_THEMES.map((t) => (
                 <button
                   key={t.key}
@@ -178,7 +170,7 @@ export function ClassDialog() {
           </div>
         </div>
         <div className="dialog-actions">
-          {path && existing && (
+          {path && existing && !make && (
             <button type="button" className="btn is-ghost is-quiet class-to-folder" onClick={() => void toFolder()}>
               Turn into a plain folder…
             </button>
@@ -188,7 +180,7 @@ export function ClassDialog() {
             Cancel
           </button>
           <button type="submit" className="btn is-primary" disabled={busy}>
-            {path ? 'Save' : 'Create'}
+            {make ? 'Make class' : path ? 'Save' : 'Create'}
           </button>
         </div>
       </form>

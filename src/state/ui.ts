@@ -19,7 +19,8 @@ export type View =
 
 /** Modal dialogs that several places can open. */
 export type Dialog =
-  | { kind: 'class'; path: string | null }
+  /** New class (no path), Edit class, or `make`: a plain folder that becomes a class only when saved. */
+  | { kind: 'class'; path: string | null; make?: boolean }
   | { kind: 'newHomework'; classPath: string | null; file?: { name: string; bytes: Uint8Array } }
   | { kind: 'linkNotes'; noteId: string };
 

@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classCounts, classForFolder, classInfo, classNotes, classHomework, countLine, guessClassIcon, homeworkFolderFor, listClasses, settleClassName } from '../../src/lib/classes';
+import {
+  CLASS_COLORS,
+  classCounts,
+  classForFolder,
+  classInfo,
+  classNotes,
+  classHomework,
+  countLine,
+  freeClassColor,
+  guessClassIcon,
+  homeworkFolderFor,
+  listClasses,
+  settleClassName,
+} from '../../src/lib/classes';
 import { CLASSES, vault } from './fixtures';
 
 test('a folder belongs to its nearest class ancestor', () => {
@@ -91,4 +104,15 @@ test('an unfiled note is matched to the class whose notes it resembles', async (
   // Already in a class, or nothing to go on: no suggestion.
   assert.equal(suggestClass(v.lecture4, v.notes, folders, CLASSES), null);
   assert.equal(suggestClass(v.loose, v.notes, folders, CLASSES), null);
+});
+
+test('a new class gets a colour no other class has, until all eight are taken', () => {
+  const meta = (color: string) => ({ kind: 'class' as const, color });
+  // Sky and olive are taken (one of them as a colour older versions stored): the next free one is ochre.
+  assert.equal(freeClassColor(['A', 'B'], { A: meta('#3e6fa8'), B: meta('#1f9d4c') }), CLASS_COLORS[2]);
+  // A sixth class after five that skipped teal gets teal, not the rose a count would give.
+  const five = { A: meta('#3e6fa8'), B: meta('#5e7a45'), C: meta('#946a16'), D: meta('#7d5a9e'), E: meta('#b44f6b') };
+  assert.equal(freeClassColor(Object.keys(five), five), '#2f7d7a');
+  const all = Object.fromEntries(CLASS_COLORS.map((c, i) => [`C${i}`, meta(c)]));
+  assert.equal(freeClassColor(Object.keys(all), all), CLASS_COLORS[0]);
 });

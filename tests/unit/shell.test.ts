@@ -170,3 +170,19 @@ test('a sidebar put away for the window is saved as shown; one hidden by hand st
     useUI.setState({ sidebar: true, sidebarAuto: false });
   }
 });
+
+test('a row preview reads math as text and keeps headings apart from the sentences around them', async () => {
+  const { noteSnippet, plainMath } = await import('../../src/components/NoteGrid');
+  assert.equal(plainMath('\\lim_{x \\to a} f(x) = L'), 'lim x → a f(x) = L');
+  assert.equal(plainMath('\\frac{x^2-9}{x-3}'), '(x²-9)/(x-3)');
+  assert.equal(plainMath('|f(x) - L| < \\varepsilon'), '|f(x) - L| < ε');
+  const n = note({
+    type: 'doc',
+    content: [
+      para('Prof. Alvarez · Tuesday'),
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Definition of a limit' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'We write ' }, { type: 'mathInline', attrs: { latex: '\\lim_{x \\to a} f(x) = L' } }, { type: 'text', text: ' when f(x) gets close to L.' }] },
+    ],
+  }, { title: 'Lecture 4' });
+  assert.equal(noteSnippet(n), 'Prof. Alvarez · Tuesday · Definition of a limit · We write lim x → a f(x) = L when f(x) gets close to L.');
+});

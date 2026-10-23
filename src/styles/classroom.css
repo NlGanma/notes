@@ -210,15 +210,10 @@
   inset: 0;
   pointer-events: none;
 }
-.class-art-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(20, 20, 19, 0.14);
-}
 .class-art-icon {
   position: absolute;
   display: grid;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.45);
 }
 .class-art-icon svg {
   stroke-width: 1.5;

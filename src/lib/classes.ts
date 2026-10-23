@@ -136,6 +136,13 @@ export const HOMEWORK_SUBFOLDER = 'Homework';
 /** The colour a new class is given, in turn (each theme's header colour). */
 export const CLASS_COLORS = ['#3e6fa8', '#5e7a45', '#946a16', '#7d5a9e', '#2f7d7a', '#b44f6b', '#4f5ba8', '#5c5f66'];
 
+/** A new class's colour: the first one no class has yet, so two classes never look alike until all eight are taken. */
+export function freeClassColor(folders: string[], folderMeta: Record<string, FolderMeta>): string {
+  const classes = listClasses(folders, folderMeta, { archived: true });
+  const used = new Set(classes.map((c) => c.theme.key));
+  return CLASS_COLORS.find((c) => !used.has(themeFor(c).key)) ?? CLASS_COLORS[classes.length % CLASS_COLORS.length];
+}
+
 export const CLASS_ICONS = [
   'sigma',
   'calculator',
