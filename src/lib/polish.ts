@@ -329,7 +329,7 @@ export function analyzeNote(note: NoteDoc, opts: { line: number; ai: boolean; vi
       id: 'math',
       icon: 'math',
       title: 'Typeset handwritten math',
-      detail: `Under ${mathInk.length} handwritten equation${mathInk.length === 1 ? '' : 's'}`,
+      detail: `${mathInk.length} handwritten equation${mathInk.length === 1 ? '' : 's'}`,
       action: 'Typeset',
       apply(editor) {
         for (const b of [...mathInk].reverse()) {
