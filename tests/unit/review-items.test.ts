@@ -132,7 +132,7 @@ test('an untitled note’s opening keeps the id it always had and is asked about
   const lines = [
     'Federalism splits sovereignty between a central government and regional governments, each with its own powers.',
     'A unitary state keeps sovereignty in the central government, which can create or abolish the regions.',
-    '**Confederation** is a loose union of sovereign states that keep most of their powers.',
+    '**Confederation** is a loose union of sovereign states that keep their own armies, currencies, courts and most of their powers.',
   ];
   const untitled = note('', 'Politics', lines.map((t) => p(t)));
   const cs = heuristicConcepts(untitled);
@@ -148,6 +148,10 @@ test('an untitled note’s opening keeps the id it always had and is asked about
       assert.ok(assertGroundedItem(it, chunk), `${c.name} at ${level}: ${it.format}`);
       if (c.whole) assert.doesNotMatch(it.prompt, /Federalism|unitary/, 'the question doesn’t read out the answer');
     }
+  // The two questions connecting the opening and the definition are asked from each side.
+  const connects = cs.map((c) => buildItem(c, 3, { title: '', siblings: cs, avoid: [], rng: mulberry32(1), chunkText: chunk })).filter((it) => it.format === 'connect');
+  assert.equal(connects.length, 2);
+  assert.notEqual(connects[0].prompt, connects[1].prompt);
   // A titled note's opening is still asked about by its title.
   const titled = heuristicConcepts(note('Lecture 12 — Federalism', 'Politics', [p(lines[0]), p(lines[1])]));
   assert.equal(titled[0].name, 'Lecture 12');

@@ -231,8 +231,10 @@ export function buildItem(c: Concept, level: Level, ctx: BuildCtx): Item {
       return {
         ...base(c, f, 'connect', 3, ctx, 'rubric'),
         key: `${c.id}:${partner.id}:connect`,
-        prompt:
-          c.whole || partner.whole
+        // Asked from each side, so the two questions a pair allows don't read the same.
+        prompt: c.whole
+          ? `How does the rest of this note relate to **${clean(named.name)}**, according to your notes?`
+          : partner.whole
             ? `How does **${clean(named.name)}** fit with the rest of this note, according to your notes?`
             : `How are **${clean(c.name)}** and **${clean(partner.name)}** related, according to your notes?`,
         points: points.map((p) => clean(p.text)),
