@@ -11,7 +11,7 @@ import type { Confidence } from '../../lib/review/mastery';
 import { cx } from '../../lib/util';
 import { toast } from '../common/toast';
 import { SELF_GRADES, sessionKey } from './sessionKeys';
-import { classStyle, Key } from './parts';
+import { Key } from './parts';
 
 /** Enter that ends a line, not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
 const isEnter = (e: ReactKeyboardEvent<HTMLElement>) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
@@ -117,7 +117,15 @@ export function ReviewSession() {
             <X size={18} />
           </button>
         </div>
-        <div className="rv-progress" role="progressbar" aria-label="Questions answered" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} title={`${done} of ${total} answered · ${right} right`}>
+        <div
+          className="rv-progress"
+          role="progressbar"
+          aria-label="Questions answered"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={done}
+          title={`${done} of ${total} answered · ${right} right`}
+        >
           <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
         </div>
       </div>
@@ -128,7 +136,6 @@ export function ReviewSession() {
           <div
             key={current.shownAt}
             className={cx('rv-card', `is-${current.phase}`)}
-            style={classStyle(meta?.color)}
             data-concept={current.concept.id}
             data-item-key={current.item.key}
             data-class={meta?.group}
@@ -137,7 +144,10 @@ export function ReviewSession() {
           >
             <div className="rv-card-head">
               {meta?.color && <span className="class-square" style={{ background: meta.color }} aria-hidden />}
-              <span className="rv-where" title={current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}>
+              <span
+                className="rv-where"
+                title={current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}
+              >
                 {meta?.groupName ? `${meta.groupName} · ` : ''}
                 {sourceName}
                 {section ? ` › ${section}` : ''}
@@ -256,7 +266,9 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   return (
     <div className="rv-ask">
       <div className="rv-answer-head">
-        <span className="rv-answer-label">{item.format === 'mcq' ? 'Choose the answer' : item.format === 'rate' ? 'Answer in your head or on paper, then check your notes' : 'Your answer'}</span>
+        <span className="rv-answer-label">
+          {item.format === 'mcq' ? 'Choose the answer' : item.format === 'rate' ? 'Answer in your head or on paper, then check your notes' : 'Your answer'}
+        </span>
         {/* Clicking a segment keeps the answer box focused, so Enter still checks and typing goes on. */}
         {askConfidence && (
           <div className="seg rv-conf" role="radiogroup" aria-label="How sure are you?">
@@ -444,7 +456,11 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
     <div className="rv-notes-say">
       <div className="rv-notes-say-head">
         <span>{label}</span>
-        <button className="rv-source-chip" onClick={() => useUI.getState().openNote(src.noteId, { blockId: src.blockId ?? undefined })} title="Open this part of your notes">
+        <button
+          className="rv-source-chip"
+          onClick={() => useUI.getState().openNote(src.noteId, { blockId: src.blockId ?? undefined })}
+          title="Open this part of your notes"
+        >
           <span>
             {name}
             {src.section ? ` › ${src.section}` : ''}
@@ -521,14 +537,30 @@ function Feedback({ current }: { current: Current }) {
   const retry = current.retry;
   // A second try that landed turns the red down: the first answer still counts, but the news is good.
   const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || (retry?.s !== undefined && retry.s >= 0.8) ? 'neutral' : fb.verdict;
-  const title = idk ? 'Here’s the answer' : current.overridden ? 'Counted as right' : fb.verdict === 'right' ? (missedBefore > 0 ? 'Right this time' : 'Right') : fb.verdict === 'partial' ? 'Partly right' : 'Not quite';
+  const title = idk
+    ? 'Here’s the answer'
+    : current.overridden
+      ? 'Counted as right'
+      : fb.verdict === 'right'
+        ? missedBefore > 0
+          ? 'Right this time'
+          : 'Right'
+        : fb.verdict === 'partial'
+          ? 'Partly right'
+          : 'Not quite';
   const adds = fb.verdict === 'partial' ? (fb.missed ?? []) : [];
 
   return (
     <section className={cx('rv-feedback', `is-${tone}`)} aria-live="polite">
       <div className="rv-feedback-head">
         <span className="rv-feedback-icon" aria-hidden>
-          {idk || fb.verdict === 'partial' ? <BookOpen size={14} /> : fb.verdict === 'right' || current.overridden ? <Check size={14} strokeWidth={2.75} /> : <X size={14} strokeWidth={2.75} />}
+          {idk || fb.verdict === 'partial' ? (
+            <BookOpen size={14} />
+          ) : fb.verdict === 'right' || current.overridden ? (
+            <Check size={14} strokeWidth={2.75} />
+          ) : (
+            <X size={14} strokeWidth={2.75} />
+          )}
         </span>
         <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
         {fb.note && <div className="rv-grade-note">{fb.note}</div>}
@@ -555,10 +587,14 @@ function Feedback({ current }: { current: Current }) {
       ) : retry && retry.s === undefined ? (
         <div className="rv-retry-result">Compare it with what your notes say.</div>
       ) : retry && retry.s !== undefined ? (
-        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>{retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet. Here’s what your notes say.'}</div>
+        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>
+          {retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet. Here’s what your notes say.'}
+        </div>
       ) : null}
 
-      {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} label={adds.length ? 'What your notes add' : 'Your notes say'} points={adds} />}
+      {(current.revealed || (!canRetry && !retry?.checking)) && (
+        <NotesSay current={current} label={adds.length ? 'What your notes add' : 'Your notes say'} points={adds} />
+      )}
 
       <div className="rv-mastery-change" title="How well you know this idea">
         <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
@@ -620,7 +656,11 @@ function FeedbackFoot({ current, children }: { current: Current; children?: Reac
           wrong &&
           canOverride(current) &&
           overrides < 3 && (
-            <button className="btn is-ghost is-small rv-link-btn" onClick={() => useReview.getState().override()} title="Count it as right (at most 3 times a session)">
+            <button
+              className="btn is-ghost is-small rv-link-btn"
+              onClick={() => useReview.getState().override()}
+              title="Count it as right (at most 3 times a session)"
+            >
               I was right
             </button>
           )
@@ -630,7 +670,12 @@ function FeedbackFoot({ current, children }: { current: Current; children?: Reac
         </button>
       </div>
       <span className="grow" />
-      <button ref={next} className={cx('btn rv-next', canRetry ? 'is-secondary' : 'is-primary')} onClick={() => useReview.getState().next()} disabled={!!retry?.checking}>
+      <button
+        ref={next}
+        className={cx('btn rv-next', canRetry ? 'is-secondary' : 'is-primary')}
+        onClick={() => useReview.getState().next()}
+        disabled={!!retry?.checking}
+      >
         Continue
       </button>
       {children}

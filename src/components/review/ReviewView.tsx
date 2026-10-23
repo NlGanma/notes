@@ -192,7 +192,13 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                     <span className="rv-option-label">Length</span>
                     <div className="seg rv-length" role="radiogroup" aria-label="Length">
                       {LENGTHS.map((l) => (
-                        <button key={l.n} role="radio" aria-checked={opts.length === l.n} className={cx(opts.length === l.n && 'is-active')} onClick={() => useReview.getState().setOpts({ length: l.n })}>
+                        <button
+                          key={l.n}
+                          role="radio"
+                          aria-checked={opts.length === l.n}
+                          className={cx(opts.length === l.n && 'is-active')}
+                          onClick={() => useReview.getState().setOpts({ length: l.n })}
+                        >
                           <span>
                             {l.n} · {l.label}
                           </span>
@@ -200,7 +206,10 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                       ))}
                     </div>
                   </div>
-                  <label className={cx('rv-option rv-check', stats.groups < 2 && 'is-off')} title={stats.groups < 2 ? 'Pick notes from two or more classes' : 'Questions from different classes take turns'}>
+                  <label
+                    className={cx('rv-option rv-check', stats.groups < 2 && 'is-off')}
+                    title={stats.groups < 2 ? 'Pick notes from two or more classes' : 'Questions from different classes take turns'}
+                  >
                     <span className="rv-option-label">Mix classes</span>
                     <Switch checked={opts.mix && stats.groups >= 2} disabled={stats.groups < 2} onChange={(v) => useReview.getState().setOpts({ mix: v })} />
                   </label>
@@ -232,7 +241,9 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                 <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={start}>
                   Start review
                 </button>
-                {!online && <div className="rv-promise">The local AI is offline. Questions come straight from your notes, and you check written answers yourself.</div>}
+                {!online && (
+                  <div className="rv-promise">The local AI is offline. Questions come straight from your notes, and you check written answers yourself.</div>
+                )}
               </aside>
             </div>
           )}

@@ -1,6 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Folder } from 'lucide-react';
-import { themeFor, themeVars } from '../../lib/classes';
 import { isDue, isMastered } from '../../lib/review/mastery';
 import { conceptsOf, type ReviewFile } from '../../state/review';
 import type { NoteDoc } from '../../lib/vault/types';
@@ -65,12 +64,13 @@ export function addCounts(list: IdeaCounts[]): IdeaCounts {
   return c;
 }
 
-/** A class's theme as CSS variables (--class-main, --class-light…), from its stored colour. */
-export const classStyle = (color?: string): CSSProperties | undefined => (color ? (themeVars(themeFor(color)) as CSSProperties) : undefined);
-
 /** A class's colour square, as in the sidebar; a folder icon for notes outside any class. */
 export function GroupMark({ color }: { color?: string }) {
-  return color ? <span className="class-square" style={{ background: color }} aria-hidden /> : <Folder size={16} strokeWidth={1.5} className="rv-folder" aria-hidden />;
+  return color ? (
+    <span className="class-square" style={{ background: color }} aria-hidden />
+  ) : (
+    <Folder size={16} strokeWidth={1.5} className="rv-folder" aria-hidden />
+  );
 }
 
 /** The shared switch, as a labelled control. */

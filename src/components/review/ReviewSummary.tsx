@@ -169,7 +169,8 @@ export function ReviewSummary() {
             <div className="rv-summary-notes">
               {summary.thin.length > 0 && (
                 <div>
-                  Thin in your notes: {summary.thin.slice(0, 6).map(name).join(', ')}. Add a sentence or two and Review can ask about {summary.thin.length === 1 ? 'it' : 'them'} in more depth.
+                  Thin in your notes: {summary.thin.slice(0, 6).map(name).join(', ')}. Add a sentence or two and Review can ask about{' '}
+                  {summary.thin.length === 1 ? 'it' : 'them'} in more depth.
                 </div>
               )}
               {summary.notReviewable.length > 0 && <div>Not reviewable yet (handwriting not transcribed): {summary.notReviewable.join(', ')}</div>}
