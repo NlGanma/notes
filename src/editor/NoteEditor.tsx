@@ -32,14 +32,15 @@ import { strokeBounds, translateStroke, unionBounds } from '../lib/ink/geometry'
 import { bytesToBase64, cx, debounce } from '../lib/util';
 import { toast } from '../components/common/toast';
 
+// ⌥S is Select (as the welcome note and Settings → Shortcuts say); ⌥A, once Ask about an area, selects too.
 const TOOL_KEYS: Record<string, Tool> = {
   KeyT: 'text',
   KeyP: 'pen',
   KeyH: 'highlighter',
   KeyE: 'eraser',
   KeyL: 'lasso',
-  KeyS: 'shapes',
-  KeyA: 'ask',
+  KeyS: 'lasso',
+  KeyA: 'lasso',
 };
 
 const scrollMemory = new Map<string, number>();

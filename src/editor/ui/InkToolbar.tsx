@@ -41,15 +41,15 @@ import { FormatPanel } from './FormatPanel';
 import { MoreMenu, PaperPanel } from './PagePanels';
 import { BG_COLORS } from './palette';
 
-const TOOLS: { id: Tool; label: string; icon: (color?: string) => ReactNode; key: string }[] = [
+const TOOLS: { id: Tool; label: string; icon: (color?: string) => ReactNode; key?: string }[] = [
   { id: 'text', label: 'Type', icon: () => <Type size={20} />, key: 'T' },
   // The active pen is painted in its ink (GoodNotes), so the colour reads without looking at the dots.
   { id: 'pen', label: 'Pen', icon: (c) => <PenLine size={20} fill={c ?? 'none'} />, key: 'P' },
   { id: 'highlighter', label: 'Highlighter', icon: () => <Highlighter size={20} />, key: 'H' },
   { id: 'eraser', label: 'Eraser', icon: () => <Eraser size={20} />, key: 'E' },
-  { id: 'lasso', label: 'Lasso', icon: () => <Lasso size={20} />, key: 'L' },
-  { id: 'shapes', label: 'Shapes', icon: () => <Shapes size={20} />, key: 'S' },
-  { id: 'ask', label: 'Ask about an area', icon: () => <MessageCircleQuestion size={20} />, key: 'A' },
+  { id: 'lasso', label: 'Select', icon: () => <Lasso size={20} />, key: 'S' },
+  { id: 'shapes', label: 'Shapes', icon: () => <Shapes size={20} /> },
+  { id: 'ask', label: 'Ask about an area', icon: () => <MessageCircleQuestion size={20} /> },
 ];
 
 const SHAPES: { id: ShapeKind; label: string; icon: ReactNode }[] = [
@@ -400,7 +400,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
             >
               {tool.icon(on && tool.id === 'pen' ? t.pen.color : undefined)}
               {ink && <span className={cx('tb-tool-ink', tool.id === 'highlighter' && 'is-hl')} style={{ background: ink }} />}
-              <Tip label={reopen ? `${tool.label} settings` : tool.label} kbd={reopen ? undefined : `${ALT}${tool.key}`} />
+              <Tip label={reopen ? `${tool.label} settings` : tool.label} kbd={reopen || !tool.key ? undefined : `${ALT}${tool.key}`} />
             </button>
           );
         })}
