@@ -308,7 +308,11 @@ export function LibraryView() {
     stick.current = true;
   };
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-  const retry = () => useAssistant.getState().regenerate(LIBRARY_KEY);
+  const retry = () => {
+    useAssistant.getState().regenerate(LIBRARY_KEY);
+    // A study output made again opens when it's done, as it did the first time.
+    if (lastAssistant?.tool) setWaitFor(useAssistant.getState().threads[LIBRARY_KEY]?.messages.at(-1)?.id ?? null);
+  };
 
   // ---------------------------------------------------------------- render
   const placeholder = !count

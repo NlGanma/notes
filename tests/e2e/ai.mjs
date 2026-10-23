@@ -134,6 +134,13 @@ check(await page.locator('.library .art-card.is-open').count(), '…and its card
 await page.click('.fc-card');
 await page.waitForTimeout(500);
 await shot(page, 'ai-08-flashcards');
+// Retry makes the cards again, and they open when they're done, as the first ones did.
+await page.locator('.library .lib-tool-turn .msg-act[title="Retry"]').last().click();
+const closedForRetry = !(await page.locator('.lib-artifact').count());
+await page.waitForTimeout(300);
+await waitIdle();
+await page.waitForSelector('.lib-artifact .flashcards', { timeout: 20000 });
+check(closedForRetry && (await page.locator('.library .art-card.is-open').count()) === 1, 'Retry on a study card makes it again and opens the new cards when they’re done');
 await page.click('.library button[title="New conversation"]');
 check(!(await page.locator('.lib-artifact').count()), 'a new conversation closes the open output');
 await page.fill('.library-composer textarea', 'limits');
