@@ -10,6 +10,7 @@ import type { Scope } from '../../lib/ai/rag';
 import type { StudyTool } from '../../lib/ai/prompts';
 import { classForFolder, classInfo, listClasses } from '../../lib/classes';
 import { cx, formatRelativeTime } from '../../lib/util';
+import { citedInAnswer } from '../../lib/ai/markdown';
 import { MessageView, shownMarkdown } from '../ai/Message';
 import { SourcesList, useCitePreview } from '../ai/Citations';
 import { ComposerStatus, useAvailability } from '../ai/ComposerStatus';
@@ -64,6 +65,18 @@ function outputTitle(m: ChatMsg, focus?: string): string {
 
 /** Below this width the page can't share: an open study output floats over the conversation. */
 const SIDE_BY_SIDE = 1100;
+
+const citedCount = new WeakMap<ChatMsg, number>();
+/** How many notes a finished prose output cites (a finished message never changes, so it's counted once). */
+function notesCited(m: ChatMsg): number {
+  let n = citedCount.get(m);
+  if (n === undefined) {
+    const used = citedInAnswer(shownMarkdown(m), m.sources?.length);
+    n = new Set((m.sources ?? []).filter((s) => used.has(s.n)).map((s) => s.noteId)).size;
+    citedCount.set(m, n);
+  }
+  return n;
+}
 
 export function LibraryView() {
   const notes = useVault((s) => s.notes);
@@ -142,9 +155,9 @@ export function LibraryView() {
         msg: m,
         tool,
         title: outputTitle(m, ask?.focus),
-        notes: new Set((m.sources ?? []).map((s) => s.noteId)).size,
+        notes: !json && m.status === 'done' ? notesCited(m) : 0,
         busy: m.status === 'streaming',
-        failed: m.status === 'error' || m.status === 'stopped' || (json && m.status === 'done' && !parsed),
+        failed: m.status === 'error' || m.status === 'stopped' || !!m.insufficient || (json && m.status === 'done' && !parsed),
         parsed,
       });
     });
@@ -158,9 +171,10 @@ export function LibraryView() {
     if (!m) setWaitFor(null);
     else if (m.status !== 'streaming') {
       setWaitFor(null);
-      if (m.status === 'done') setArtifact(m.id);
+      // A reply that made nothing ("not enough in these notes", cards that didn't hold up) stays in the conversation.
+      if (m.status === 'done' && !outputs.get(m.id)?.failed) setArtifact(m.id);
     }
-  }, [messages, waitFor]);
+  }, [messages, waitFor, outputs]);
 
   // ---------------------------------------------------------------- effects
   useEffect(() => {
@@ -635,7 +649,7 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
         {onRetry && <RetryRow onRetry={onRetry} />}
       </div>
     );
-  // "There isn't enough in these notes to make this yet" comes back as plain text.
+  // "There isn't enough in these notes to make this yet" is a plain reply, not an output.
   if (output.failed) return <MessageView msg={msg} onRegenerate={onRetry} iconActions />;
   return (
     <div className="msg is-bot lib-tool-turn">
@@ -645,10 +659,12 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
         </span>
         <span className="art-card-text">
           <span className="art-card-title">{output.title}</span>
-          <span className="art-card-meta">
-            {outputMeta(output)}
-            <LeftOut output={output} />
-          </span>
+          {outputMeta(output) && (
+            <span className="art-card-meta">
+              {outputMeta(output)}
+              <LeftOut output={output} />
+            </span>
+          )}
         </span>
       </button>
       {onRetry && <RetryRow onRetry={onRetry} />}

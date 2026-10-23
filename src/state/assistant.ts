@@ -102,6 +102,8 @@ export interface ChatMsg {
   added?: string[];
   /** Study tools: items dropped because no excerpt backed them. */
   dropped?: number;
+  /** Study tools: the notes had too little to make anything from (the reply says so instead). */
+  insufficient?: boolean;
   /** Search the notes even though the coverage check said they don't cover this. */
   forced?: boolean;
   /** The question this answers (rewrites: which action). */
@@ -860,6 +862,9 @@ export const useAssistant = create<AssistantState>()(
           if (tool && !hits.some((h) => h.chunk.text.length > 60)) {
             patchMsg(key, botMsg.id, {
               status: 'done',
+              insufficient: true,
+              // Nothing was read to make it, so the reply cites nothing.
+              sources: [],
               content: 'There isn’t enough in these notes to make this yet — write a little more, then try again.',
             });
             return;

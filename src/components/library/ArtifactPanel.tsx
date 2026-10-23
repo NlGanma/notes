@@ -38,11 +38,11 @@ export interface Output {
   parsed: ReturnType<typeof parseStudyJSON>;
 }
 
-/** "12 cards", "5 questions", or how many notes a prose output came from. */
+/** "12 cards", "5 questions", or how many notes a prose output cites (nothing, when it cites none). */
 export function outputMeta(o: Output): string {
   if (o.parsed?.kind === 'flashcards') return plural(o.parsed.cards.length, 'card');
   if (o.parsed?.kind === 'quiz') return plural(o.parsed.questions.length, 'question');
-  return `From ${plural(o.notes || 1, 'note')}`;
+  return o.notes ? `From ${plural(o.notes, 'note')}` : '';
 }
 
 /** Cards or questions dropped because no passage of the notes backed them: said wherever the output's size is. */
@@ -96,10 +96,12 @@ export function ArtifactPanel({
           <div className="art-title" title={output.title}>
             {output.title}
           </div>
-          <div className="art-sub">
-            {outputMeta(output)}
-            <LeftOut output={output} />
-          </div>
+          {outputMeta(output) && (
+            <div className="art-sub">
+              {outputMeta(output)}
+              <LeftOut output={output} />
+            </div>
+          )}
         </div>
         {parsed?.kind === 'flashcards' && (
           <button className="icon-btn is-tiny" title="Shuffle" aria-label="Shuffle" onClick={() => setOrder((v) => v + 1)}>

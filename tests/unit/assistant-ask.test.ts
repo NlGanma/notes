@@ -46,7 +46,7 @@ globalThis.fetch = (async (url: string, init: RequestInit) => {
 
 const { useAI } = await import('../../src/state/ai');
 const { useVault } = await import('../../src/state/vault');
-const { useAssistant, friendlyError } = await import('../../src/state/assistant');
+const { LIBRARY_KEY, useAssistant, friendlyError } = await import('../../src/state/assistant');
 const { buildSeedNotes } = await import('../../src/lib/vault/seed');
 const { NOTE_STARTERS, TEXT_ACTIONS } = await import('../../src/lib/ai/prompts');
 
@@ -147,4 +147,14 @@ test('a server error is said in words, without its raw reply', () => {
   // Errors relayed from the app's main process carry the status but may not start with "HTTP".
   const relayed = friendlyError(Object.assign(new Error('<html>Bad gateway</html>'), { status: 502 }));
   assert.equal(relayed, 'The model server had a problem (HTTP 502). It was retried automatically; try again in a moment.');
+});
+
+test('a study tool with nothing in the notes to make it from says so, marked, without asking the model', async () => {
+  await useAssistant.getState().askLibrary({ prompt: '', scope: { kind: 'folder', path: 'An empty folder' }, tool: 'summary' });
+  const reply = [...useAssistant.getState().threads[LIBRARY_KEY].messages].reverse().find((m) => m.role === 'assistant')!;
+  assert.equal(reply.status, 'done');
+  assert.ok(reply.insufficient, 'marked, so the page shows it as a reply and not as a summary');
+  assert.match(reply.content, /isn’t enough in these notes/);
+  assert.deepEqual(reply.sources, [], 'it cites nothing');
+  assert.equal(script.requests.length, 0);
 });
