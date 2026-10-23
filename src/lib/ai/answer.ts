@@ -114,10 +114,10 @@ export function shownOf(m: ShownReply): string {
 /** With "never use the AI's own knowledge": what isn't from the notes is left out, not shown in a box. */
 export function leaveOutOwn(md: string): string {
   return normalizeOutside(md)
-    .replace(/^:::outside[^\n]*\n[\s\S]*?\n:::[ \t]*$/gm, '_Left out — not in your notes._')
+    .replace(/^:::outside[^\n]*\n[\s\S]*?\n:::[ \t]*$/gm, '_Left out, not in your notes._')
     // A table row's cells but the last close without a tag: they go, and the row says it once (its pipes stay).
     .replace(/\uE000[^\uE000\uE001\uE004]*\uE004/g, '')
-    .replace(/\uE000[^\uE000\uE001]*\uE001/g, '_(left out — not in your notes)_')
+    .replace(/\uE000[^\uE000\uE001]*\uE001/g, '_(left out, not in your notes)_')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

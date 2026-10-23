@@ -35,25 +35,29 @@ export function gapFillSystem(gaps: string[], className?: string) {
 - Markdown; ALL math in LaTeX ($...$ inline, $$...$$ display).`;
 }
 
-/** Labels the app prints (never the model). */
+/**
+ * Labels the app prints (never the model). Each box of the AI's own knowledge says "proceed with caution"
+ * in its header, so the lines around it don't repeat it.
+ */
 export const LABELS = {
   noneTitle: 'Your notes don’t cover this',
-  noneBody: 'So the answer below is from the AI’s own general knowledge, not your notes — proceed with caution and check it against your class materials.',
+  noneBody: 'Check the answer below against your class materials.',
   /** Under "Your notes don't cover this"; says where the one switch is, for the Assistant and Ask your notes alike. */
-  noneOff: (_library: boolean) => 'Nib is set to answer only from your notes, so the AI’s own knowledge isn’t used (Settings → Local AI).',
-  noLinked: 'You haven’t linked any notes to this homework, so nothing here can come from your class notes. The answer below is the AI’s own general knowledge — proceed with caution.',
-  // The boxes say "Not from your notes" or "Not found in your notes", list items and table rows "not in your notes".
-  partial: 'Your notes only cover part of this. Anything in an amber box, or marked “not in your notes”, is the AI’s own knowledge — proceed with caution.',
-  /** The pill for parts from the AI's own knowledge (the same words wherever it shows). */
+  noneOff: (_library: boolean) => 'Set to answer only from your notes (Settings → Local AI).',
+  noLinked: 'You haven’t linked any notes to this homework, so nothing below comes from your class notes.',
+  partial: 'Your notes only cover part of this.',
+  /** The same, when list items or table rows carry a "not in your notes" tag (a tag has no box header to say it). */
+  partialTagged: 'Your notes only cover part of this. Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution.',
+  /** For older replies' citation check (GroundingBar). */
   ownParts: (n: number) => `${n === 1 ? '1 part' : `${n} parts`} from the AI’s own knowledge`,
-  collapsed: 'Nib couldn’t match this answer to your notes, so all of it is shown as the AI’s own knowledge — proceed with caution.',
+  collapsed: 'Couldn’t match this answer to your notes, so all of it is shown as the AI’s own knowledge.',
   gap: (what: string) => `Not in your notes: ${what}`,
   nearest: 'Closest in your notes',
   searchAnyway: 'Search my notes anyway',
-  computed: 'Worked from your problem with your notes’ method — check the arithmetic.',
-  mayCover: 'The AI didn’t find an answer in these passages, but your notes may cover this — have a look:',
+  computed: 'Worked from your problem with your notes’ method. Check the arithmetic.',
+  mayCover: 'The AI didn’t find an answer in these passages, but your notes may cover this. Have a look:',
   exampleNone: 'Your notes don’t include an example of this.',
-  translateNote: 'Translated by the AI — the wording is the AI’s, not your notes’. Check it.',
+  translateNote: 'Translated by the AI. The wording is the AI’s, not your notes’, so check it.',
   doubleChecking: 'Double-checking loosely matched sentences against your notes…',
 };
 

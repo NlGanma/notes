@@ -31,8 +31,9 @@ const LABEL: Record<CalloutVariant, string> = {
   tip: 'Tip',
   important: 'Important',
   question: 'Question',
-  ai: 'From your assistant',
-  outside: 'Not from your notes — general knowledge',
+  ai: 'From the AI',
+  // The chat box's label, OWN_HEAD in lib/ai/markdown (kept out of the editor's bundle); doc.css shows it above the text.
+  outside: 'Not from your notes · the AI’s own knowledge — proceed with caution',
 };
 
 const FIXED: CalloutVariant[] = ['ai', 'outside'];

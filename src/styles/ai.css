@@ -897,7 +897,7 @@
 
 /* ------------------------------------------------------------------ what the notes-only check found
  * One system: the amber box (with its label) is the AI's own knowledge; "not in your notes" tags and
- * the pills use the same amber; the banner above an answer is a calm line with an amber dot. */
+ * the count under the answer use the same amber; the banner above an answer is a calm line with an amber dot. */
 
 /* The AI's own knowledge, boxed and labelled by the app. */
 .md .outside-notes {
@@ -932,7 +932,7 @@
 .md .outside-notes > :last-child {
   margin-bottom: 0;
 }
-/* Sentences Nib moved out of the answer itself ("Not found in your notes"): the same box. */
+/* Sentences the check moved out of the answer itself ("Not found in your notes"): the same box. */
 .md .outside-notes.is-auto {
   background: var(--warning-soft);
 }
@@ -982,47 +982,40 @@
   background: rgba(250, 178, 25, 0.3);
 }
 
-/* The pills under an answer: how much came from the notes, and what didn't. */
+/* Under an answer, one quiet line: how much came from the notes, and how much didn't (amber words, no fills:
+   the boxes and tags above already carry the warning). */
 .grounding {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-.grounding-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
+  align-items: baseline;
+  margin-top: 10px;
   font-family: var(--font-ui);
   font-size: 12px;
-  font-weight: 500;
-  line-height: 22px;
+  line-height: 18px;
+  color: var(--text-3);
+}
+.grounding-item {
   white-space: nowrap;
 }
-.grounding-item svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-}
-.grounding-item.is-cited {
-  background: var(--success-soft);
-  color: var(--success);
+.grounding-item + .grounding-item::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--text-4);
+  text-decoration: none;
+  display: inline-block;
 }
 .grounding-item.is-outside {
-  background: var(--warning-soft);
   color: var(--warning);
 }
 .grounding-item.is-uncited {
+  font: inherit;
   color: var(--warning);
-  box-shadow: inset 0 0 0 1px rgba(250, 178, 25, 0.5);
   cursor: pointer;
 }
 .grounding-item.is-uncited:hover,
 .grounding-item.is-uncited.is-on {
-  background: var(--warning-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 /* The double-check's own lines ("Every sentence is checked…", "Double-checking…"). */
 .msg-checking {

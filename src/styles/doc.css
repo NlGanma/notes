@@ -276,7 +276,7 @@
   --callout-icon: #d9730d;
 }
 .callout[data-variant='outside'] .callout-body::before {
-  content: 'Not from your notes · the AI’s own knowledge, so check it';
+  content: 'Not from your notes · the AI’s own knowledge — proceed with caution';
   display: block;
   font: 500 12px/24px var(--font-ui, system-ui, sans-serif);
   color: #9a4f0a;

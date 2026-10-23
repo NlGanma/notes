@@ -1,5 +1,5 @@
 import { tokenize } from './rag';
-import { AUTO_HEAD, boxBody, isCitation, normalizeOutside, OWN_CLOSE, OWN_END, OWN_HEAD, OWN_OPEN, WEAK_CLOSE, WEAK_OPEN } from './markdown';
+import { AUTO_HEAD, boxBody, isCitation, mergeBoxes, normalizeOutside, OWN_CLOSE, OWN_END, OWN_HEAD, OWN_OPEN, OWN_TAG, WEAK_CLOSE, WEAK_OPEN } from './markdown';
 import { needsCitation } from './grounding';
 import { findQuote, isSpanOf, unitsOf } from './quote';
 
@@ -959,14 +959,14 @@ export function verifyAnswer(raw: string, ctx: VerifyCtx): VerifyReport {
 
 /** Copy version of a checked answer: boxes keep their label as a quote, inline marks become words. */
 export function markersToText(md: string): string {
-  return normalizeOutside(md)
+  return mergeBoxes(normalizeOutside(md))
     .replace(/^:::outside( auto)?\n([\s\S]*?)\n:::[ \t]*$/gm, (_m, auto: string | undefined, body: string) =>
       [`> **${auto ? AUTO_HEAD : OWN_HEAD}**`, ...body.split('\n').map((l) => (l ? `> ${l}` : '>'))].join('\n'),
     )
     .replace(new RegExp(`[${OWN_OPEN}${OWN_END}]`, 'g'), '')
-    .replace(new RegExp(OWN_CLOSE, 'g'), ' _(not from your notes)_')
+    .replace(new RegExp(OWN_CLOSE, 'g'), ` _(${OWN_TAG})_`)
     .replace(/\uE002/g, '')
-    .replace(/\uE003/g, ' _(loosely matched \u2014 check your notes)_');
+    .replace(/\uE003/g, ' _(loosely matched, check your notes)_');
 }
 
 /**

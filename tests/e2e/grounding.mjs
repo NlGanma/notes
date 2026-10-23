@@ -50,7 +50,8 @@ let before = await stats();
 await ask('What is the capital of Peru?');
 let after = await stats();
 const banner = (await bot().locator('.coverage-banner').textContent().catch(() => '')) ?? '';
-check(/notes don.t cover this/i.test(banner) && /proceed with caution/i.test(banner), 'an off-topic question says the notes don’t cover it and to proceed with caution');
+check(/notes don.t cover this/i.test(banner) && /check the answer below/i.test(banner), 'an off-topic question says the notes don’t cover it and to check the answer');
+check(!/proceed with caution/i.test(banner), '…leaving “proceed with caution” to the box’s label (said once)');
 const head = (await bot().locator('.outside-notes .outside-head').first().textContent().catch(() => '')) ?? '';
 check(/AI.s own knowledge/.test(head) && /proceed with caution/.test(head), '…and the answer is boxed as the AI’s own knowledge');
 check(/Lima/.test(await bot().locator('.outside-notes').textContent().catch(() => '')), '…with the general-knowledge answer inside the box');
@@ -113,7 +114,9 @@ await libAsk('What is the squeeze theorem and who discovered it?');
 check(/Archimedes/.test(await libBot().locator('.outside-notes.is-auto').textContent().catch(() => '')), 'library: an invented fact with a citation is caught and boxed');
 check(await libBot().locator('.md > p .cite, .md > ul .cite').count(), '…while the part from the notes keeps its citations');
 check(/Not in your notes: who discovered it/i.test(await libBot().locator('.coverage-banner').textContent().catch(() => '')), '…and what the notes lack is named');
-check((await libBot().locator('.outside-notes').count()) >= 2, '…and answered separately in its own labelled box');
+const gapBox = (await libBot().locator('.outside-notes').last().textContent().catch(() => '')) ?? '';
+check(/In general/.test(gapBox) && /proceed with caution/.test(gapBox), '…and answered separately, inside a labelled box');
+check(!(await libBot().locator('.md .outside-notes + .outside-notes').count()), '…boxes that follow each other read as one, under one label');
 await shot(page, 'grounding-03-library');
 
 // Own knowledge off (its one switch is in Settings → Local AI): say so, make no model call.

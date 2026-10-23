@@ -234,12 +234,14 @@ test('a fence the model writes cannot close a box early', () => {
 test('copying keeps the labels; leaving out own knowledge leaves no trace of it', () => {
   const shown = 'From the notes [1].\n\n:::outside auto\nArchimedes proved it.\n:::\n\n- itemNewton did\n- loosely';
   const copied = markersToText(shown);
-  assert.match(copied, /> \*\*Not found in your notes · treat this as the AI’s own knowledge — proceed with caution\*\*\n> Archimedes proved it\./);
-  assert.match(copied, /Newton did _\(not from your notes\)_/);
-  assert.match(copied, /loosely _\(loosely matched — check your notes\)_/);
+  assert.match(copied, /> \*\*Not found in your notes · the AI’s own knowledge — proceed with caution\*\*\n> Archimedes proved it\./);
+  assert.match(copied, /Newton did _\(not in your notes\)_/);
+  assert.match(copied, /loosely _\(loosely matched, check your notes\)_/);
+  // Boxes in a row are copied under one label.
+  assert.equal((markersToText(':::outside\nOne.\n:::\n\n:::outside auto\nTwo.\n:::').match(/proceed with caution/g) ?? []).length, 1);
   const left = leaveOutOwn(shown);
   assert.ok(!/Archimedes|Newton/.test(left), left);
-  assert.match(left, /Left out — not in your notes/);
+  assert.match(left, /Left out, not in your notes/);
 });
 
 test('a reply that stopped before it was checked is shown boxed, never raw', () => {
@@ -365,7 +367,7 @@ test('a table row not in the notes: every cell stays marked, the tag shows once 
   assert.ok(!/Archimedes|Syracuse|Newton|Principia|1687/.test(unlabeled(html)), unlabeled(html));
   // Copied, sent back as history, or left out (strict mode): the rows keep their cells, and say it once.
   const copied = markersToText(shown);
-  assert.equal((copied.match(/not from your notes/g) ?? []).length, 2, copied);
+  assert.equal((copied.match(/not in your notes/g) ?? []).length, 2, copied);
   for (const md of [historyForModel(shown), leaveOutOwn(shown)]) {
     const lines = md.split('\n').filter((l) => l.startsWith('|'));
     assert.ok(lines.every((l) => l.split('|').length === 5), md);
@@ -380,7 +382,7 @@ test('inserted into a note, a table becomes one bullet per row (the editor has n
   const html = markdownToEditorHTML(shown, { stripCitations: true, maxCite: EX.length });
   assert.ok(!/<table|<td|<th/.test(html), html);
   assert.match(html, /<ul>\s*<li><p><strong>Law<\/strong> · <strong>Example<\/strong><\/p><\/li>/);
-  assert.match(html, /<li><p>Archimedes proved the squeeze theorem · in 250 BC <em>\(not from your notes — the AI’s own knowledge\)<\/em><\/p><\/li>/);
+  assert.match(html, /<li><p>Archimedes proved the squeeze theorem · in 250 BC <em>\(not in your notes · the AI’s own knowledge\)<\/em><\/p><\/li>/);
   // Empty cells add no stray separators.
   assert.match(markdownToEditorHTML('| | A |\n|---|---|\n| x | |'), /<li><p><strong>A<\/strong><\/p><\/li>\s*<li><p>x<\/p><\/li>/);
 });
