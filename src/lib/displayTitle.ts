@@ -30,12 +30,43 @@ function clip(line: string): string {
   return `${(space > MAX / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:–—-]+$/, '')}…`;
 }
 
+// LaTeX commands a name shows as their symbol (each entry: the command's name, then the symbol).
+const SYMBOLS: Record<string, string> = Object.fromEntries(
+  'to→ implies⇒ infty∞ cdot· times× pm± le≤ leq≤ ge≥ geq≥ ne≠ approx≈ alphaα betaβ gammaγ deltaδ DeltaΔ thetaθ lambdaλ muμ piπ sigmaσ omegaω'
+    .split(' ')
+    .map((e) => [e.slice(0, -1), e.slice(-1)]),
+);
+
+/** A formula as a name can show it: "\lim_{x \to 3} \frac{x^2 - 9}{x - 3}" reads "lim x→3 (x^2 - 9)/(x - 3)". */
+function plainMath(latex: string): string {
+  let t = latex.replace(/\\(?:left|right)(?![a-zA-Z])|\\[,;:! ]/g, ' ').replace(/\\(?:text|mathrm|operatorname|mathbf)\{([^{}]*)\}/g, '$1');
+  for (let prev = ''; prev !== t; ) {
+    prev = t;
+    t = t.replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)').replace(/\\sqrt\{([^{}]*)\}/g, '√($1)');
+  }
+  return t
+    .replace(/\\(lim|sum|int|prod|max|min)_\{([^{}]*)\}/g, '$1 $2 ')
+    .replace(/_\{([^{}]*)\}/g, '$1')
+    .replace(/\^\{([^{}]*)\}/g, (_, e: string) => (e.length > 1 ? `^(${e})` : `^${e}`))
+    .replace(/\\([a-zA-Z]+)/g, (_, name: string) => SYMBOLS[name] ?? name)
+    .replace(/[{}_]/g, '')
+    .replace(/\s*([→⇒])\s*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** A line of what was read with its LaTeX written out: "$...$", "$$...$$", "\(...\)" or bare commands. */
+function plainLine(line: string): string {
+  const t = line.replace(/\$\$([^$]*)\$\$|\$([^$]+)\$|\\\(([\s\S]*?)\\\)/g, (_, a?: string, b?: string, c?: string) => plainMath(a ?? b ?? c ?? ''));
+  return (/\\[a-zA-Z]/.test(t) ? plainMath(t) : t).replace(/\$/g, '').trim();
+}
+
 function inlineText(nodes: JSONContent[] | undefined): string {
   let out = '';
   for (const n of nodes ?? []) {
     if (n.type === 'text') out += n.text ?? '';
     else if (n.type === 'hardBreak') out += '\n';
-    else if (n.type === 'mathInline') out += String(n.attrs?.latex ?? '');
+    else if (n.type === 'mathInline') out += plainMath(String(n.attrs?.latex ?? ''));
     else if (n.content) out += inlineText(n.content);
   }
   return out;
@@ -62,8 +93,9 @@ function firstInkLine(blocks: JSONContent[] | undefined): string | null {
   for (const b of blocks ?? []) {
     if (b.type === 'inkBlock') {
       const t = b.attrs?.transcript as { text?: string; description?: string } | null | undefined;
-      const line = (t?.text || t?.description || '').split('\n').find((l) => l.trim());
-      if (line) return line.trim();
+      // (its math written out, so "$\\lim_{x \\to 3}$" never shows up in a tab)
+      const line = (t?.text || t?.description || '').split('\n').map(plainLine).find(Boolean);
+      if (line) return line;
     } else if (b.content) {
       const inner = firstInkLine(b.content);
       if (inner) return inner;

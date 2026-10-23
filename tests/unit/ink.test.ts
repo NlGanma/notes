@@ -4,6 +4,7 @@ import { eraseFromStroke, pathLength, pointInPolygon, strokeBounds } from '../..
 import { recognizeShape } from '../../src/lib/ink/shapes';
 import type { Stroke } from '../../src/lib/ink/types';
 import seedInk from '../../src/lib/vault/seedInk.json';
+import { displayTitle } from '../../src/lib/displayTitle';
 import {
   autoscrollSpeed,
   blobGroups,
@@ -341,4 +342,17 @@ test('the demo notes are written with the felt marker, the only pen', () => {
   const brushes = new Set(strokes.map((s) => s.brush));
   assert.ok(brushes.has('marker'));
   assert.deepEqual([...brushes].filter((b) => b !== 'marker' && b !== 'highlighter' && b !== 'mono'), []);
+});
+
+test('a note named by its handwriting shows the math written out, never LaTeX', () => {
+  const named = (text: string) =>
+    displayTitle({
+      version: 1,
+      meta: { id: 'n', title: '', folder: '', tags: [], created: 0, updated: 0, paper: 'ruled' },
+      content: { type: 'doc', content: [{ type: 'inkBlock', attrs: { transcript: { text } } }] },
+    });
+  assert.equal(named('Ex. Find $\\lim_{x \\to 3} \\frac{x^2 - 9}{x - 3}$'), 'Ex. Find lim x→3 (x^2 - 9)/(x - 3)');
+  assert.equal(named('$$v_0^2 = 2 g h$$'), 'v0^2 = 2 g h');
+  assert.equal(named('\\theta = \\pi / 4'), 'θ = π / 4');
+  assert.match(named('$$\n$$'), /^Note · /, 'nothing left: the date name');
 });
