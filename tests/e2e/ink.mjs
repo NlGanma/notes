@@ -1054,6 +1054,106 @@ await page.keyboard.press('Escape');
 await page.setViewportSize({ width: 1440, height: 1000 });
 await page.waitForTimeout(300);
 
+// 16. Ask about an equation inside a quote; with the assistant open, one part of the page at a time.
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForTimeout(400);
+await page.keyboard.type('Equations');
+await page.keyboard.press('Enter');
+await page.keyboard.press('Alt+t');
+await page.keyboard.type('A second line to ask about.');
+await page.keyboard.press('Enter');
+await page.keyboard.type('> Inside a quote');
+await page.keyboard.press('Enter');
+await page.keyboard.type('$$');
+await page.keyboard.press('Space');
+await page.waitForTimeout(300);
+await page.keyboard.type('x^2+1');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+const quoted = page.locator(`${V} .ProseMirror blockquote .math-block`).first();
+const askEquation = async () => {
+  await quoted.hover();
+  await quoted.locator('.ink-more').click();
+  await page.click('.ink-menu .menu-item:has-text("Ask about this")');
+  await page.waitForTimeout(300);
+};
+await askEquation();
+const eqBox = await quoted.boundingBox();
+const eqAsk = await page.locator(`${V} .snip-ask`).boundingBox();
+check(
+  (await page.locator(`${V} .snip-ask input`).getAttribute('placeholder')) === 'Ask about this equation…' && eqAsk && eqAsk.y >= eqBox.y + eqBox.height - 2 && eqAsk.y < eqBox.y + eqBox.height + 40,
+  'Ask about this… on an equation inside a quote opens the composer under it',
+);
+await page.keyboard.press('Escape');
+// What is waiting in the assistant's composer (the store, as the dev server serves it).
+const draftAtts = () =>
+  page.evaluate(async () => {
+    const { useAssistant } = await import('/src/state/assistant.ts');
+    return Object.values(useAssistant.getState().drafts).flatMap((d) => d.attachments.map((a) => `${a.label}: ${a.text ?? ''}`));
+  });
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForSelector('.assistant');
+await askEquation();
+let atts = await draftAtts();
+check(atts.length === 1 && atts[0] === 'Equation: $$x^2+1$$' && !(await page.locator(`${V} .snip-ask`).count()), `with the assistant open it goes into its composer as the equation (${JSON.stringify(atts)})`);
+await page.locator(`${V} .tb-tool[data-tool="lasso"]`).click();
+const boxOverLine = async (loc) => {
+  const b = await loc.boundingBox();
+  await page.mouse.move(b.x - 6, b.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 200, b.y + b.height + 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+};
+await boxOverLine(page.locator(`${V} .ProseMirror blockquote p`).first());
+atts = await draftAtts();
+check(atts.length === 1 && /^Text in that area: > Inside a quote/.test(atts[0]), `a box then replaces the equation in the composer (${JSON.stringify(atts)})`);
+await boxOverLine(page.locator(`${V} .ProseMirror > p:has-text("second line")`).first());
+atts = await draftAtts();
+check(atts.length === 1 && atts[0] === 'Text in that area: A second line to ask about.', `and a second box replaces the first, with only the text it covers (${JSON.stringify(atts)})`);
+await shot(page, 'ink-25-second-box');
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForFunction(() => !document.querySelector('.assistant'));
+
+// 17. With the local model not running, the Ask composer says so and can't send; the selection's Ask is off.
+const setAI = (patch) =>
+  page.evaluate(async (p) => {
+    const { useAI } = await import('/src/state/ai.ts');
+    const was = useAI.getState().baseUrl;
+    useAI.getState().set(p);
+    return was;
+  }, patch);
+const aiUrl = await setAI({ baseUrl: 'http://127.0.0.1:59999' });
+await page.waitForFunction(() => document.querySelector('[data-ai-status]')?.getAttribute('data-ai-status') === 'offline' || !document.querySelector('[data-ai-status]'), null, { timeout: 5000 }).catch(() => {});
+await page.waitForTimeout(600);
+await boxOverLine(page.locator(`${V} .ProseMirror > p:has-text("second line")`).first());
+await page.locator(`${V} .snip-ask input`).fill('Why?');
+check(
+  /Local AI isn’t running/.test((await page.locator(`${V} .snip-ask .composer-status`).textContent()) ?? '') &&
+    (await page.locator(`${V} .snip-ask .composer-status button:has-text("Open settings")`).count()) === 1 &&
+    (await page.locator(`${V} .snip-send`).isDisabled()) &&
+    (await page.locator(`${V} .snip-quick button:has-text("Explain")`).isDisabled()),
+  'offline, the Ask composer says Local AI isn’t running (with Open settings), and Send and the four asks are off',
+);
+await shot(page, 'ink-26-offline-ask');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Alt+p');
+wrap = await wrapBox();
+await writeText(page, 'ab', wrap.x + 60, wrap.y + R(6), 18);
+await page.waitForTimeout(200);
+await page.keyboard.press('Alt+l');
+await page.mouse.move(wrap.x + 40, wrap.y + R(6) - 30);
+await page.mouse.down();
+await page.mouse.move(wrap.x + 160, wrap.y + R(6) + 20, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+const selAsk = page.locator(`${V} .ink-sel-menu .sel-btn.is-ask`);
+check((await selAsk.isDisabled()) && (await selAsk.getAttribute('title')) === 'Local AI isn’t running', 'and the selection menu’s Ask is off, saying why');
+await setAI({ baseUrl: aiUrl });
+await page.waitForTimeout(800);
+check(!(await selAsk.isDisabled()), 'when the model is back, Ask is on again');
+await page.keyboard.press('Escape');
+
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
 await browser.close();
