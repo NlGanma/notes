@@ -301,7 +301,8 @@ export const useVault = create<VaultState>((set, get) => {
       for (const [id, folders] of Object.entries(gone.links)) {
         const n = get().notes[id];
         const hw = n?.meta.homework;
-        if (hw) get().updateMeta(id, { homework: { ...hw, folders: [...hw.folders, ...folders.filter((f) => !hw.folders.includes(f))] }, updated: n.meta.updated });
+        if (hw)
+          get().updateMeta(id, { homework: { ...hw, folders: [...hw.folders, ...folders.filter((f) => !hw.folders.includes(f))] }, updated: n.meta.updated });
       }
     },
 

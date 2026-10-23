@@ -47,6 +47,18 @@ await page.waitForTimeout(300);
 check(await page.locator(`${V} .callout[data-variant="ai"]`).count(), 'reply inserted into the note as an assistant callout');
 await shot(page, 'ai-02-inserted');
 
+// 3b. With the assistant open, a window narrowed until the page would be under 760px puts the sidebar away,
+// and widening it again brings the sidebar back.
+const sidebarShown = () => page.evaluate(() => !document.querySelector('.sidebar.is-hidden'));
+const mainWidth = () => page.evaluate(() => Math.round(document.querySelector('.main').getBoundingClientRect().width));
+const shownBefore = await sidebarShown();
+await page.setViewportSize({ width: 1100, height: 940 });
+await page.waitForTimeout(400);
+check(shownBefore && !(await sidebarShown()) && (await mainWidth()) >= 700, `narrowing the window beside the assistant puts the sidebar away (page ${await mainWidth()}px)`);
+await page.setViewportSize({ width: 1440, height: 940 });
+await page.waitForTimeout(400);
+check(await sidebarShown(), '…and widening it brings the sidebar back');
+
 // 4. Snip & ask: drag over the squeeze-theorem area.
 await page.locator(`${V} .tb-tool[data-tool="ask"]`).click();
 const heading = page.locator(`${V} .ProseMirror h2:has-text("Squeeze theorem")`);

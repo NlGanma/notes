@@ -93,6 +93,25 @@ export function savedUI(s: UIState): Partial<UIState> & { sidebar: boolean } {
 /** Below this the sidebar starts hidden and, when shown, floats over the page. */
 export const NARROW = '(max-width: 899px)';
 
+/**
+ * A hidden sidebar is inert, and the button that shows it goes away once it is shown: either way the keyboard
+ * focus would drop to the page. Called before the change, this hands focus that was in `from` to `to`, unless
+ * something else (a click elsewhere) took it meanwhile.
+ */
+function keepFocus(from: string, to: string) {
+  if (typeof document === 'undefined' || !document.activeElement?.closest(from)) return;
+  requestAnimationFrame(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body) document.querySelector<HTMLElement>(to)?.focus();
+  });
+}
+
+/** Puts the floating sidebar away (Esc, a click outside it, a page picked), keeping the keyboard focus. */
+export function hideSidebar() {
+  keepFocus('.sidebar', '.mainbar-show');
+  useUI.getState().set({ sidebar: false });
+}
+
 export const useUI = create<UIState>()(
   persist(
     (set, get) => ({
@@ -147,7 +166,11 @@ export const useUI = create<UIState>()(
       },
       setView: (v) => set({ view: v }),
       // Showing or hiding it by hand is a choice, except over a narrow window, where it only floats.
-      toggleSidebar: () => set({ sidebar: !get().sidebar, sidebarAuto: get().sidebarAuto && window.matchMedia(NARROW).matches }),
+      toggleSidebar: () => {
+        if (get().sidebar) keepFocus('.sidebar', '.mainbar-show');
+        else keepFocus('.mainbar-show', '.sidebar-hide');
+        set({ sidebar: !get().sidebar, sidebarAuto: get().sidebarAuto && window.matchMedia(NARROW).matches });
+      },
       setAssistant: (open) => set({ assistant: open }),
       setPalette: (open) => set({ palette: open }),
       openSettings: (section) => {

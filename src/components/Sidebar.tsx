@@ -173,11 +173,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
         <span className="grow" />
         <button
           className="icon-btn sidebar-hide no-drag"
-          onClick={() => {
-            useUI.getState().toggleSidebar();
-            // The focus goes to the button that brings it back, not lost with the hidden sidebar.
-            requestAnimationFrame(() => document.querySelector<HTMLElement>('.mainbar-show')?.focus());
-          }}
+          // Its focus goes to the button that brings it back (toggleSidebar), not lost with the hidden sidebar.
+          onClick={() => useUI.getState().toggleSidebar()}
           aria-label="Hide sidebar"
           title={`Hide sidebar  ${MOD}\\`}
         >

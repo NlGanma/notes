@@ -34,6 +34,8 @@ export function migrateUI(persisted: unknown, version: number): Obj {
   const s: Obj = isObj(persisted) ? { ...persisted } : {};
   if (version < 1) {
     s.view = migrateView(s.view);
+    // A hidden sidebar used to leave an icon rail; there is no rail now, so it would leave no navigation at all.
+    s.sidebar = true;
     const scope = s.libraryScope;
     if (!isObj(scope) || scope.kind === 'tag') s.libraryScope = { kind: 'all' };
     delete s.gridMode;

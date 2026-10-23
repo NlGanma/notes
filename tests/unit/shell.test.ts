@@ -94,6 +94,12 @@ test('saved pages that no longer exist open somewhere sensible', () => {
   assert.deepEqual(migrateUI({ libraryScope: { kind: 'folder', path: 'Biology' } }, 0).libraryScope, { kind: 'folder', path: 'Biology' });
 });
 
+test('a sidebar folded to the old icon rail opens shown, since there is no rail any more', () => {
+  assert.equal(migrateUI({ sidebar: false, view: { kind: 'home' } }, 0).sidebar, true);
+  assert.equal(migrateUI({ sidebar: true }, 0).sidebar, true);
+  assert.equal(migrateUI({ sidebar: false }, 1).sidebar, false, 'hidden by hand in this version: kept');
+});
+
 test('old pens become the felt marker at the width they drew', () => {
   assert.equal(markerSizeFor(2.2, 'fountain'), 1.6, 'the old default stays medium');
   assert.equal(markerSizeFor(1.4, 'ballpoint'), 1.1);

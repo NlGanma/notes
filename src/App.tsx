@@ -19,7 +19,7 @@ import { Toasts, toast } from './components/common/toast';
 import { NoteEditor } from './editor/NoteEditor';
 import { SlashMenu } from './editor/ui/SlashMenu';
 import { useVault } from './state/vault';
-import { NARROW, useUI } from './state/ui';
+import { hideSidebar, NARROW, useUI } from './state/ui';
 import { useAI } from './state/ai';
 import { flushReview, useReview } from './state/review';
 import { bridge, isElectron, isMac } from './lib/platform';
@@ -124,13 +124,36 @@ export function App() {
   // comes back when the assistant closes (only if it was put away for the room, not by hand).
   const crowded = assistant && view.kind === 'note';
   useEffect(() => {
-    const ui = useUI.getState();
     if (!ready || narrow) return;
-    if (crowded && ui.sidebar) {
-      const panel = document.querySelector('.assistant')?.getBoundingClientRect().width ?? 400;
-      const sidebarW = document.querySelector('.sidebar')?.getBoundingClientRect().width ?? 272;
-      if (window.innerWidth - sidebarW - panel < 760) ui.set({ sidebar: false, sidebarAuto: true });
-    } else if (!crowded && ui.sidebarAuto) ui.set({ sidebar: true, sidebarAuto: false });
+    if (!crowded) {
+      const ui = useUI.getState();
+      if (ui.sidebarAuto) ui.set({ sidebar: true, sidebarAuto: false });
+      return;
+    }
+    // The page's width beside the assistant with the sidebar shown. (A hidden sidebar measures 0, so use its token.)
+    const sidebarW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 272;
+    const room = () => window.innerWidth - sidebarW - (document.querySelector('.assistant')?.getBoundingClientRect().width || 400);
+    let fits = room() >= 760;
+    if (!fits && useUI.getState().sidebar) useUI.getState().set({ sidebar: false, sidebarAuto: true });
+    // The window resized with the assistant open: the sidebar steps aside as the room runs out and comes back
+    // with it. Only crossing the line moves it, so a sidebar shown by hand in a tight window stays.
+    let frame = 0;
+    const onResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const now = room() >= 760;
+        if (now === fits) return;
+        fits = now;
+        const ui = useUI.getState();
+        if (!now && ui.sidebar) ui.set({ sidebar: false, sidebarAuto: true });
+        else if (now && !ui.sidebar && ui.sidebarAuto) ui.set({ sidebar: true, sidebarAuto: false });
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(frame);
+    };
   }, [crowded, narrow, ready]);
 
   // The floating sidebar goes away on a click outside it, on Esc, and when a page is picked.
@@ -140,9 +163,9 @@ export function App() {
     const onDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest('.sidebar, .popover, .context-menu, .modal-backdrop, .mainbar-show')) return;
-      useUI.getState().set({ sidebar: false });
+      hideSidebar();
     };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && useUI.getState().set({ sidebar: false });
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && hideSidebar();
     window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('keydown', onKey);
     return () => {
@@ -152,7 +175,7 @@ export function App() {
   }, [overlay]);
   const viewKey = JSON.stringify(view);
   useEffect(() => {
-    if (useUI.getState().sidebar && window.matchMedia(NARROW).matches) useUI.getState().set({ sidebar: false });
+    if (useUI.getState().sidebar && window.matchMedia(NARROW).matches) hideSidebar();
     setScrolled(false);
   }, [viewKey]);
 
