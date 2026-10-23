@@ -172,6 +172,19 @@ test('old default papers become one of the three', () => {
   assert.ok(!('paper' in migrateSettings({}, 0)));
 });
 
+test('a closed tab goes back where it was, without taking the page', () => {
+  const ui = useUI.getState();
+  useUI.setState({ tabs: ['a', 'b', 'c'], view: { kind: 'home' } });
+  ui.closeTab('b');
+  assert.deepEqual(useUI.getState().tabs, ['a', 'c']);
+  ui.reopenTab('b', 1);
+  assert.deepEqual(useUI.getState().tabs, ['a', 'b', 'c']);
+  assert.deepEqual(useUI.getState().view, { kind: 'home' });
+  ui.reopenTab('b', 0);
+  assert.deepEqual(useUI.getState().tabs, ['a', 'b', 'c'], 'a tab that is open stays where it is');
+  useUI.setState({ tabs: [] });
+});
+
 test('a sidebar put away for the window is saved as shown; one hidden by hand stays hidden', () => {
   const saved = (p: { sidebar: boolean; sidebarAuto: boolean }) => savedUI({ ...useUI.getState(), ...p }).sidebar;
   assert.equal(saved({ sidebar: false, sidebarAuto: true }), true, 'a narrow window or the assistant hid it');
