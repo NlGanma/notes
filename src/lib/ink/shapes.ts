@@ -149,10 +149,14 @@ export function recognizeShape(raw: number[]): RecognizedShape | null {
     return { kind: 'line', pts: flat(densify([a, b])), closed: false };
   }
 
+  // 2. Arrow: a shaft whose end bends back into a head.
+  const arrow = recognizeArrow(pts, diag);
+  if (arrow) return arrow;
+
   const closed = se < Math.max(16, 0.22 * Math.max(w, h)) || se < 0.12 * length;
 
   if (closed && w > 10 && h > 10) {
-    // 2. Polygon candidates (triangle / rectangle)
+    // 3. Polygon candidates (triangle / rectangle)
     const simplified = rdp(pts, Math.max(4, diag * 0.06));
     let poly = simplified.slice();
     if (poly.length > 2 && dist(poly[0], poly[poly.length - 1]) < Math.max(16, diag * 0.2)) poly.pop();
@@ -243,7 +247,7 @@ export function recognizeShape(raw: number[]): RecognizedShape | null {
     return null;
   }
 
-  // 3. Open polyline with a few clean segments (e.g. an angle or a zig-zag).
+  // 4. Open polyline with a few clean segments (e.g. an angle or a zig-zag).
   const simplified = dropFlatVertices(rdp(pts, Math.max(4, diag * 0.05)), false);
   if (simplified.length >= 3 && simplified.length <= 5) {
     let dev = 0;
@@ -255,6 +259,65 @@ export function recognizeShape(raw: number[]): RecognizedShape | null {
     if (dev < Math.max(5, diag * 0.07)) return { kind: 'polyline', pts: flat(densify(simplified)), closed: false };
   }
   return null;
+}
+
+/**
+ * A one-stroke arrow: the shaft is the stroke's first and longest straight run, ending at the tip; after
+ * it the pen stays near the tip and bends back into one or two barbs (tip, barb, back to the tip, barb; or
+ * a closed head; or a single barb). A check mark starts with its short leg, so it is not one.
+ */
+function recognizeArrow(pts: P[], diag: number): RecognizedShape | null {
+  const v = dropFlatVertices(rdp(pts, Math.max(3, diag * 0.04)), false, 20);
+  // shaft, then at most barb, tip, barb
+  if (v.length < 3 || v.length > 5) return null;
+  const start = v[0];
+  let tip = v[1];
+  const shaft = dist(start, tip);
+  if (shaft < 24) return null;
+  const tail = v.slice(2);
+  let tailLen = dist(tip, tail[0]);
+  for (let i = 1; i < tail.length; i++) tailLen += dist(tail[i - 1], tail[i]);
+  if (tailLen > shaft * 1.4) return null;
+  // The drawn line has to follow that outline: a scribble near the tip is not a head.
+  const outline = [start, tip, ...tail];
+  for (const p of pts) {
+    let best = Infinity;
+    for (let i = 0; i < outline.length - 1; i++) best = Math.min(best, segDist(p, outline[i], outline[i + 1]));
+    if (best > Math.max(5, diag * 0.08)) return null;
+  }
+  const barbs: number[] = [];
+  for (const b of tail) {
+    const d = dist(tip, b);
+    if (d < Math.max(4, shaft * 0.08)) continue; // back at the tip
+    if (d > shaft * 0.55) return null;
+    const a = angleAt(start, tip, b);
+    if (a < 10 || a > 75) return null;
+    barbs.push(d);
+  }
+  if (!barbs.length) return null;
+  // Nearly level or upright shafts are made exactly so, like a snapped line.
+  const ang = (Math.atan2(tip.y - start.y, tip.x - start.x) * 180) / Math.PI;
+  const m = ((ang % 180) + 180) % 180;
+  if (m < 6 || m > 174) tip = { x: tip.x, y: start.y };
+  else if (Math.abs(m - 90) < 6) tip = { x: start.x, y: tip.y };
+  const head = Math.max(8, Math.min(dist(start, tip) * 0.45, barbs.reduce((a, b) => a + b, 0) / barbs.length));
+  return { kind: 'arrow', pts: flat(arrowPoints(start, tip, head)), closed: false };
+}
+
+function segDist(p: P, a: P, b: P) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** The shaft, then the head drawn tip → barb → tip → barb, all as one line. */
+function arrowPoints(from: P, tip: P, head: number): P[] {
+  const ang = Math.atan2(tip.y - from.y, tip.x - from.x);
+  const w1 = { x: tip.x + Math.cos(ang + Math.PI - 0.45) * head, y: tip.y + Math.sin(ang + Math.PI - 0.45) * head };
+  const w2 = { x: tip.x + Math.cos(ang + Math.PI + 0.45) * head, y: tip.y + Math.sin(ang + Math.PI + 0.45) * head };
+  return [...densify([from, tip]), w1, tip, w2];
 }
 
 function rectPoints(x0: number, y0: number, x1: number, y1: number): P[] {
@@ -306,14 +369,7 @@ export function shapeFromDrag(
       };
     case 'arrow': {
       const len = Math.hypot(dx, dy) || 1;
-      const head = Math.min(len * 0.45, 10 + size * 2.4);
-      const ang = Math.atan2(dy, dx);
-      const a1 = ang + Math.PI - 0.45;
-      const a2 = ang + Math.PI + 0.45;
-      const tip = { x: ex, y: ey };
-      const w1 = { x: ex + Math.cos(a1) * head, y: ey + Math.sin(a1) * head };
-      const w2 = { x: ex + Math.cos(a2) * head, y: ey + Math.sin(a2) * head };
-      return { pts: flat([...densify([{ x: x0, y: y0 }, tip]), w1, tip, w2]), closed: false };
+      return { pts: flat(arrowPoints({ x: x0, y: y0 }, { x: ex, y: ey }, Math.min(len * 0.45, 10 + size * 2.4))), closed: false };
     }
     case 'rect':
       return { pts: flat(densify(rectPoints(x0, y0, ex, ey))), closed: true };
