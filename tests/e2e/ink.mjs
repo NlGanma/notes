@@ -811,7 +811,7 @@ const hintShown = async () => page.evaluate(() => {
   return h ? { text: h.textContent, shown: getComputedStyle(h).display !== 'none' && h.getBoundingClientRect().width > 20 } : null;
 });
 const idle = await hintShown();
-check(!!idle?.shown, `at 1024px wide the lasso hint is still shown ("${idle?.text}")`);
+check(!idle, `at rest Select puts no explainer in the bar${idle ? ` (found "${idle.text}")` : ''}`);
 const sc = await page.evaluate(() => {
   const p = document.querySelector('.note-view:not(.is-hidden) .page');
   return p.getBoundingClientRect().width / p.offsetWidth;

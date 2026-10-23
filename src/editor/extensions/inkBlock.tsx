@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useRef, useState } from 'react';
-import { Eye, EyeOff, MoreHorizontal, MessageCircle, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
+import { Eye, EyeOff, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
 import { useTools } from '../../state/tools';
 import type { InkTranscript, Stroke } from '../../lib/ink/types';
 import { deleteBlock, fittedHeight, inkOf, insertParagraphInInk, setInkBlockHeight, trimInkBlock } from '../ink/ops';
@@ -181,7 +181,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
       </div>
       <Popover anchor={moreRef.current} open={menu} onClose={() => setMenu(false)} align="start" className="menu-pop">
         <div className="menu ink-menu" role="menu">
-          {ink.length > 0 && item(<MessageCircle size={20} />, 'Ask about this…', () => editorBus.emit('block:ask', { editor, blockId: id }))}
+          {ink.length > 0 && item(<MessageCircleQuestion size={20} />, 'Ask about this…', () => editorBus.emit('block:ask', { editor, blockId: id }))}
           {ink.length > 0 && <div className="menu-sep" />}
           {transcript &&
             !transcript.stale &&

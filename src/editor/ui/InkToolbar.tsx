@@ -300,10 +300,8 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
     </>
   );
 
-  let context: ReactNode;
-  if (dropHint) context = <div className="tb-hint is-drop">{dropHint}</div>;
-  else if (t.tool === 'lasso') context = <div className="tb-hint">Drag a box to select or ask · drag ink to move</div>;
-  else context = options();
+  // (Select has no options: its tooltip says what it does.)
+  const context: ReactNode = dropHint ? <div className="tb-hint is-drop">{dropHint}</div> : t.tool === 'lasso' ? null : options();
   const foldable = !dropHint && t.tool !== 'lasso';
   const fold = !!foldedFor[foldKey] && foldable;
 
@@ -383,10 +381,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
       <Popover anchor={anchorRef.current} open={pop === 'size'} onClose={close} className="tool-pop is-size">
         {slot && (
           <div className="pop-section">
-            <div className="pop-label">
-              {SIZE_NAMES[slot.index]}
-              <span className="pop-value">{slotValue.toFixed(slot.kind === 'highlighter' ? 0 : 1)}</span>
-            </div>
+            <div className="pop-label">{SIZE_NAMES[slot.index]}</div>
             <div className="size-preview">
               <span
                 className={cx('tb-line', slot.kind === 'highlighter' && 'is-hl')}

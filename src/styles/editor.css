@@ -1011,11 +1011,6 @@
   align-items: center;
   justify-content: space-between;
 }
-.pop-value {
-  font-weight: 400;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
 .size-preview {
   height: 40px;
   display: grid;
