@@ -30,7 +30,7 @@ function useSuggestions(noteId: string) {
   return useMemo(() => (note ? analyzeNote(note, { line, ai, vision: hasVision }) : []), [note, line, ai, hasVision]);
 }
 
-/** Polish, opened from the note's ⋯ menu: a short sheet of tidy-ups, each applied on its own (and undone with ⌘Z). */
+/** Polish, opened from the note's ⋯ menu: a short sheet of tidy-ups (edits undo with ⌘Z) and where the note belongs. */
 export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void }) {
   const suggestions = useSuggestions(noteId);
   const [busy, setBusy] = useState<string | null>(null);
@@ -52,7 +52,9 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
     }
   };
 
-  const quick = suggestions.filter((s) => !s.ai);
+  // Filing the note in a class moves it on disk, so it stays a choice of its own: Apply all and ⌘Z are for edits.
+  const filing = suggestions.filter((s) => s.id === 'class');
+  const quick = suggestions.filter((s) => !s.ai && s.id !== 'class');
   const smart = suggestions.filter((s) => s.ai);
   const left = suggestions.length - done.length;
 
@@ -66,6 +68,14 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
         <div className="polish-empty">
           <Check size={16} />
           Nothing to tidy up.
+        </div>
+      )}
+      {filing.length > 0 && (
+        <div className="polish-group">
+          <div className="polish-group-label">Class</div>
+          {filing.map((s) => (
+            <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
+          ))}
         </div>
       )}
       {quick.length > 0 && (
@@ -100,7 +110,7 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
       )}
       <div className="polish-foot">
         {online ? (
-          'Undo any change with ⌘Z.'
+          'Undo any edit with ⌘Z.'
         ) : (
           <>
             More suggestions, like reading handwriting, need the local AI.

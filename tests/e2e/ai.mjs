@@ -177,6 +177,38 @@ const transcript = await page.evaluate(() => {
 });
 check(transcript && /lim/.test(transcript.text), 'handwriting was read by the vision model and stored as a transcript');
 
+// 8b. Apply all tidies the note but never files it in a class (that's its own button, and moves the file).
+const loose = await page.evaluate(() => {
+  const p = (t) => ({ type: 'paragraph', content: t ? [{ type: 'text', text: t }] : [] });
+  const content = {
+    type: 'doc',
+    content: [
+      p('Limits and continuity: the squeeze theorem says if g(x) ≤ f(x) ≤ h(x) and lim g = lim h = L then lim f = L.'),
+      p(''),
+      p(''),
+      p(''),
+      p('The intermediate value theorem: a continuous function on [a, b] takes every value between f(a) and f(b).'),
+      p('- first typed bullet about limits'),
+      p('- second typed bullet about continuity'),
+    ],
+  };
+  const doc = window.__nib.vault.getState().createNote({ folder: '', title: 'Limits review', content });
+  window.__nib.ui.getState().openNote(doc.meta.id);
+  return doc.meta.id;
+});
+await page.waitForSelector(`${V} .page-title`);
+await page.waitForTimeout(600);
+await noteMenuItem(page, 'Polish');
+await page.waitForSelector('.polish');
+const classGroup = page.locator('.polish-group:has(.polish-group-label:text-is("Class"))');
+check(await classGroup.locator('.polish-row:has-text("Move to Calculus I")').count(), 'Polish offers filing the loose note, in a group of its own');
+check(!(await page.locator('.polish-group:has(.polish-all) .polish-row:has-text("Move to")').count()), '…not among the quick fixes Apply all runs');
+await page.click('.polish-all');
+await page.waitForTimeout(1200);
+const after = await page.evaluate((id) => window.__nib.vault.getState().notes[id].meta.folder, loose);
+check(after === '' && !(await page.locator(`${V} .crumb.is-class`).count()), `Apply all leaves the note where it was (folder ${JSON.stringify(after)})`);
+await page.keyboard.press('Escape');
+
 // 9. Settings shows the detected models.
 await page.click('.side-settings');
 await page.click('.settings-nav-item:has-text("Local AI")');
