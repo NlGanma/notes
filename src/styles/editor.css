@@ -84,13 +84,14 @@
   /* (Its width follows the page's fit: the paper choice below asks it how much room there is.) */
   container-type: inline-size;
 }
-/* A folder shortens to a few letters at most, never to a bare "›". */
+/* A folder shortens to a few letters at most, never to a bare "›": the width is only the floor it can shrink to
+   (a short name keeps its own size), the basis is the whole name. */
 .page-meta .crumb-part {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: calc(4ch + 12px);
-  flex: 0 1 auto;
+  width: calc(4ch + 12px);
+  flex: 0 1 content;
 }
 /* Short of room (a new note's paper choice beside a long folder name), the folders shorten first; the class only
    once they are down to their few letters. (Beside a factor this large, the class's share rounds to nothing.) */
