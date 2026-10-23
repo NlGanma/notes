@@ -77,17 +77,36 @@ const boxOver = async () => {
   await page.mouse.up();
 };
 await boxOver();
-await page.waitForSelector(`${V} .ink-sel-menu`);
-await shot(page, 'ai-03-snip');
-await page.click(`${V} .ink-sel-menu .sel-btn:has-text("Ask")`);
 await page.waitForSelector(composerAtts);
-check(!(await page.locator(`${V} .snip-ask`).count()), 'with the assistant open, Ask on a selection opens no composer on the page');
+await page.waitForTimeout(200);
+check(
+  (await page.locator(`${V} .ink-sel-menu`).count()) === 1 && !(await page.locator(`${V} .snip-ask`).count()),
+  'with the assistant open, letting go of the box puts the area in its composer; the ink it caught stays selected',
+);
 check((await page.locator(`${composerAtts} img`).count()) > 0, 'the area went into the assistant’s composer as a picture');
 check(/Text in that area/.test((await page.locator(composerAtts).allTextContents()).join(' ')), '…with the typed text inside the box');
+await shot(page, 'ai-03-snip');
+const attsBefore = await page.locator(composerAtts).count();
+await page.click(`${V} .ink-sel-menu .sel-btn:has-text("Ask")`);
+await page.waitForTimeout(400);
+check(
+  (await page.locator(composerAtts).count()) === attsBefore && !(await page.locator(`${V} .snip-ask`).count()),
+  'Ask on the selection uses that composer too, without a second picture or a composer on the page',
+);
 await page.locator('.assistant textarea').fill('What does this say?');
 await page.locator('.assistant textarea').press('Enter');
 await waitIdle();
 check((await page.locator('.assistant .msg.is-user').last().locator('.msg-att-chip, .msg-att-img').count()) > 0, 'sending it asks about that area');
+const worked = page.locator(`${V} .ink-block-node`).first();
+await worked.scrollIntoViewIfNeeded();
+await worked.hover();
+await worked.locator('.ink-more').first().click();
+await page.click('.ink-menu .menu-item:has-text("Ask about this")');
+await page.waitForTimeout(300);
+check(
+  !(await page.locator(`${V} .snip-ask`).count()) && /Handwriting/.test((await page.locator(composerAtts).allTextContents()).join(' ')),
+  'with the assistant open, a handwriting area’s Ask about this… goes into its composer too',
+);
 
 // 4b. With the assistant closed, the same box's Ask opens the composer on the page; Explain asks at once.
 await page.click('.top-btn:has-text("Assistant"), .top-btn[title^="Assistant"]');

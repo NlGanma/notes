@@ -477,6 +477,11 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     askAbout: (blockId: string) => {
       const b = layoutRef.current.blocks.find((x) => x.id === blockId);
       if (!b) return;
+      // The assistant is open: the question is typed there, not in a second composer on the page.
+      if (useUI.getState().assistant) {
+        propsRef.current.onAttach(blockRequest(b));
+        return;
+      }
       // Under the writing itself; an equation (or an empty area) is as wide as the column.
       const bb = unionBounds(b.ink.map(strokeBounds));
       const width = wrapRef.current?.offsetWidth ?? 600;
@@ -584,13 +589,17 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     void askRegion(region, { ...frame, maxY: frame.maxY + 5 * inv }, false);
   }
 
+  /** A handwriting area's ink, or an equation's text, as Ask sends it. */
+  function blockRequest(b: BlockBox): Omit<InkAskRequest, 'mode' | 'prompt'> {
+    const strokes = b.ink.map((s) => translateStroke(s, 0, b.top));
+    return { strokes, blockIds: [b.id], label: b.type === 'mathBlock' ? 'Equation' : 'Handwriting' };
+  }
+
   async function submitAsk(a: AskAt, mode: AskMode, prompt?: string) {
     if (a.blockId) {
       const b = layoutRef.current.blocks.find((x) => x.id === a.blockId);
       setAsk(null);
-      if (!b) return;
-      const strokes = b.ink.map((s) => translateStroke(s, 0, b.top));
-      propsRef.current.onAsk({ mode, prompt, strokes, blockIds: [b.id], label: b.type === 'mathBlock' ? 'Equation' : 'Handwriting' });
+      if (b) propsRef.current.onAsk({ ...blockRequest(b), mode, prompt });
       return;
     }
     if (!a.region) return;
@@ -633,8 +642,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     if (prev) items = [...prev.items, ...items.filter((i) => !prev.items.some((p) => p.strokeId === i.strokeId))];
     if (items.length) {
       const sel = selectionFromItems(items);
-      if (sel) sel.area = prev?.area ? unionBounds([prev.area, r])! : r;
+      if (!sel) return;
+      sel.area = prev?.area ? unionBounds([prev.area, r])! : r;
       setSelection(sel);
+      // With the assistant open, the box goes straight into its composer; the ink stays selected.
+      if (useUI.getState().assistant) {
+        const frame = selectionFrame(sel.bounds, 1 / s).frame;
+        void capture(unionBounds([sel.area, frame])!).then((req) => propsRef.current.onAttach(req));
+      }
       return;
     }
     // Nothing caught (typed text, an equation, a scan): the box stays, as an area of the page to ask about.
