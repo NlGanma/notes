@@ -139,7 +139,7 @@ export function handleGlobalKey(e: KeyboardEvent) {
     // in whichever note was last edited, even one that isn't on screen.
     if (!e.altKey && !ownsUndo(document.activeElement)) {
       map['z'] = () => runCommand(e.shiftKey ? 'redo' : 'undo');
-      if (!e.shiftKey) map['y'] = () => runCommand('redo');
+      if (!e.shiftKey && currentNoteId()) map['y'] = () => runCommand('redo');
     }
   }
   const fn = map[key];

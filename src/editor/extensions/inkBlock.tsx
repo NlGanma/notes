@@ -106,10 +106,18 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const moreRef = useRef<HTMLButtonElement>(null);
-  // The ⋯ it hangs from goes away under the marker, highlighter and eraser: so does what was read.
+  // The ⋯ it hangs from goes away under the marker, highlighter and eraser, and moves when the page scrolls: so does
+  // what was read.
   useEffect(() => {
     if (tool !== 'text' && tool !== 'lasso') setShowTranscript(false);
   }, [tool]);
+  useEffect(() => {
+    const scroller = showTranscript ? rootRef.current?.closest('.note-scroll') : null;
+    if (!scroller) return;
+    const close = () => setShowTranscript(false);
+    scroller.addEventListener('scroll', close, { passive: true, once: true });
+    return () => scroller.removeEventListener('scroll', close);
+  }, [showTranscript]);
 
   const line = () => lineHeightOf(editor.view.dom);
   const item = (icon: React.ReactNode, label: string, run: () => void, hint?: string, danger?: boolean) => (
