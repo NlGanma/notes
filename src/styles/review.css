@@ -701,8 +701,8 @@
 .rv-answered.is-partial {
   background: var(--bg-subtle);
 }
-.rv-retry .rv-input {
-  margin-top: 4px;
+.rv-retry {
+  margin-top: 16px;
 }
 
 /* A self-check: the notes' answer, then three grades. */

@@ -104,6 +104,7 @@ await page.click('.rv-row.is-group:has-text("Calculus I") .rv-box');
 const label = (await page.locator('.rv-panel-label').textContent()) ?? '';
 check(/Calculus I/.test(label) && /Spanish II/.test(label), `two classes picked together (“${label}”)`);
 check(await page.locator('.rv-check:has-text("Mix classes") input:not([disabled])').count(), '…and mixing them is offered');
+check(await page.locator('.rv-check:has-text("Ask how sure") input').count(), '…and so is asking how sure (setup is the one place for both)');
 const statsText = (await page.locator('.rv-panel-stats').textContent()) ?? '';
 check(/\d+ ideas?/.test(statsText), `the panel counts the ideas in the notes (${statsText.trim()})`);
 check(await page.locator('.rv-warn').count(), 'untranscribed handwriting is called out as not reviewable');
@@ -126,6 +127,9 @@ await page.click('.rv-start');
 await page.waitForSelector('.rv-session .rv-card');
 const top = (await page.locator('.rv-topbar-label').textContent()) ?? '';
 check(/Calculus I/.test(top) && /Spanish II/.test(top), `the session mixes both classes (${top})`);
+const count = ((await page.locator('.rv-count').textContent()) ?? '').trim();
+check(/^1 \/ 10$/.test(count), `the bar counts the questions (“${count}”)`);
+check(!(await page.locator('.rv-session :text-is("Options")').count()), '…with no Options dialog: ending is the close button or Esc');
 await shot(page, 'review-02-question');
 
 const seq = [];
@@ -217,8 +221,10 @@ for (let turn = 0; turn < 40; turn++) {
     check(/is-right|is-partial/.test(v ?? ''), `a free answer from the notes’ key points is ${/is-right/.test(v ?? '') ? 'right' : 'partly right'} (${item.format})`);
     rubricGraded = true;
   }
-  // Every answer ends with the notes' own words and the mastery change.
+  // Every answer ends with the notes' own words and the mastery change, under a calm verdict.
   check(await page.locator('.rv-mastery-change').count(), `feedback shows the idea’s mastery change (${item.format})`);
+  const verdict = ((await page.locator('.rv-verdict').textContent()) ?? '').trim();
+  if (/!/.test(verdict)) check(false, `the verdict is plain, without cheering (“${verdict}”)`);
   const shown = s.shownAt;
   await page.click('.rv-next');
   await page.waitForFunction((t) => {
@@ -247,6 +253,9 @@ check(/Session complete/.test((await page.locator('.rv-summary-head').textConten
 const rows = await page.locator('.rv-class-row .rv-class-name').allTextContents();
 check(rows.includes('Calculus I') && rows.includes('Spanish II'), `…with progress for each class (${rows.join(', ')})`);
 check(/next review/.test((await page.locator('.rv-class-meta').first().textContent()) ?? ''), '…and when to come back');
+const line = (await page.locator('.rv-summary-sub').textContent()) ?? '';
+check(/\d+ questions? · \d+ right · \d+ min/.test(line), `…and the numbers in one plain line (${line})`);
+check((await page.locator('.rv-summary-actions .btn.is-primary').count()) === 1, '…and Done is its one primary action');
 await shot(page, 'review-05-summary');
 await page.click('.rv-summary-actions .btn.is-primary');
 
@@ -289,7 +298,10 @@ const endedEarly = await running();
 await page.keyboard.press('Escape');
 if (await running()) await page.keyboard.press('Escape');
 await page.waitForSelector('.rv-summary');
-if (endedEarly) check(/Stopped after \d+ question/.test((await page.locator('.rv-summary-head').textContent()) ?? ''), 'a session ended early says it stopped');
+if (endedEarly) {
+  const head = (await page.locator('.rv-summary-head').textContent()) ?? '';
+  check(/Stopped after \d+ question/.test(head) && !/Nice job|!/.test(head), `a session ended early says it stopped, plainly (“${head.slice(0, 60)}”)`);
+}
 await page.click('.rv-summary-actions .btn.is-primary');
 
 // ---------------------------------------------------------------- persistence

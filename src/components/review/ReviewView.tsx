@@ -125,6 +125,9 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
         ? `You’ve finished these notes for now. Next review ${dayLabel(stats.next)}.`
         : null;
   const label = selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet';
+  // The column names the classes; the note count starts the stats line under them.
+  const cut = label.lastIndexOf(' · ');
+  const who = selected.size && cut > 0 ? label.slice(0, cut) : label;
   const start = () => useReview.getState().start([...selected]);
 
   return (
@@ -154,12 +157,12 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
               <ReviewPicker selected={selected} onChange={set} />
 
               <aside className="rv-panel" aria-label="Review options">
-                <div className={cx('rv-panel-label', !selected.size && 'is-none')} title={label}>
-                  {label}
+                <div className={cx('rv-panel-label', !selected.size && 'is-none')} title={who}>
+                  {who}
                 </div>
                 {selected.size > 0 && (
                   <div className="rv-panel-stats">
-                    {plural(stats.total, 'idea')}
+                    {plural(selected.size, 'note')} · {plural(stats.total, 'idea')}
                     {part(stats.fresh, 'new', 'fresh', 'Pick only the notes with new ideas')}
                     {part(stats.learning, 'learning', 'learning', 'Pick only the notes with ideas you’re still learning')}
                     {part(stats.mastered, 'mastered')}
@@ -209,7 +212,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                           </button>
                         </Fragment>
                       ))}{' '}
-                      isn’t transcribed yet, so it can’t be reviewed. Open the note and use “Read handwriting”.
+                      isn’t read yet. Open the note and use “Read handwriting” to review it.
                     </span>
                   </div>
                 )}

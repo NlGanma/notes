@@ -528,7 +528,7 @@ function Feedback({ current }: { current: Current }) {
     <section className={cx('rv-feedback', `is-${tone}`)} aria-live="polite">
       <div className="rv-feedback-head">
         <span className="rv-feedback-icon" aria-hidden>
-          {tone === 'neutral' ? <BookOpen size={16} /> : tone === 'right' ? <Check size={16} strokeWidth={2.5} /> : <X size={16} strokeWidth={2.5} />}
+          {idk || fb.verdict === 'partial' ? <BookOpen size={14} /> : fb.verdict === 'right' || current.overridden ? <Check size={14} strokeWidth={2.75} /> : <X size={14} strokeWidth={2.75} />}
         </span>
         <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
         {fb.note && <div className="rv-grade-note">{fb.note}</div>}
