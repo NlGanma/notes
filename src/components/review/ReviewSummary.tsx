@@ -173,7 +173,7 @@ export function ReviewSummary() {
                   {summary.thin.length === 1 ? 'it' : 'them'} in more depth.
                 </div>
               )}
-              {summary.notReviewable.length > 0 && <div>Not reviewable yet (handwriting not transcribed): {summary.notReviewable.join(', ')}</div>}
+              {summary.notReviewable.length > 0 && <div>Handwriting not read yet: {summary.notReviewable.join(', ')}.</div>}
             </div>
           )}
         </div>

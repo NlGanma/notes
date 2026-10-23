@@ -1,5 +1,7 @@
 import type { FolderMeta, NoteDoc } from '../vault/types';
 import { classForFolder, HOMEWORK_SUBFOLDER, listClasses, type ClassInfo } from '../classes';
+import { displayTitle } from '../displayTitle';
+import { unreadSections } from './concepts';
 
 /**
  * What can be reviewed, organised the way the student already filed it:
@@ -87,6 +89,12 @@ export function selectionLabel(groups: ReviewGroup[], ids: Set<string>): string 
   const count = ids.size;
   const who = names.length <= 2 ? names.join(' + ') : `${names.slice(0, 2).join(', ')} + ${names.length - 2} more`;
   return `${who}${who ? ' · ' : ''}${count} ${count === 1 ? 'note' : 'notes'}`;
+}
+
+/** Where a note's unread handwriting is, as the student knows the note: "Lecture 4 › Worked example", or just its name. */
+export function unreadLabels(note: NoteDoc): string[] {
+  const name = displayTitle(note);
+  return [...new Set(unreadSections(note).map((s) => (s ? `${name} › ${s}` : name)))];
 }
 
 /** The class (or folder group) a note belongs to, for interleaving across classes. */

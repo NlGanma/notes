@@ -48,7 +48,15 @@ export interface Concept {
   /** The teacher flagged it (highlighted, "on the exam"). */
   exam?: boolean;
   stale?: boolean;
+  /**
+   * The text before an untitled note's first heading. It has no name to ask by, so its questions say
+   * "this note" and the screen calls it by the note's name; `name` stays the key its id was made from.
+   */
+  whole?: boolean;
 }
+
+/** The name an untitled note's opening text has always been stored under (its id is made from it). */
+export const WHOLE_NOTE = 'This note';
 
 export const UNTRANSCRIBED = '[Handwritten notes — not transcribed yet]';
 
@@ -222,7 +230,9 @@ export function heuristicConcepts(note: NoteDoc, opts: ExtractOpts = {}): Concep
     } else if (sectionFacts.length && !section && sectionFacts.reduce((n, f) => n + contentWords(f.text).length, 0) >= 6) {
       // Text before the first heading: named after the note.
       const kind: ConceptKind = /\$\$/.test(chunk.text) ? 'formula' : 'fact';
-      add({ ...base, name: (note.meta.title || 'This note').split(/\s+[—–-]\s+/)[0], kind, facts: sectionFacts.slice(0, 8) });
+      const facts = sectionFacts.slice(0, 8);
+      if (note.meta.title) add({ ...base, name: note.meta.title.split(/\s+[—–-]\s+/)[0], kind, facts });
+      else add({ ...base, name: WHOLE_NOTE, kind, facts, whole: true });
     }
   }
   for (const c of out) {
@@ -249,9 +259,14 @@ export function capOf(c: Pick<Concept, 'kind' | 'facts' | 'partners'>): { cap: L
   return { cap, thin: false };
 }
 
-/** Sections a note has that can't be reviewed yet (handwriting with no transcript). */
-export function notReviewable(note: NoteDoc): string[] {
+/** Sections whose handwriting has no transcript yet ('' for handwriting before the first heading). */
+export function unreadSections(note: NoteDoc): string[] {
   return chunkNote(note)
     .filter((c) => c.text.includes(UNTRANSCRIBED))
-    .map((c) => c.section.split(' › ').pop() || note.meta.title || 'Handwriting');
+    .map((c) => c.section.split(' › ').pop() ?? '');
+}
+
+/** Sections a note has that can't be reviewed yet (handwriting with no transcript). */
+export function notReviewable(note: NoteDoc): string[] {
+  return unreadSections(note).map((s) => s || note.meta.title || 'Handwriting');
 }

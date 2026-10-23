@@ -4,14 +4,12 @@ import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
 import { dueNotes, useReview } from '../../state/review';
-import { buildReviewTree, isReviewable, selectionLabel } from '../../lib/review/tree';
-import { notReviewable } from '../../lib/review/concepts';
+import { buildReviewTree, isReviewable, selectionLabel, unreadLabels } from '../../lib/review/tree';
 import { dayLabel } from '../../lib/review/session';
 import { ReviewPicker } from './ReviewPicker';
 import { ReviewSession } from './ReviewSession';
 import { ReviewSummary } from './ReviewSummary';
 import { countIdeas, Switch } from './parts';
-import { displayTitle } from '../../lib/displayTitle';
 import { cx, plural } from '../../lib/util';
 
 const LENGTHS: { n: number; label: string }[] = [
@@ -68,8 +66,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
     const blocked: { id: string; label: string }[] = [];
     const groups = new Set<string>();
     for (const n of picked) {
-      const name = displayTitle(n);
-      for (const s of notReviewable(n)) blocked.push({ id: n.meta.id, label: s === n.meta.title ? name : `${name} › ${s}` });
+      for (const label of unreadLabels(n)) blocked.push({ id: n.meta.id, label });
       groups.add(tree.find((g) => g.chapters.some((ch) => ch.notes.some((x) => x.meta.id === n.meta.id)))?.key ?? '');
     }
     return { ...counts, blocked, groups: groups.size };

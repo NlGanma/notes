@@ -531,6 +531,8 @@ function SelfGrade({ current }: { current: Current }) {
 function Feedback({ current }: { current: Current }) {
   const fb = current.feedback!;
   const missedBefore = useReview((s) => (s.current ? (s.current.sessBefore?.misses[s.current.concept.id] ?? 0) : 0));
+  // The idea as the summary will name it (an untitled note's own text goes by the note's name).
+  const ideaName = useReview((s) => s.pool.find((p) => p.id === current.concept.id)?.name) ?? current.concept.name.replace(/\*\*/g, '');
   // "I don't know" is no mistake: the answer, in a neutral tone rather than red.
   const idk = !!current.dontKnow;
   const canRetry = canRetryOf(current);
@@ -597,7 +599,9 @@ function Feedback({ current }: { current: Current }) {
       )}
 
       <div className="rv-mastery-change" title="How well you know this idea">
-        <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
+        <span className="rv-mastery-name" title={ideaName}>
+          {ideaName}
+        </span>
         <MasteryBar before={fb.before} after={fb.after} />
         <span className="rv-pct">
           {fb.before}% → {fb.after}%

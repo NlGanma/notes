@@ -6,14 +6,15 @@ import { parseJSONLoose } from '../lib/ai/json';
 import { chunkNote, tokenize, type Chunk } from '../lib/ai/rag';
 import { expandProof } from '../lib/ai/quote';
 import { classForFolder, classInfo } from '../lib/classes';
-import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
-import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
+import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel, unreadLabels } from '../lib/review/tree';
+import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, type Concept, type Fact } from '../lib/review/concepts';
 import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
 import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
 import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
 import { conceptsTask, gradeTask, LEVEL_HINT, MASTERY_ENGINE_PROMPT, nudgeTask, questionTask, SCHEMAS } from '../lib/review/prompts';
 import { debounce, hashString, uid } from '../lib/util';
+import { displayTitle } from '../lib/displayTitle';
 import type { NoteDoc, VaultBackend } from '../lib/vault/types';
 
 /**
@@ -632,7 +633,8 @@ export const useReview = create<ReviewState>((set, get) => {
           cap: c.cap,
           needs: c.needs,
           partners: c.partners,
-          name: c.name.replace(/\*\*/g, ''),
+          // Shown on screen only: an untitled note's opening text goes by the note's name.
+          name: c.whole ? displayTitle(note) : c.name.replace(/\*\*/g, ''),
           thin: c.thin,
         }),
       );
@@ -821,7 +823,7 @@ export const useReview = create<ReviewState>((set, get) => {
       get().file.states,
       {
         label: selectionLabel(tree, new Set(sess.noteIds)),
-        notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? notReviewable(noteOf(id)!).map((s) => `${noteOf(id)!.meta.title} › ${s}`) : [])),
+        notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? unreadLabels(noteOf(id)!) : [])),
         misconceptions: get().misconceptions,
         overrides: get().overrides,
         stopped,
