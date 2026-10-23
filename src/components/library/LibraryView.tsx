@@ -114,6 +114,7 @@ export function LibraryView() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const stick = useRef(true);
+  const lastTop = useRef(0);
 
   const [width, setWidth] = useState(1200);
   useLayoutEffect(() => {
@@ -428,8 +429,11 @@ export function LibraryView() {
                 className="lib-scroll"
                 ref={listRef}
                 onScroll={(e) => {
+                  // Only scrolling up lets go of the newest reply: a scroll event can land after more of it arrived.
                   const el = e.currentTarget;
-                  stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                  if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) stick.current = true;
+                  else if (el.scrollTop < lastTop.current - 2) stick.current = false;
+                  lastTop.current = el.scrollTop;
                 }}
               >
                 <div className="lib-column">

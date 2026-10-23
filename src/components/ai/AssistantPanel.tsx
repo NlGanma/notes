@@ -139,6 +139,7 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const stick = useRef(true);
+  const lastTop = useRef(0);
   const allNotes = useVault((s) => s.notes);
   const isHomework = !!note?.meta.homework;
   const linked = note && isHomework ? homeworkSources(note, allNotes) : [];
@@ -268,8 +269,11 @@ export function AssistantPanel() {
         className={cx('assistant-list', !messages.length && 'is-empty')}
         ref={listRef}
         onScroll={(e) => {
+          // Only scrolling up lets go of the newest reply: a scroll event can land after more of it arrived.
           const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) stick.current = true;
+          else if (el.scrollTop < lastTop.current - 2) stick.current = false;
+          lastTop.current = el.scrollTop;
         }}
         // An attached picture that finishes loading makes the list taller after it was scrolled.
         onLoadCapture={(e) => stick.current && (e.currentTarget.scrollTop = e.currentTarget.scrollHeight)}
