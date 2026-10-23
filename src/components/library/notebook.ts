@@ -9,6 +9,7 @@ import { plural } from '../../lib/util';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { toast } from '../common/toast';
+import { friendlyError } from '../../lib/ai/errors';
 
 /** A set of notes Ask your notes reads from as a whole: every note, or one class or folder. */
 export type Notebook = { kind: 'all' } | { kind: 'folder'; path: string };
@@ -105,7 +106,7 @@ export async function saveMarkdownNote(title: string, md: string, folder: string
     toast.info('Saved as a note', title, { label: 'Open', run: () => useUI.getState().openNote(doc.meta.id) });
     return doc.meta.id;
   } catch (e) {
-    toast.error('Couldn’t save the note', String(e));
+    toast.error('Couldn’t save the note', friendlyError(e));
     return null;
   }
 }

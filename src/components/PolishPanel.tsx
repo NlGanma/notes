@@ -7,6 +7,7 @@ import { useSettings, LINE_PX } from '../state/settings';
 import { analyzeNote, type Suggestion } from '../lib/polish';
 import { editors } from '../editor/registry';
 import { toast } from './common/toast';
+import { friendlyError } from '../lib/ai/errors';
 import { cx } from '../lib/util';
 
 const ICONS: Record<Suggestion['icon'], React.ReactNode> = {
@@ -46,7 +47,7 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
       await s.apply(editor, note);
       setDone((d) => [...d, s.id]);
     } catch (e) {
-      toast.error('Couldn’t apply that', String((e as Error).message ?? e));
+      toast.error('Couldn’t apply that', friendlyError(e));
     } finally {
       setBusy(null);
     }
