@@ -254,7 +254,6 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
               onClick={() => t.setEraser({ highlighterOnly: !t.eraser.highlighterOnly })}
               aria-pressed={t.eraser.highlighterOnly}
             >
-              {t.eraser.highlighterOnly && <Check size={14} strokeWidth={2} />}
               Highlighter only
             </button>
           </>

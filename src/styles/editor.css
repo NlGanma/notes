@@ -718,7 +718,7 @@
 .tb-sep {
   width: 1px;
   height: 20px;
-  margin: 0 6px;
+  margin: 0 5px;
   background: var(--border);
   flex: none;
 }
@@ -757,7 +757,7 @@
   opacity: 0.55;
 }
 .tb-tool {
-  width: 34px;
+  width: 32px;
   padding: 0;
 }
 .tb-tool.is-active,
@@ -796,7 +796,7 @@
 /* Sizes: a sample of the line each slot draws. */
 .tb-size {
   position: relative;
-  width: 30px;
+  width: 28px;
   height: 32px;
   display: grid;
   place-items: center;
@@ -868,23 +868,22 @@
   color: var(--text);
 }
 
-/* Eraser: "Whole stroke | Part", and the highlighter-only chip. */
+/* Eraser: "Whole stroke | Part", and the highlighter-only chip. Kept tight so the eraser's bar fits beside
+   a 1000px window's page; the chip is the same width on and off. */
 .tb-seg.seg {
   height: 30px;
 }
 .tb-seg.seg button {
   height: 28px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 13px;
 }
 .tb-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   height: 30px;
-  padding: 0 10px;
-  margin-left: 2px;
+  padding: 0 9px;
   border-radius: var(--radius);
   font-size: 13px;
   color: var(--text-2);
@@ -897,7 +896,6 @@
   color: var(--text);
 }
 .tb-chip.is-on {
-  padding-left: 7px;
   background: var(--bg-active);
   color: var(--text);
   box-shadow: none;
