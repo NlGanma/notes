@@ -71,6 +71,8 @@ export function Popover({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        // From the keyboard, focus goes back to what opened it rather than to the page.
+        if (anchor instanceof HTMLElement && ref.current?.contains(document.activeElement)) anchor.focus();
         onClose();
       }
     };

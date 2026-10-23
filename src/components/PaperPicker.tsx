@@ -66,8 +66,11 @@ export function PaperPicker({
  */
 export function PaperTiles({ last, onPick }: { last: Paper; onPick(p: Paper): void }) {
   const ref = useRef<HTMLDivElement>(null);
+  // A frame later: the popover holding the tiles is still hidden while it measures where to sit,
+  // and a hidden button can't take the focus.
   useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>(`[data-paper="${last}"]`)?.focus();
+    const id = requestAnimationFrame(() => ref.current?.querySelector<HTMLButtonElement>(`[data-paper="${last}"]`)?.focus());
+    return () => cancelAnimationFrame(id);
   }, [last]);
   return (
     <div

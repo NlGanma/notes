@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
-import { launch, shot, BASE, OUT, createClassDialog, newNoteFromSidebar, noteMenuItem } from './lib.mjs';
+import { launch, shot, BASE, OUT, createClassDialog, newNoteFromSidebar, noteMenuItem, showSidebar } from './lib.mjs';
 
 const MOCK = process.env.MOCK_URL || 'http://127.0.0.1:11434';
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
@@ -268,6 +268,36 @@ check(
   '…and moves it there',
 );
 await page.keyboard.press('Escape');
+
+// ---------------------------------------------------------------- New note from the keyboard
+// The paper used last has the focus; ← and → move it, Enter makes the note on that paper.
+await showSidebar(page);
+await page.click('.sidebar .side-new');
+await page.waitForSelector('.new-note-pop .paper-opt');
+const lastPaper = await page.evaluate(() => JSON.parse(localStorage.getItem('nib.settings') || '{}').state?.paper);
+const focusedPaper = () => page.evaluate(() => document.activeElement?.getAttribute('data-paper') ?? null);
+await page.waitForFunction((p) => document.activeElement?.getAttribute('data-paper') === p, lastPaper, { timeout: 2000 }).catch(() => {});
+check((await focusedPaper()) === lastPaper, `the New note menu opens with the last paper used in focus (${lastPaper})`);
+await page.keyboard.press('ArrowLeft');
+const pickedPaper = await focusedPaper();
+check(pickedPaper && pickedPaper !== lastPaper, `← moves the focus to the next paper (${pickedPaper})`);
+const beforeId = await page.evaluate(() => window.__nib.ui.getState().view.id ?? null);
+await page.keyboard.press('Enter');
+await page.waitForFunction((b) => {
+  const v = window.__nib.ui.getState().view;
+  return v.kind === 'note' && v.id !== b;
+}, beforeId);
+check(
+  await page.evaluate((p) => {
+    const v = window.__nib.ui.getState().view;
+    return window.__nib.vault.getState().notes[v.id]?.meta.paper === p;
+  }, pickedPaper),
+  '…and Enter makes a note on that paper',
+);
+await page.click('.sidebar .side-new');
+await page.waitForFunction(() => document.activeElement?.closest('.new-note-pop'));
+await page.keyboard.press('Escape');
+check(await page.evaluate(() => !document.querySelector('.new-note-pop') && !!document.activeElement?.classList.contains('side-new')), 'Esc closes it and gives the focus back to New note');
 
 // ---------------------------------------------------------------- renaming a class keeps links
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
