@@ -63,9 +63,12 @@
   inset: 12px;
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-xl);
-  background: rgba(250, 249, 245, 0.85);
+  /* Nearly opaque: the page under it is a hint of where the drop lands, not text to read through. */
+  background: rgba(250, 249, 245, 0.94);
   display: grid;
   place-items: center;
+  padding: 24px;
+  text-align: center;
   font-size: 15px;
   color: var(--text-2);
   pointer-events: none;
@@ -448,14 +451,26 @@
 .class-ask-send:disabled {
   opacity: 0.4;
 }
+/* Laid out like the Ask page's composer status: the state, then Open settings at the far end. */
 .class-ask-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-bottom: 6px;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 0 0 8px;
   font-size: 13px;
   line-height: 18px;
   color: var(--text-2);
+  box-shadow: 0 1px 0 var(--hairline);
+  cursor: default;
+}
+.class-ask-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.class-ask-status .link-btn {
+  flex: none;
+  margin: 0;
 }
 .class-ask-dot {
   width: 6px;

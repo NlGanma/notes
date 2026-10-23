@@ -650,6 +650,10 @@ button.hw-chip:hover,
   padding: 4px 16px 8px;
   outline: none;
 }
+/* Inside a folder the way back takes 28px, which the list gives up. */
+.link-up + .link-list {
+  height: calc(min(380px, 50vh) - 28px);
+}
 .link-row {
   display: flex;
   align-items: center;
