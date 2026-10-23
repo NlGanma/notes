@@ -283,3 +283,18 @@ export function suggestClass(note: NoteDoc, notes: Record<string, NoteDoc>, fold
   const classTokens = new Set(chunks.filter((c) => classForFolder(c.folder, folderMeta) === best.path).flatMap((c) => tokenize(`${c.section} ${c.text}`)));
   return { cls, terms: qTokens.filter((t) => classTokens.has(t) && t.length > 3).slice(0, 4) };
 }
+
+/**
+ * Move to… doesn't list the classes' Homework folders: homework gets there by picking its class, and a plain
+ * note filed there would drop out of the class page.
+ */
+export function homeworkFolders(folderMeta: Record<string, FolderMeta>): string[] {
+  return Object.keys(folderMeta)
+    .filter((f) => !f.includes('/') && isClassFolder(f, folderMeta))
+    .map((f) => homeworkFolderFor(f));
+}
+
+/** Where Move to… puts a note: homework filed into a class goes into that class's Homework folder. */
+export function moveTarget(note: NoteDoc, choice: string, folderMeta: Record<string, FolderMeta>): string {
+  return note.meta.homework && choice && isClassFolder(choice, folderMeta) ? homeworkFolderFor(choice) : choice;
+}

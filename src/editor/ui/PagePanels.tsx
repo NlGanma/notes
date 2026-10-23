@@ -7,14 +7,10 @@ import { normalizePaper, PAPERS, type Paper } from '../../lib/paper';
 import { PaperPicker } from '../../components/PaperPicker';
 import { PolishPanel } from '../../components/PolishPanel';
 import { MOD } from '../../lib/platform';
-import { HOMEWORK_SUBFOLDER, isClassFolder } from '../../lib/classes';
-import { displayTitle } from '../../lib/displayTitle';
 import { exportNote } from '../../lib/export';
-import { pickFolder } from '../../components/common/dialogs';
+import { moveNoteTo } from '../../components/FileTree';
 
 export { PAPERS };
-
-const short = (s: string) => (s.length > 40 ? `${s.slice(0, 39)}…` : s);
 
 /**
  * The note's ⋯ menu, the one home of what can be done to the note as a whole: its paper, Polish, Export,
@@ -66,16 +62,6 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
 
   const setPaper = (p: Paper) => useVault.getState().updateMeta(id, { paper: p, updated: note.meta.updated });
 
-  const moveTo = async () => {
-    onDone();
-    const choice = await pickFolder(`Move ${short(displayTitle(note))} to…`, note.meta.folder);
-    if (choice === null) return;
-    // Homework filed into a class goes into that class's Homework folder.
-    const { folderMeta } = useVault.getState();
-    const target = note.meta.homework && choice && isClassFolder(choice, folderMeta) ? `${choice}/${HOMEWORK_SUBFOLDER}` : choice;
-    if (target !== note.meta.folder) useVault.getState().moveNote(id, target);
-  };
-
   return (
     <div className="menu more-menu">
       <div className="more-paper">
@@ -92,7 +78,13 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
         <span className="menu-label">Export</span>
         <ChevronRight size={14} className="menu-chev" />
       </button>
-      <button className="menu-item" onClick={() => void moveTo()}>
+      <button
+        className="menu-item"
+        onClick={() => {
+          onDone();
+          void moveNoteTo(note);
+        }}
+      >
         <FolderInput size={16} />
         <span className="menu-label">Move to…</span>
       </button>
