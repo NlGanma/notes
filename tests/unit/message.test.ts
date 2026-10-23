@@ -143,6 +143,23 @@ test('Copy says which notes the [n] point to', () => {
   assert.match(copyText(msg({ ownOnly: true, shown: OWN })), /^> \*\*Not from your notes/);
 });
 
+test('an untitled note is cited by the name the app gives it, not the index’s “Untitled”', async () => {
+  const { useVault } = await import('../../src/state/vault');
+  const prev = useVault.getState().notes;
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell membranes' }] }] };
+  useVault.setState({ notes: { u1: { version: 1, meta: { id: 'u1', title: '', folder: '', tags: [], created: 1, updated: 1, paper: 'ruled' }, content: doc } } as never });
+  try {
+    const src = { n: 1, noteId: 'u1', title: 'Untitled', section: '', folder: '', blockId: null, text: 'Cell membranes are lipid bilayers.' };
+    assert.match(copyText(msg({ content: 'x', shown: 'Lipids [1].', sources: [src] })), /Sources: \[1\] Cell membranes$/);
+    const { SourcesList } = await import('../../src/components/ai/Citations');
+    assert.match(text(renderToStaticMarkup(createElement(SourcesList, { content: 'Lipids [1].', sources: [src] }))), /1 Cell membranes Note/);
+    const gone = { ...src, noteId: 'deleted' };
+    assert.match(copyText(msg({ content: 'x', shown: 'Lipids [1].', sources: [gone] })), /Sources: \[1\] Untitled$/, 'a note gone since keeps the stored name');
+  } finally {
+    useVault.setState({ notes: prev });
+  }
+});
+
 test('a cited passage previews highlights as words, not ==marks==', () => {
   assert.equal(trimExcerpt('## Squeeze theorem\nThe professor said this one ==will definitely be on the exam== — know it.'), 'The professor said this one will definitely be on the exam — know it.');
   assert.equal(trimExcerpt('a == b'), 'a == b');
