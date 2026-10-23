@@ -50,11 +50,12 @@
   --clay-hover: #b5543a;
   --clay-soft: #f6e9e2;
 
-  /* The AI is quiet: no gradients, clay only where Claude uses it (Send, the streaming dot). */
-  --ai: #c6613f;
-  --ai-2: #d97757;
-  --ai-soft: #f6e9e2;
-  --ai-grad: #c6613f;
+  /* The AI is quiet: ink like everything else, no gradients. Clay only where Claude uses it (Send,
+     the streaming dots and caret), and those name --clay-strong themselves. */
+  --ai: var(--text);
+  --ai-2: var(--text-2);
+  --ai-soft: var(--bg-subtle);
+  --ai-grad: var(--text);
 
   --danger: #b53333;
   --danger-strong: #8a2424;
