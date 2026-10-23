@@ -320,6 +320,8 @@ console.log(errors.join('\n') || 'no page errors');
   await off.route('**/api/**', (r) => r.abort());
   await off.goto(BASE);
   await off.waitForSelector('[data-ai-status="offline"]', { timeout: 15000 });
+  // A new profile is seeded first (the Welcome note opens when it's done).
+  await off.waitForSelector('.note-view:not(.is-hidden) .page-title', { timeout: 15000 });
   await off.click('.nav-item:has-text("Ask your notes")');
   await off.waitForSelector('.library .composer-status.is-offline');
   await off.fill('.library-composer textarea', 'What is a limit?');
@@ -342,6 +344,7 @@ console.log(errors.join('\n') || 'no page errors');
     await r.continue();
   });
   await slow.goto(BASE);
+  await slow.waitForSelector('.note-view:not(.is-hidden) .page-title', { timeout: 15000 });
   await slow.click('.nav-item:has-text("Ask your notes")');
   await slow.waitForSelector('.library .composer-status.is-loading');
   await slow.fill('.library-composer textarea', 'What is the squeeze theorem?');

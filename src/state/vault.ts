@@ -399,6 +399,8 @@ export const useVault = create<VaultState>((set, get) => {
       const seededKey = `${SEEDED_KEY}:${backend.label}`;
       if (!snap.notes.length && !localStorage.getItem(seededKey)) {
         localStorage.setItem(seededKey, '1');
+        // The app is usable while the seed is written: wherever the student goes meanwhile, they stay.
+        const startView = useUI.getState().view;
         const { buildSeedNotes, SEED_CLASSES } = await import('../lib/vault/seed');
         const seeds = buildSeedNotes();
         for (const s of seeds) normalizeDocJSON(s.content as never);
@@ -416,7 +418,7 @@ export const useVault = create<VaultState>((set, get) => {
           revision: get().revision + 1,
         });
         await backend.saveFolderMeta(folderMeta);
-        useUI.getState().openNote(seeds[0].meta.id, { newTab: true });
+        if (useUI.getState().view === startView) useUI.getState().openNote(seeds[0].meta.id, { newTab: true });
       }
     } catch (err) {
       console.error(err);
