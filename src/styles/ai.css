@@ -169,7 +169,6 @@
 .composer {
   margin: 0 12px 12px;
   flex: none;
-  min-height: 96px;
 }
 .composer-input {
   display: block;
@@ -179,12 +178,12 @@
   resize: none;
   font-size: 15px;
   line-height: 22px;
+  min-height: 46px;
   max-height: 180px;
   padding: 6px 8px 4px;
   background: transparent;
   color: var(--text);
   user-select: text;
-  flex: 1;
 }
 .composer-input::placeholder {
   color: var(--text-4);
@@ -272,6 +271,9 @@
   height: 100%;
   object-fit: cover;
   background: #fff;
+  border-radius: inherit;
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
 }
 .att-label {
   min-width: 0;

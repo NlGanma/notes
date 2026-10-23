@@ -140,7 +140,9 @@ export function ArtifactPanel({
           {!parsed && (
             <div className="art-prose" {...citeHover(sources)}>
               {json && msg.status === 'done' && msg.dropped ? (
-                <div className="msg-added">None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.</div>
+                <div className="msg-added">
+                  None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+                </div>
               ) : (
                 <MessageView
                   // Half-written cards or questions are JSON: a stopped one shows just "Stopped".

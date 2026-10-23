@@ -179,10 +179,18 @@ export function Flashcards({
               </button>
             )}
             <span className="grow" />
-            <button className={cx('btn is-secondary is-small fc-mark-btn is-missed', marks[i] === 'missed' && 'is-on')} onClick={() => mark('missed')} title="Missed it (M)">
+            <button
+              className={cx('btn is-secondary is-small fc-mark-btn is-missed', marks[i] === 'missed' && 'is-on')}
+              onClick={() => mark('missed')}
+              title="Missed it (M)"
+            >
               <X size={16} /> Missed it
             </button>
-            <button className={cx('btn is-secondary is-small fc-mark-btn is-got', marks[i] === 'got' && 'is-on')} onClick={() => mark('got')} title="Got it (G)">
+            <button
+              className={cx('btn is-secondary is-small fc-mark-btn is-got', marks[i] === 'got' && 'is-on')}
+              onClick={() => mark('got')}
+              title="Got it (G)"
+            >
               <Check size={16} /> Got it
             </button>
           </div>

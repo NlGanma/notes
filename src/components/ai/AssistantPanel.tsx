@@ -51,7 +51,12 @@ const TUTOR_FOLLOWUPS = ['Give me another hint', 'Check my work so far', 'Show j
 
 /** Homework quick actions — each one answers strictly from the linked notes. */
 const HOMEWORK_STARTERS: Starter[] = [
-  { icon: <Compass size={16} />, label: 'How do I approach this?', mode: 'explain', prompt: 'How should I approach this problem, using the method from my notes?' },
+  {
+    icon: <Compass size={16} />,
+    label: 'How do I approach this?',
+    mode: 'explain',
+    prompt: 'How should I approach this problem, using the method from my notes?',
+  },
   { icon: <Lightbulb size={16} />, label: 'Give me a hint', mode: 'tutor', prompt: 'Give me a hint for the next step, based on my notes.' },
   { icon: <SearchCheck size={16} />, label: 'Check my work', mode: 'check', prompt: 'Check my work against the method in my notes.' },
   { icon: <ListOrdered size={16} />, label: 'Solve it the way my notes do', mode: 'solve', prompt: 'Solve this step by step exactly the way my notes do.' },
@@ -59,8 +64,7 @@ const HOMEWORK_STARTERS: Starter[] = [
 
 /** Nothing typed, drawn or pasted yet: there's nothing to ask about. */
 function isBlank(note: NoteDoc): boolean {
-  const empty = (b: JSONContent): boolean =>
-    b.type === 'paragraph' && !(b.content?.length ?? 0) && !(Array.isArray(b.attrs?.ink) && b.attrs.ink.length > 0);
+  const empty = (b: JSONContent): boolean => b.type === 'paragraph' && !(b.content?.length ?? 0) && !(Array.isArray(b.attrs?.ink) && b.attrs.ink.length > 0);
   return (note.content.content ?? []).every(empty);
 }
 
@@ -147,11 +151,24 @@ export function AssistantPanel() {
     inputRef.current?.focus();
   }, [focusTick, noteId]);
 
-  // Auto-scroll while streaming unless the user scrolled up.
+  // Follows the reply as it streams unless the student scrolled up; a new question (from here or the page) always shows,
+  // and the list stays at the bottom while the composer grows under it.
+  const seen = useRef(messages.length);
   useLayoutEffect(() => {
+    if (messages.length > seen.current) stick.current = true;
+    seen.current = messages.length;
     const el = listRef.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useLayoutEffect(() => {
     const el = inputRef.current;
@@ -202,7 +219,8 @@ export function AssistantPanel() {
 
   const lastBot = [...messages].reverse().find((m) => m.role === 'assistant');
   const tutorOn = draft.mode === 'tutor';
-  const tutorActive = tutorOn || lastBot?.mode === 'tutor' || lastBot?.mode === 'check';
+  // Follow-ups answer a hint or a check, not the Tutor chip being switched on.
+  const tutorActive = lastBot?.mode === 'tutor' || lastBot?.mode === 'check';
   const blank = !!note && !isHomework && isBlank(note);
   const starters = isHomework ? HOMEWORK_STARTERS : note && isReviewable(note) ? [EXPLAIN, EXAM, REVIEW] : [EXPLAIN, QUIZ, BULLETS];
 
@@ -231,7 +249,12 @@ export function AssistantPanel() {
         </div>
         <div className="no-drag assistant-head-actions">
           {messages.length > 0 && (
-            <button className="icon-btn is-tiny" onClick={() => noteId && useAssistant.getState().clear(noteId)} title="New conversation" aria-label="New conversation">
+            <button
+              className="icon-btn is-tiny"
+              onClick={() => noteId && useAssistant.getState().clear(noteId)}
+              title="New conversation"
+              aria-label="New conversation"
+            >
               <SquarePen size={16} />
             </button>
           )}
@@ -390,7 +413,13 @@ export function AssistantPanel() {
               <Square size={10} fill="currentColor" />
             </button>
           ) : (
-            <button className="send-btn" onClick={() => send()} disabled={!noteId || !hasInput || !answerable} aria-label="Send" title={answerable ? 'Send' : 'Local AI isn’t running'}>
+            <button
+              className="send-btn"
+              onClick={() => send()}
+              disabled={!noteId || !hasInput || !answerable}
+              aria-label="Send"
+              title={answerable ? 'Send' : 'Local AI isn’t running'}
+            >
               <ArrowUp size={16} strokeWidth={2} />
             </button>
           )}

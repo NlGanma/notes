@@ -181,7 +181,8 @@ export const MessageView = memo(function MessageView({
               ) : (
                 <span key={a.id} className="msg-att-chip" title={a.text}>
                   {a.label}
-                  {a.text ? `: ${a.text.slice(0, 60)}${a.text.length > 60 ? '…' : ''}` : ''}
+                  {/* A snippet of plain text helps; raw TeX or Markdown doesn't (the tooltip has it all). */}
+                  {a.text && !/[$\\]/.test(a.text) ? `: ${a.text.slice(0, 60)}${a.text.length > 60 ? '…' : ''}` : ''}
                 </span>
               ),
             )}

@@ -189,11 +189,25 @@ export function LibraryView() {
     return () => window.removeEventListener('keydown', on);
   }, [art]);
 
-  // Follows the reply as it streams, unless the student scrolled up to read.
+  // Follows the reply as it streams, unless the student scrolled up to read; a new question always shows.
+  const seen = useRef(messages.length);
   useLayoutEffect(() => {
+    if (messages.length > seen.current) stick.current = true;
+    seen.current = messages.length;
     const el = listRef.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, art]);
+  // …and stays at the bottom while the page around it changes size (an output opening beside it).
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [empty]);
 
   useLayoutEffect(() => {
     const el = inputRef.current;
@@ -240,7 +254,10 @@ export function LibraryView() {
     if (o.parsed?.kind === 'quiz') {
       const L = 'ABCDE';
       const md = o.parsed.questions
-        .map((q, k) => `### ${k + 1}. ${q.q}\n\n${q.choices.map((c, ci) => `- ${L[ci]}. ${c}`).join('\n')}\n\n**Answer:** ${L[q.answer]}. ${q.choices[q.answer]}${q.explain ? ` — ${q.explain}` : ''}`)
+        .map(
+          (q, k) =>
+            `### ${k + 1}. ${q.q}\n\n${q.choices.map((c, ci) => `- ${L[ci]}. ${c}`).join('\n')}\n\n**Answer:** ${L[q.answer]}. ${q.choices[q.answer]}${q.explain ? ` — ${q.explain}` : ''}`,
+        )
         .join('\n\n');
       return void saveMarkdownNote(o.title, md, folder, ['quiz']);
     }
@@ -276,7 +293,10 @@ export function LibraryView() {
           : 'Ask about these notes';
 
   const composer = (
-    <div className={cx('library-composer', !count && 'is-off')} onPointerDown={(e) => e.target === e.currentTarget && (e.preventDefault(), inputRef.current?.focus())}>
+    <div
+      className={cx('library-composer', !count && 'is-off')}
+      onPointerDown={(e) => e.target === e.currentTarget && (e.preventDefault(), inputRef.current?.focus())}
+    >
       <ComposerStatus availability={availability} />
       <textarea
         ref={inputRef}
@@ -296,7 +316,12 @@ export function LibraryView() {
       />
       <div className="composer-row">
         <span className="grow" />
-        <button className={cx('scope-chip', scopeEl && 'is-open')} onClick={(e) => setScopeEl(e.currentTarget)} aria-haspopup="menu" title={`Answers come from: ${name}`}>
+        <button
+          className={cx('scope-chip', scopeEl && 'is-open')}
+          onClick={(e) => setScopeEl(e.currentTarget)}
+          aria-haspopup="menu"
+          title={`Answers come from: ${name}`}
+        >
           {cls && <span className="scope-dot" style={{ background: cls.color }} />}
           <span className="scope-chip-label">{name}</span>
           <ChevronDown size={14} />
@@ -332,49 +357,66 @@ export function LibraryView() {
   );
 
   const overlay = width < SIDE_BY_SIDE;
+  // The header names what's being asked (a class, some notes) and the conversation; "All notes" goes without saying.
+  const scoped = scope.kind !== 'all' && scope.kind !== 'tag';
+  const convTitle = empty ? '' : conversationTitle(messages);
   return (
-    <div className="library" ref={rootRef}>
-      <header className="lib-head">
-        <div className="library-title">
-          {cls && <span className="scope-dot" style={{ background: cls.color }} />}
-          <h1 title={name}>{name}</h1>
-          {!empty && (
-            <>
-              <ChevronRight size={14} className="lib-head-sep" aria-hidden />
-              <span className="lib-head-conv" title={conversationTitle(messages)}>
-                {conversationTitle(messages)}
+    <div className={cx('library', art && 'has-artifact')} ref={rootRef}>
+      <div className="lib-main">
+        <header className="lib-head">
+          <div className="library-title">
+            {scoped && (
+              <>
+                {cls && <span className="scope-dot" style={{ background: cls.color }} />}
+                <h1 title={name}>{name}</h1>
+              </>
+            )}
+            {scoped && convTitle && <ChevronRight size={14} className="lib-head-sep" aria-hidden />}
+            {convTitle && (
+              <span className={cx('lib-head-conv', !scoped && 'is-only')} title={convTitle}>
+                {convTitle}
               </span>
-            </>
+            )}
+          </div>
+          <span className="grow" />
+          {reviewing && (
+            <button className="btn is-ghost is-small" onClick={() => useUI.getState().setView({ kind: 'review' })} title="Back to your review session">
+              <ArrowLeft size={16} /> Back to review · {reviewing}
+            </button>
           )}
-        </div>
-        <span className="grow" />
-        {reviewing && (
-          <button className="btn is-ghost is-small" onClick={() => useUI.getState().setView({ kind: 'review' })} title="Back to your review session">
-            <ArrowLeft size={16} /> Back to review · {reviewing}
-          </button>
-        )}
-        {past.length > 0 && (
-          <button className={cx('icon-btn is-tiny', historyEl && 'is-on')} onClick={(e) => setHistoryEl(e.currentTarget)} title="History" aria-label="History" aria-haspopup="menu">
-            <History size={16} />
-          </button>
-        )}
-        {!empty && (
-          <button className="icon-btn is-tiny" onClick={newConversation} title="New conversation" aria-label="New conversation">
-            <SquarePen size={16} />
-          </button>
-        )}
-      </header>
+          {past.length > 0 && (
+            <button
+              className={cx('icon-btn is-tiny', historyEl && 'is-on')}
+              onClick={(e) => setHistoryEl(e.currentTarget)}
+              title="History"
+              aria-label="History"
+              aria-haspopup="menu"
+            >
+              <History size={16} />
+            </button>
+          )}
+          {!empty && (
+            <button className="icon-btn is-tiny" onClick={newConversation} title="New conversation" aria-label="New conversation">
+              <SquarePen size={16} />
+            </button>
+          )}
+        </header>
 
-      <div className={cx('lib-body', art && 'has-artifact', art && overlay && 'is-overlaid')}>
         <section className="lib-chat" aria-label="Conversation">
           {empty ? (
             <div className="lib-empty">
               <div className="lib-hello">
-                <h2 className="lib-greeting">
-                  {count ? 'What do you want to know?' : anyNotes && scope.kind === 'folder' ? `${name} has no notes yet` : 'Write a note first, then ask about it.'}
-                </h2>
-                {count > 0 && (
-                  <p className="lib-promise">{outsideKnowledge === 'never' ? 'Answers come only from your notes.' : 'Answers come from your notes. Anything else is marked.'}</p>
+                <h2 className="lib-greeting">{count ? 'What do you want to know?' : 'Write a note first, then ask about it.'}</h2>
+                {count > 0 ? (
+                  <p className="lib-promise">
+                    {outsideKnowledge === 'never' ? 'Answers come only from your notes.' : 'Answers come from your notes. Anything else is marked.'}
+                  </p>
+                ) : (
+                  anyNotes && (
+                    <p className="lib-promise">
+                      {cls ? 'This class has no notes yet.' : scope.kind === 'folder' ? 'This folder has no notes yet.' : 'The notes picked here are gone.'}
+                    </p>
+                  )
                 )}
               </div>
               {composer}
@@ -399,7 +441,16 @@ export function LibraryView() {
                         </div>
                       );
                     const o = outputs.get(m.id);
-                    if (o) return <ToolTurn key={m.id} output={o} open={art?.msg.id === m.id} onOpen={() => setArtifact(m.id)} onRetry={m === lastAssistant ? retry : undefined} />;
+                    if (o)
+                      return (
+                        <ToolTurn
+                          key={m.id}
+                          output={o}
+                          open={art?.msg.id === m.id}
+                          onOpen={() => setArtifact(m.id)}
+                          onRetry={m === lastAssistant ? retry : undefined}
+                        />
+                      );
                     return (
                       <div key={m.id} className="lib-turn" {...cite.hover(m.sources)}>
                         <MessageView
@@ -431,19 +482,19 @@ export function LibraryView() {
             </>
           )}
         </section>
-
-        {art && (
-          <ArtifactPanel
-            output={art}
-            overlay={overlay}
-            onClose={() => setArtifact(null)}
-            onCite={cite.show}
-            citeHover={cite.hover}
-            onExplain={explain}
-            onSave={saveOutput}
-          />
-        )}
       </div>
+
+      {art && (
+        <ArtifactPanel
+          output={art}
+          overlay={overlay}
+          onClose={() => setArtifact(null)}
+          onCite={cite.show}
+          citeHover={cite.hover}
+          onExplain={explain}
+          onSave={saveOutput}
+        />
+      )}
 
       <Popover anchor={scopeEl} open={!!scopeEl} onClose={() => setScopeEl(null)} align="end" className="menu-pop">
         <div className="menu scope-menu" role="menu">
@@ -526,7 +577,9 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
   if (output.failed && msg.dropped)
     return (
       <div className="msg is-bot lib-tool-turn">
-        <div className="msg-added">None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.</div>
+        <div className="msg-added">
+          None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+        </div>
         {onRetry && <RetryRow onRetry={onRetry} />}
       </div>
     );
@@ -540,9 +593,7 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
         </span>
         <span className="art-card-text">
           <span className="art-card-title">{output.title}</span>
-          <span className="art-card-meta">
-            {TOOL_LOOK[tool].name} · {outputMeta(output)}
-          </span>
+          <span className="art-card-meta">{outputMeta(output)}</span>
         </span>
       </button>
       {onRetry && <RetryRow onRetry={onRetry} />}

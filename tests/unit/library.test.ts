@@ -5,7 +5,11 @@ import { note, p, vault } from './fixtures';
 // The stores persist to localStorage; give them one in memory.
 const mem = new Map<string, string>();
 Object.assign(globalThis, {
-  localStorage: { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, String(v)), removeItem: (k: string) => void mem.delete(k) },
+  localStorage: {
+    getItem: (k: string) => mem.get(k) ?? null,
+    setItem: (k: string, v: string) => void mem.set(k, String(v)),
+    removeItem: (k: string) => void mem.delete(k),
+  },
 });
 
 const { scopeFromPick, scopeName, scopeNotes, selectionFor } = await import('../../src/components/library/notebook');
