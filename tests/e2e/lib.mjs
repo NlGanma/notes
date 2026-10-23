@@ -61,9 +61,8 @@ export async function showSidebar(page) {
 }
 
 /**
- * Opens a note filed in a class: the class's row in the sidebar, then the note's row on the class page.
- * The class page has had more than one layout; whichever lists the note is used, and if none does, the
- * note is found with Search (⌘K) instead.
+ * Opens a note filed in a class: the class's row in the sidebar, then the note's row on the class page
+ * (in its Classwork tab while the class page still has tabs). Fails if the class page doesn't list it.
  */
 export async function openClassNote(page, cls, title) {
   await showSidebar(page);
@@ -74,13 +73,10 @@ export async function openClassNote(page, cls, title) {
     const classwork = page.locator('.class-view .gtab:has-text("Classwork")');
     if (await classwork.count()) await classwork.click();
   }
-  if (await row.isVisible().catch(() => false)) {
-    await row.click();
-  } else {
-    await page.click('.side-search');
-    await page.fill('.palette-input input', title);
-    await page.click(`.palette-item:has-text("${title}")`);
-  }
+  await row.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {
+    throw new Error(`The ${cls} class page doesn't list “${title}”`);
+  });
+  await row.click();
   await page.waitForSelector(`.note-view:not(.is-hidden) .page-title`);
 }
 
