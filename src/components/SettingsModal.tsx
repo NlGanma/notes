@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Check, Copy, Cpu, FolderOpen, Info, Keyboard, Loader2, PenLine, RefreshCw, Radar, Settings2, X } from 'lucide-react';
 import { Modal } from './common/Modal';
 import { useUI, type SettingsSection } from '../state/ui';
@@ -28,7 +28,8 @@ export function SettingsModal() {
   const section = useUI((s) => s.settings);
   const close = () => useUI.getState().openSettings(null);
   const [scrolled, setScrolled] = useState(false);
-  useEffect(() => setScrolled(false), [section]);
+  // Each pane opens at its top (the body is keyed by pane), so the header's hairline starts off.
+  useLayoutEffect(() => setScrolled(false), [section]);
   return (
     <Modal open={!!section} onClose={close} width={880} bare className="settings">
       <div className="settings-layout">
@@ -54,7 +55,7 @@ export function SettingsModal() {
               <X size={16} strokeWidth={1.5} />
             </button>
           </div>
-          <div className="settings-body" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}>
+          <div className="settings-body" key={section} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}>
             {section === 'general' && <GeneralSection />}
             {section === 'ai' && <AISection />}
             {section === 'writing' && <WritingSection />}
