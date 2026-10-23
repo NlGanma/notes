@@ -253,7 +253,8 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                         </li>
                       ))}
                     </ul>
-                    {!canRead && <div className="rv-unread-hint">Reading it needs the local AI with a vision model.</div>}
+                    {/* Offline, the status row below already says why it can't be read now. */}
+                    {!canRead && ai === 'online' && <div className="rv-unread-hint">Reading it needs a vision model, set in Settings → Local AI.</div>}
                   </div>
                 )}
 
