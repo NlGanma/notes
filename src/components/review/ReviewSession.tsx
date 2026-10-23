@@ -102,6 +102,7 @@ export function ReviewSession() {
   const done = Math.min(session.index, total);
   const right = session.history.filter((h) => h.s >= 0.8).length;
   const label = groups.join(' + ');
+  const where = `${meta?.groupName ? `${meta.groupName} · ` : ''}${sourceName}${section ? ` › ${section}` : ''}`;
 
   return (
     <div className="screen review-view rv-session">
@@ -146,11 +147,9 @@ export function ReviewSession() {
               {meta?.color && <span className="class-square" style={{ background: meta.color }} aria-hidden />}
               <span
                 className="rv-where"
-                title={current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}
+                title={`${where}\n${current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}`}
               >
-                {meta?.groupName ? `${meta.groupName} · ` : ''}
-                {sourceName}
-                {section ? ` › ${section}` : ''}
+                {where}
               </span>
               {ask && !current.hintUsed && current.item.format !== 'mcq' && (
                 <button

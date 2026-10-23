@@ -138,15 +138,13 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
           <header className="rv-head">
             <h1 className="rv-title">Review</h1>
             <span className="grow" />
-            {tree.length > 0 &&
-              (dueIds.length > 0 ? (
-                <button className="btn is-secondary rv-due-btn" onClick={() => set(new Set(dueIds))}>
-                  What’s due · {plural(dueIds.length, 'note')}
-                </button>
-              ) : (
-                loaded && <span className="rv-due-none">Nothing due today</span>
-              ))}
+            {tree.length > 0 && dueIds.length > 0 && (
+              <button className="btn is-secondary rv-due-btn" onClick={() => set(new Set(dueIds))}>
+                What’s due · {plural(dueIds.length, 'note')}
+              </button>
+            )}
           </header>
+          {tree.length > 0 && loaded && !dueIds.length && <p className="rv-due-none">Nothing due today</p>}
 
           {!tree.length ? (
             <div className="rv-empty">
@@ -170,12 +168,6 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                     {part(stats.learning, 'learning', 'learning', 'Pick only the notes with ideas you’re still learning')}
                     {part(stats.mastered, 'mastered')}
                     {part(stats.due, 'due')}
-                    {!askable && stats.total > 0 && (
-                      <>
-                        {' · '}
-                        <span className="rv-stat">next review {dayLabel(stats.next)}</span>
-                      </>
-                    )}
                     {reading && (
                       <span className="rv-reading">
                         {' · '}
@@ -239,13 +231,19 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                 <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={start}>
                   Start review
                 </button>
+                {/* Review works offline: questions are built from the notes and short answers are checked by code. */}
                 {!online && (
-                  <div className="rv-promise">The local AI is offline. Questions come straight from your notes, and you check written answers yourself.</div>
+                  <div className="rv-promise">
+                    The local AI is offline. Questions come straight from your notes, and you check some answers yourself.{' '}
+                    <button className="rv-promise-link" onClick={() => useUI.getState().openSettings('ai')}>
+                      Open settings
+                    </button>
+                  </div>
                 )}
               </aside>
             </div>
           )}
-          {tree.length > 0 && !startInView && (
+          {tree.length > 0 && selected.size > 0 && !startInView && (
             <div className="rv-startbar">
               <span className="rv-startbar-label" title={label}>
                 {label}

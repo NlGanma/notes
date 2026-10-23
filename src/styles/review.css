@@ -12,9 +12,11 @@
 /* ------------------------------------------------------------ setup */
 
 .rv-setup-column {
+  /* The start bar reaches the column's edges with the same number. */
+  --rv-gutter: 32px;
   max-width: 1040px;
   margin: 0 auto;
-  padding: 28px 32px 64px;
+  padding: 28px var(--rv-gutter) 64px;
 }
 .rv-setup-column.is-empty {
   max-width: 760px;
@@ -35,8 +37,11 @@
   color: var(--text);
 }
 .rv-due-none {
-  font-size: 13px;
-  color: var(--text-3);
+  margin: -8px 0 16px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 24px;
+  color: var(--text-2);
 }
 .rv-empty {
   padding: 72px 0;
@@ -140,16 +145,19 @@
   flex: none;
   color: var(--text-3);
 }
-/* Tree depth lives in the name cell, so the checkboxes stay in one column. */
+/*
+ * Tree depth lives in the name cell, so the checkboxes stay in one column. A chapter's folder sits under
+ * its class's name; a note's name steps in one icon further than its parent's name.
+ */
 .rv-indent {
   flex: none;
-  width: 16px;
-}
-.rv-row.is-note .rv-indent {
   width: 40px;
 }
-.rv-row.is-note:not(.is-flat) .rv-indent {
+.rv-row.is-note .rv-indent {
   width: 64px;
+}
+.rv-row.is-note:not(.is-flat) .rv-indent {
+  width: 88px;
 }
 
 /* A checkbox drawn like the shared .check, with a half-checked state. */
@@ -329,6 +337,7 @@
   white-space: nowrap;
 }
 .rv-warn {
+  overflow-wrap: anywhere;
   display: flex;
   gap: 8px;
   margin-top: 16px;
@@ -368,6 +377,14 @@
   font-size: 12px;
   line-height: 16px;
   color: var(--text-3);
+}
+.rv-promise-link {
+  color: var(--link);
+  font-size: inherit;
+  line-height: inherit;
+}
+.rv-promise-link:hover {
+  text-decoration: underline;
 }
 .rv-startbar {
   display: none;
@@ -1136,6 +1153,11 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
+.rv-idea-term,
+.md.rv-idea-def {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .rv-idea-name {
   font-size: 14px;
   line-height: 22px;
@@ -1161,6 +1183,7 @@
   margin-top: -3px;
 }
 .rv-summary-notes {
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1204,8 +1227,8 @@
     align-items: center;
     gap: 16px;
     height: 56px;
-    margin: 24px -32px -64px;
-    padding: 0 32px;
+    margin: 24px calc(-1 * var(--rv-gutter)) -64px;
+    padding: 0 var(--rv-gutter);
     background: var(--bg-canvas);
     box-shadow: 0 -1px 0 var(--border);
   }
@@ -1220,14 +1243,16 @@
   }
 }
 @container review (max-width: 640px) {
-  .rv-setup-column,
+  .rv-setup-column {
+    --rv-gutter: 20px;
+  }
   .rv-summary-column {
     padding-left: 20px;
     padding-right: 20px;
   }
   .rv-tree-head,
   .rv-row {
-    grid-template-columns: minmax(0, 1fr) 40px 40px 44px 32px;
+    grid-template-columns: minmax(0, 1fr) 40px 40px 60px 32px;
   }
   .rv-mastery {
     display: none;
