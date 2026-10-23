@@ -1325,6 +1325,30 @@ check(
   await page.evaluate((id) => JSON.stringify(window.__nib.vault.getState().notes[id]?.content).includes('Extra words'), keyNote),
   `${MOD}+Z on the Classes page leaves the note typed in before untouched`,
 );
+// …nor under a dialog, whether the note's text kept the focus or nothing has it.
+await page.evaluate((id) => window.__nib.ui.getState().openNote(id), keyNote);
+await page.waitForFunction((id) => window.__nib.ui.getState().view.id === id, keyNote);
+await page.waitForTimeout(300);
+await page.evaluate((V) => document.querySelector(`${V} .ProseMirror`).editor.chain().focus('end').run(), V);
+await page.keyboard.type(' Keep these words');
+await page.waitForTimeout(700);
+const bodyText = () => page.evaluate((V) => document.querySelector(`${V} .ProseMirror`).textContent, V);
+for (const blur of [false, true]) {
+  if (blur) await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press(`${MOD}+,`);
+  await page.waitForSelector('.modal-backdrop');
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(250);
+  check((await bodyText()).includes('Keep these words'), `${MOD}+Z under Settings leaves the note behind it alone (${blur ? 'nothing focused' : 'its text focused'})`);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached' });
+}
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+check(
+  !(await bodyText()).includes('Keep these words') && (await bodyText()).includes('Extra words'),
+  `…and with the dialog closed, ${MOD}+Z undoes that typing`,
+);
 
 // 18d. A ⌘N note left with nothing in it goes away, tab and all; one with something in it stays.
 await page.keyboard.press(`${MOD}+n`);
