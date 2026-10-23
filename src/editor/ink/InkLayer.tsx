@@ -662,6 +662,12 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     setOverlay(null);
   }
 
+  /** Ink just picked up takes the keyboard from a text field (the assistant's composer, say), so ⌫ and ⌘C act on it. */
+  function keysToInk() {
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest('textarea, input')) active.blur();
+  }
+
   function finishMarquee(g: MarqueeGesture) {
     setQuiet(false);
     const r = marqueeRect(g);
@@ -670,6 +676,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       // A tap just off the ink still picks up the blob it was meant for.
       const blob = blobAt({ x: g.x0, y: g.y0 }, true);
       setSelection(blob ? selectionFromItems(blob) : null);
+      if (blob) keysToInk();
       return;
     }
     const prev = g.add ? selectionRef.current : null;
@@ -680,11 +687,10 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       if (!sel) return;
       sel.area = prev?.area ? unionBounds([prev.area, r])! : r;
       setSelection(sel);
+      keysToInk();
       // With the assistant open, the box goes into its composer too, but the keyboard stays with the ink, which
       // stays selected: boxing ink is as often to move or delete it as to ask about it.
       if (useUI.getState().assistant) {
-        const active = document.activeElement as HTMLElement | null;
-        if (active?.closest('textarea, input')) active.blur();
         const frame = selectionFrame(sel.bounds, 1 / s).frame;
         void capture(unionBounds([sel.area, frame])!).then((req) => propsRef.current.onAttach(req, { focus: false }));
       }
