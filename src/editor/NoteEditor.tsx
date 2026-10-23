@@ -45,6 +45,9 @@ const TOOL_KEYS: Record<string, Tool> = {
 
 const scrollMemory = new Map<string, number>();
 
+/** What a Select box or a block's "Ask about this…" puts in the assistant's composer (see inkAttachments). */
+const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What Nib read', 'Equation']);
+
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -338,12 +341,16 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     [inkAttachments, assistantAsk],
   );
 
-  /** The assistant is open: what the Select box caught goes into its composer, which takes the keyboard. */
+  /**
+   * The assistant is open: what the Select box caught goes into its composer, which takes the keyboard. One
+   * part of the page at a time: a new box (or "Ask about this…") replaces what the last one put there.
+   */
   const onInkAttach = useCallback(
     (req: Omit<InkAskRequest, 'mode' | 'prompt'>) => {
       const attachments = inkAttachments(req);
       if (!attachments.length) return;
       const a = useAssistant.getState();
+      for (const old of a.draft(noteId).attachments) if (PAGE_PARTS.has(old.label)) a.detach(noteId, old.id);
       for (const att of attachments) a.attach(noteId, att);
       a.focus();
     },

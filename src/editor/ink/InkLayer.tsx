@@ -545,11 +545,14 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     const blockIds: string[] = [];
     for (const blk of layoutRef.current.blocks) {
       if (blk.zoneEnd < region.minY || blk.top > region.maxY) continue;
-      blockIds.push(blk.id);
+      const before = strokes.length;
       for (const s of blk.ink) {
         const abs = translateStroke(s, 0, blk.top);
         if (boundsIntersect(strokeBounds(abs), region)) strokes.push(abs);
       }
+      // A block's text counts when the box covers some of it, not when the box only grazes its edge.
+      const over = Math.min(region.maxY, blk.top + blk.height) - Math.max(region.minY, blk.top);
+      if (strokes.length > before || over >= Math.min(8, blk.height / 2)) blockIds.push(blk.id);
     }
     // The frame, halo, handles and menus step out of the picture.
     setCapturing(true);
