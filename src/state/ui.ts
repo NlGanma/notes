@@ -225,3 +225,8 @@ function travel(from: View[], to: View[]) {
 
 export const goBack = () => travel(back, forward);
 export const goForward = () => travel(forward, back);
+
+/** A note deleted for good leaves Back and Forward too, so they never land on a blank page. */
+export function forgetNoteHistory(id: string) {
+  for (const list of [back, forward]) for (let i = list.length - 1; i >= 0; i--) if (same(list[i], { kind: 'note', id })) list.splice(i, 1);
+}

@@ -18,7 +18,7 @@ import { useVault } from '../state/vault';
 import { LINE_PX, PAGE_WIDTH, useSettings } from '../state/settings';
 import { normalizePaper } from '../lib/paper';
 import { useTools } from '../state/tools';
-import { useUI } from '../state/ui';
+import { forgetNoteHistory, useUI } from '../state/ui';
 import { useAI, visionModel } from '../state/ai';
 import { useAssistant, type Attachment } from '../state/assistant';
 import { TEXT_ACTIONS } from '../lib/ai/prompts';
@@ -55,6 +55,12 @@ function readFailure(e: unknown): string {
   if (/not found|no such model|pull/i.test(msg)) return 'The model chosen in Settings → Local AI isn’t installed.';
   if (/time(d)? ?out/i.test(msg)) return 'The local AI took too long. Try again.';
   return 'Try again, or choose another model in Settings → Local AI.';
+}
+
+/** Nothing written at all: one empty line, without even a stroke on it. */
+function isBlank(doc: PMNode): boolean {
+  const first = doc.firstChild;
+  return doc.childCount === 1 && first?.type.name === 'paragraph' && first.content.size === 0 && !inkOf(first).length;
 }
 
 function readFileAsDataURL(file: File): Promise<string> {
@@ -212,6 +218,34 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     setPageHeight(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
+
+  // A note ⌘N made (or the palette, or a menu's New note) and left with nothing in it goes away, as in Apple Notes:
+  // stray presses don't leave a pile of empty "Note · Oct 23"s behind. Nothing to undo, so no toast.
+  const instant = useRef(false);
+  const offersPaper = useUI((s) => s.paperStrip === noteId);
+  if (offersPaper) instant.current = true;
+  useEffect(() => {
+    if (!active || !editor) return;
+    const titleEl = pageRef.current?.querySelector<HTMLTextAreaElement>('textarea.page-title') ?? null;
+    return () => {
+      if (!instant.current) return;
+      try {
+        if (!isBlank(editor.state.doc) || titleEl?.value.trim()) return;
+      } catch {
+        return;
+      }
+      // After the commit: a view that comes straight back to the note (React's rehearsal remount in development) keeps it.
+      setTimeout(() => {
+        const ui = useUI.getState();
+        const n = useVault.getState().notes[noteId];
+        if ((ui.view.kind === 'note' && ui.view.id === noteId) || !n || n.meta.trashed || n.meta.homework || n.meta.title.trim()) return;
+        instant.current = false;
+        ui.closeTab(noteId);
+        forgetNoteHistory(noteId);
+        void useVault.getState().deleteForever(noteId);
+      }, 0);
+    };
+  }, [active, editor, noteId]);
 
   // A note put away lets go of the keyboard, so the browser's own undo can never reach it from another page.
   useEffect(() => {

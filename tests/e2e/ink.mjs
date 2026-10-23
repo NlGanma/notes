@@ -1,6 +1,6 @@
 // End-to-end test of the type ↔ handwriting flow, driven with real pointer
 // events. Run against the dev server:  node tests/e2e/ink.mjs
-import { launch, shot, BASE } from './lib.mjs';
+import { launch, shot, BASE, showSidebar } from './lib.mjs';
 import { handPaths, writeText } from './hand.mjs';
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -1238,6 +1238,93 @@ await setAI({ baseUrl: aiUrl });
 await page.waitForTimeout(800);
 check(!(await selAsk.isDisabled()), 'when the model is back, Ask is on again');
 await page.keyboard.press('Escape');
+
+// 18. Keys: ⌥P from a new note's title, Space under Select, ⌘Z away from the text, highlights, a note left empty.
+const noteIds = () => page.evaluate(() => Object.keys(window.__nib.vault.getState().notes));
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForFunction(() => document.activeElement?.classList.contains('page-title'));
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(150);
+check(
+  (await page.locator(`${V} .tb-tool[data-tool="pen"].is-active`).count()) === 1 &&
+    (await page.locator(`${V} .page-title`).inputValue()) === '' &&
+    !(await page.evaluate(() => document.activeElement?.classList.contains('page-title'))),
+  '⌥P in a new note’s title picks up the marker and types nothing there',
+);
+wrap = await wrapBox();
+const keyIds = await newIds(() => writeText(page, 'ab', wrap.x + 40, wrap.y + R(2), 18));
+await page.keyboard.press('Alt+s');
+await page.waitForTimeout(150);
+const beforeKeys = JSON.stringify(await docJSON());
+await page.keyboard.press('Space');
+await page.keyboard.press('x');
+await page.waitForTimeout(200);
+check(
+  JSON.stringify(await docJSON()) === beforeKeys && (await page.locator(`${V} .tb-tool[data-tool="lasso"].is-active`).count()) === 1,
+  'under Select with nothing selected, Space and letters type nothing and Select stays',
+);
+const keyBox = await boxAround(keyIds);
+await page.mouse.move(keyBox.x0, keyBox.y0);
+await page.mouse.down();
+await page.mouse.move(keyBox.x1, keyBox.y1, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+const keyWas = byId(await inkNow()).get(keyIds[0]);
+await drag([(keyBox.x0 + keyBox.x1) / 2, (keyBox.y0 + keyBox.y1) / 2], 160, 0);
+const keyMoved = byId(await inkNow()).get(keyIds[0]);
+await page.evaluate(() => document.activeElement?.blur?.());
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+check(
+  keyMoved.pts[0][0] > keyWas.pts[0][0] + 100 && Math.abs(byId(await inkNow()).get(keyIds[0]).pts[0][0] - keyWas.pts[0][0]) < 0.01,
+  `${MOD}+Z with no field focused undoes moving the ink`,
+);
+await page.keyboard.press('Escape');
+
+// 18b. Highlights alone are no writing: selected, they offer Ask but not Text or Math.
+await page.keyboard.press('Alt+h');
+await page.mouse.move(wrap.x + 40, wrap.y + R(5));
+await page.mouse.down();
+await page.mouse.move(wrap.x + 220, wrap.y + R(5), { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+await page.keyboard.press('Alt+s');
+await page.mouse.click(wrap.x + 130, wrap.y + R(5));
+await page.waitForTimeout(250);
+const hlMenu = await page.locator(`${V} .ink-sel-menu .sel-btn`).allTextContents();
+check(
+  (await selCount()) === 1 && hlMenu.some((t) => /Ask/.test(t)) && !hlMenu.some((t) => /^(Text|Math)$/.test(t.trim())),
+  `a selected highlight offers no Text or Math (${hlMenu.map((t) => t.trim()).filter(Boolean).join(', ')})`,
+);
+await page.keyboard.press('Escape');
+
+// 18c. ⌘Z on another page never reaches a note's text behind it.
+const keyNote = await page.evaluate(() => window.__nib.ui.getState().view.id);
+await page.keyboard.press('Alt+t');
+await page.keyboard.type('Extra words');
+await page.waitForTimeout(600);
+await showSidebar(page);
+await page.click('.sidebar .nav-classes-label');
+await page.waitForSelector('.classes-view');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(700);
+check(
+  await page.evaluate((id) => JSON.stringify(window.__nib.vault.getState().notes[id]?.content).includes('Extra words'), keyNote),
+  `${MOD}+Z on the Classes page leaves the note typed in before untouched`,
+);
+
+// 18d. A ⌘N note left with nothing in it goes away, tab and all; one with something in it stays.
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForSelector(`${V} .paper-strip`);
+const emptyId = await page.evaluate(() => window.__nib.ui.getState().view.id);
+await showSidebar(page);
+await page.click('.sidebar .nav-classes-label');
+await page.waitForSelector('.classes-view');
+await page.waitForTimeout(300);
+check(
+  !(await noteIds()).includes(emptyId) && !(await page.evaluate((id) => window.__nib.ui.getState().tabs.includes(id), emptyId)) && (await noteIds()).includes(keyNote),
+  'a ⌘N note left empty is gone, tab and all, and the one written in stays',
+);
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
