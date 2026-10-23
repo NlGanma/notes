@@ -1038,15 +1038,29 @@ await page.locator('.tool-pop.is-size input[type="range"]').fill('1.6');
 await page.keyboard.press('Escape');
 await page.keyboard.press('Alt+e');
 check((await page.locator(`${V} .tb-context button`).allTextContents()).join('|').includes('Whole stroke|Part|Highlighter only'), 'the eraser offers Whole stroke | Part and Highlighter only');
-await page.setViewportSize({ width: 720, height: 760 });
+const eraserBar = () =>
+  page.evaluate(() => {
+    const bar = document.querySelector('.note-view:not(.is-hidden) .ink-toolbar');
+    const edge = bar.closest('.note-scroll').getBoundingClientRect().right;
+    const all = [...bar.querySelectorAll('.tb-tool, .tb-more, .tb-context > *')].every((el) => el.getBoundingClientRect().right <= edge);
+    return { folded: bar.classList.contains('is-folded'), all, sw: bar.scrollWidth, cw: bar.clientWidth, sidebar: !document.querySelector('.sidebar.is-hidden') };
+  });
+await page.setViewportSize({ width: 1000, height: 760 });
 await page.waitForTimeout(500);
-const fit = await page.evaluate(() => {
-  const bar = document.querySelector('.note-view:not(.is-hidden) .ink-toolbar');
-  const edge = bar.closest('.note-scroll').getBoundingClientRect().right;
-  const all = [...bar.querySelectorAll('.tb-tool, .tb-more, .tb-context > *')].every((el) => el.getBoundingClientRect().right <= edge);
-  return { folded: bar.classList.contains('is-folded'), all, sw: bar.scrollWidth, cw: bar.clientWidth };
-});
-check(fit.folded && fit.all && fit.sw <= fit.cw + 1, `in a narrow window the eraser's settings fold into one button and nothing is cut off (${JSON.stringify(fit)})`);
+const bar1000 = await eraserBar();
+await page.locator(`${V} .tb-chip`).click();
+await page.waitForTimeout(200);
+const bar1000On = await eraserBar();
+await page.locator(`${V} .tb-chip`).click();
+check(
+  bar1000.sidebar && !bar1000.folded && bar1000.all && !bar1000On.folded && bar1000On.sw === bar1000.sw,
+  `at 1000×760 beside the sidebar the eraser's settings fit in the bar, Highlighter only on or off (${JSON.stringify(bar1000)})`,
+);
+// (960 is the narrowest the Mac app's window goes)
+await page.setViewportSize({ width: 960, height: 760 });
+await page.waitForTimeout(500);
+const fit = await eraserBar();
+check(fit.folded && fit.all && fit.sw <= fit.cw + 1, `in a narrower window the eraser's settings fold into one button and nothing is cut off (${JSON.stringify(fit)})`);
 await page.locator(`${V} .tb-summary`).click();
 check((await page.locator('.tool-pop.is-summary button:has-text("Part")').count()) === 1, 'the folded button opens the same settings');
 await shot(page, 'ink-24-folded');
@@ -1112,6 +1126,68 @@ await boxOverLine(page.locator(`${V} .ProseMirror > p:has-text("second line")`).
 atts = await draftAtts();
 check(atts.length === 1 && atts[0] === 'Text in that area: A second line to ask about.', `and a second box replaces the first, with only the text it covers (${JSON.stringify(atts)})`);
 await shot(page, 'ink-25-second-box');
+
+// The chips carry the block they came from: asked from the panel, the answer is about the boxed paragraph and
+// goes under it, not under the caret's block.
+await page.keyboard.press('Alt+t');
+await page.locator(`${V} .ProseMirror blockquote p`).first().click();
+await page.locator(`${V} .tb-tool[data-tool="lasso"]`).click();
+const second = page.locator(`${V} .ProseMirror > p:has-text("second line")`).first();
+const secondId = await second.getAttribute('data-id');
+await boxOverLine(second);
+const chipAnchors = await page.evaluate(async () => {
+  const { useAssistant } = await import('/src/state/assistant.ts');
+  return Object.values(useAssistant.getState().drafts).flatMap((d) => d.attachments.map((a) => a.anchor ?? null));
+});
+check(!!secondId && chipAnchors.length === 1 && chipAnchors[0] === secondId, `the box's chip remembers the paragraph it came from, with the caret in the quote (${JSON.stringify(chipAnchors)})`);
+await page.waitForSelector('[data-ai-status="online"]', { timeout: 15000 });
+await page.locator('.assistant .composer-input').fill('Why is this here?');
+await page.locator('.assistant .composer-input').press('Enter');
+await page.waitForSelector('.assistant .msg.is-bot');
+await page.waitForFunction(() => !document.querySelector('.msg.is-streaming, .msg-making'), null, { timeout: 20000 });
+await page.waitForTimeout(200);
+const askedAbout = await page.evaluate(async () => {
+  const { useAssistant } = await import('/src/state/assistant.ts');
+  const users = Object.values(useAssistant.getState().threads).flatMap((t) => t.messages).filter((m) => m.role === 'user');
+  return users.at(-1)?.anchor ?? null;
+});
+check(askedAbout === secondId, 'sent from the panel, the question is about the boxed paragraph, not the caret’s block');
+const reply = page.locator('.assistant .msg.is-bot').last();
+await reply.hover();
+await reply.locator('.msg-act:has-text("Insert into note")').click();
+await page.waitForTimeout(300);
+const underBoxed = await page.evaluate((id) => {
+  const kids = [...document.querySelector('.note-view:not(.is-hidden) .ProseMirror').children];
+  const i = kids.findIndex((e) => e.getAttribute('data-id') === id);
+  return i >= 0 && !!kids[i + 1]?.matches('.callout[data-variant="ai"]');
+}, secondId);
+check(underBoxed, 'and Insert into note puts the answer right under that paragraph');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(200);
+
+// A box that catches ink leaves the keyboard with the ink (⌫, ⌘D and the arrows act on it), even from the composer.
+await page.locator(`${V} .tb-tool[data-tool="pen"]`).click();
+wrap = await wrapBox();
+await writeText(page, 'ab', wrap.x + 60, wrap.y + R(9), 18);
+await page.waitForTimeout(200);
+await page.locator(`${V} .tb-tool[data-tool="lasso"]`).click();
+await page.locator('.assistant .composer-input').fill('half a question');
+const inkBefore = (await inkNow()).length;
+await page.mouse.move(wrap.x + 40, wrap.y + R(9) - 30);
+await page.mouse.down();
+await page.mouse.move(wrap.x + 160, wrap.y + R(9) + 20, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+atts = await draftAtts();
+const inComposer = await page.evaluate(() => !!document.activeElement?.closest('.assistant'));
+check(atts.some((a) => a.startsWith('Handwriting in that area')) && (await selCount()) > 0 && !inComposer, `the ink box goes into the composer, stays selected and keeps the keyboard (${JSON.stringify(atts)})`);
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(300);
+check(
+  (await inkNow()).length < inkBefore - 1 && (await page.locator('.assistant .composer-input').inputValue()) === 'half a question',
+  '⌫ then deletes the ink, and the question being typed is untouched',
+);
+await page.locator('.assistant .composer-input').fill('');
 await page.keyboard.press(`${MOD}+j`);
 await page.waitForFunction(() => !document.querySelector('.assistant'));
 
