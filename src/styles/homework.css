@@ -360,9 +360,6 @@ button.hw-chip:hover,
   line-height: 16px;
   color: var(--text-3);
 }
-.hw-work-note.hw-no-sources {
-  color: var(--warning);
-}
 
 /* ------------------------------------------------------------------ due date */
 

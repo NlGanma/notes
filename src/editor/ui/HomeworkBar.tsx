@@ -223,7 +223,7 @@ export function HomeworkBar({ note }: { note: NoteDoc }) {
       )}
       {needsVision && unread > 0 && <div className="hw-read-hint">Needs a vision model. Set one in Settings → Local AI.</div>}
       {/* What the homework helper may use, said plainly: a notes-only label. */}
-      <div className={cx('hw-work-note', !sources.length && 'hw-no-sources')}>
+      <div className="hw-work-note">
         {sources.length ? 'The homework helper answers only from these notes.' : 'No notes linked yet. The homework helper answers only from linked notes.'}
       </div>
 
