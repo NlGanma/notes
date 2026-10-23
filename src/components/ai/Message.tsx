@@ -21,7 +21,7 @@ import { applyGrounding, type GroundingReport } from '../../lib/ai/grounding';
 import { shownOf, type CheckSummary } from '../../lib/ai/answer';
 import { LABELS } from '../../lib/ai/policy';
 import { markersToText } from '../../lib/ai/verify';
-import { openSource } from './Citations';
+import { openSource, sourceTitle } from './Citations';
 import { useUI } from '../../state/ui';
 import { cx, plural } from '../../lib/util';
 
@@ -52,7 +52,7 @@ export function shownMarkdown(msg: ChatMsg): string {
 export function copyText(msg: ChatMsg): string {
   const md = shownMarkdown(msg);
   const cited = citedInAnswer(md, msg.sources?.length);
-  const sources = (msg.sources ?? []).filter((s) => cited.has(s.n)).map((s) => `[${s.n}] ${[s.title, s.section].filter(Boolean).join(' › ')}`);
+  const sources = (msg.sources ?? []).filter((s) => cited.has(s.n)).map((s) => `[${s.n}] ${[sourceTitle(s), s.section].filter(Boolean).join(' › ')}`);
   return sources.length ? `${markersToText(md)}\n\nSources: ${sources.join(' · ')}` : markersToText(md);
 }
 
@@ -93,7 +93,7 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
           <span className="coverage-nearest-label">{LABELS.nearest}</span>
           {msg.nearest.map((s: SourceRef) => (
             <button key={s.n} className="coverage-chip" onClick={() => openSource(s)}>
-              {s.section || s.title}
+              {s.section || sourceTitle(s)}
             </button>
           ))}
         </div>

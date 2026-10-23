@@ -2,12 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import type { SourceRef } from '../../state/assistant';
 import { useUI } from '../../state/ui';
+import { useVault } from '../../state/vault';
+import { displayTitle } from '../../lib/displayTitle';
 import { citedInAnswer, renderMarkdown } from '../../lib/ai/markdown';
 import { Popover } from '../common/Popover';
 
-/** Opens the cited note and flashes the cited passage. */
+/**
+ * Opens the cited note and flashes the cited passage. Cited beside a note (the Assistant, the Homework helper),
+ * the source gets a tab of its own: replacing the note being asked about would take the panel's subject away.
+ */
 export function openSource(src: SourceRef) {
-  useUI.getState().openNote(src.noteId, { blockId: src.blockId ?? undefined });
+  const ui = useUI.getState();
+  ui.openNote(src.noteId, { blockId: src.blockId ?? undefined, newTab: ui.view.kind === 'note' });
+}
+
+/**
+ * What to call a cited note: the name it goes by now (an untitled note's first line), not the "Untitled" the
+ * search index stores. Read once at render; the index itself stays on meta titles.
+ */
+export function sourceTitle(src: SourceRef): string {
+  const n = useVault.getState().notes[src.noteId];
+  return n ? displayTitle(n) : src.title;
 }
 
 /** First ~420 characters of a passage, without its heading line, ending on a word. */
@@ -63,7 +78,7 @@ export function useCitePreview(opts: { placement?: 'top' | 'right' | 'left' } = 
   });
   const side = opts.placement === 'right' || opts.placement === 'left';
   const src = preview?.src;
-  const heading = src ? src.section.split(' › ').pop() || src.title : '';
+  const heading = src ? src.section.split(' › ').pop() || sourceTitle(src) : '';
   const where = src?.folder.split('/')[0];
   const popover = (
     <Popover
@@ -93,7 +108,7 @@ export function useCitePreview(opts: { placement?: 'top' | 'right' | 'left' } = 
             }}
           >
             <FileText size={16} />
-            <span className="cite-preview-title">{src.title}</span>
+            <span className="cite-preview-title">{sourceTitle(src)}</span>
             {where && <span className="cite-preview-sec">· {where}</span>}
           </button>
         </div>
@@ -117,7 +132,7 @@ export function SourcesList({ content, sources, label = 'Sources from your notes
           <button key={s.n} className="source" onClick={() => openSource(s)}>
             <span className="cite-n">{s.n}</span>
             <span className="source-text">
-              <span className="source-title">{s.title}</span>
+              <span className="source-title">{sourceTitle(s)}</span>
               <span className="source-sec">{[s.folder, s.section].filter(Boolean).join(' › ') || 'Note'}</span>
             </span>
           </button>

@@ -7,6 +7,7 @@ import type { SourceRef } from '../../state/assistant';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
+import { sourceTitle } from '../ai/Citations';
 
 export { parseStudyJSON };
 export type { Card, QuizQ };
@@ -41,7 +42,7 @@ function SourceLink({ n, sources, onOpen }: { n?: number; sources: SourceRef[]; 
     >
       <span className="cite-n">{src.n}</span>
       <span className="study-source-text">
-        {src.title}
+        {sourceTitle(src)}
         {src.section ? ` › ${src.section.split(' › ').pop()}` : ''}
       </span>
     </button>
