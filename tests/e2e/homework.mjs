@@ -177,10 +177,25 @@ check((await page.locator('.hw-row-item').count()) === 3, 'the Homework page lis
 check(!(await page.locator('.homework-view :is(.gtab, [role="tab"])').count()), '…in one list, with no Assigned / Missing / Done tabs');
 await shot(page, 'hw-02-list');
 
-// Ticking a row's checkbox finishes it (it moves into Done), and Undo brings it back.
+// Two quick clicks on one checkbox tick it and untick it; they never reach the row below.
+{
+  const box = await page.locator('.homework-view .hw-row-item:has-text("worksheet-photo") .hw-check').boundingBox();
+  const undone = () => page.locator('.homework-view .hw-row-item:not(.is-done)').count();
+  check((await undone()) === 3, 'three homework to do before the clicks');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(150);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(1800);
+  check((await undone()) === 3 && !(await page.locator('.homework-view .hw-done-head').count()), 'a quick second click unticks the same homework instead of ticking the next one');
+  check(!(await page.locator('.toast:has-text("Marked as done")').count()), '…and takes its Marked as done toast away');
+}
+
+// Ticking a row's checkbox finishes it: it stays a moment, checked, then moves into Done. Undo brings it back.
 await page.click('.hw-row-item:has-text("worksheet-photo") .hw-check');
 await page.waitForSelector('.toast:has-text("Marked as done")');
-check(!(await page.locator('.hw-row-item:has-text("worksheet-photo")').count()) && /Done \(1\)/.test(await page.textContent('.hw-done-head')), 'ticking a homework moves it into the folded Done list');
+check(await page.locator('.homework-view .hw-row-item.is-done:has-text("worksheet-photo") .hw-check[aria-checked="true"]').count(), 'a ticked homework stays in its place for a moment, checked');
+await page.waitForSelector('.homework-view .hw-row-item:has-text("worksheet-photo")', { state: 'detached', timeout: 5000 });
+check(/Done \(1\)/.test(await page.textContent('.hw-done-head')), '…then moves into the folded Done list');
 await page.click('.toast:has-text("Marked as done") .toast-action:has-text("Undo")');
 await page.waitForSelector('.hw-row-item:has-text("worksheet-photo")');
 check(true, '…and Undo puts it back');

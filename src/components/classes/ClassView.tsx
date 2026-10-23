@@ -16,7 +16,7 @@ import { cx } from '../../lib/util';
 import { folderMenu } from '../FileTree';
 import { dateGroup, FolderRow, NoteRow } from '../NoteGrid';
 import { NewNotePopover } from '../NewNoteMenu';
-import { DoneList, HomeworkRow } from '../homework/HomeworkRow';
+import { DoneList, HomeworkRow, isTodo, useJustDone } from '../homework/HomeworkRow';
 import { byDue } from '../homework/sources';
 import { menuUnder } from './ClassesView';
 
@@ -122,10 +122,11 @@ export function ClassView({ path }: { path: string }) {
   const newBtn = useRef<HTMLButtonElement>(null);
   const cls = classInfo(path, folderMeta[path]);
   const reviewDue = useReviewDue(path, notes);
+  const held = useJustDone((s) => s.ids);
 
   const homework = useMemo(() => classHomework(path, notes).sort(byDue), [path, notes]);
-  const todo = homework.filter((n) => !n.meta.homework!.done);
-  const done = homework.filter((n) => n.meta.homework!.done).sort((a, b) => b.meta.updated - a.meta.updated);
+  const todo = homework.filter((n) => isTodo(n, held));
+  const done = homework.filter((n) => !isTodo(n, held)).sort((a, b) => b.meta.updated - a.meta.updated);
   const lecture = useMemo(() => classNotes(path, notes).sort((a, b) => b.meta.updated - a.meta.updated), [path, notes]);
   const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
   const subfolders = folders.filter((f) => f.startsWith(path + '/') && !f.slice(path.length + 1).includes('/') && f !== hwDir);

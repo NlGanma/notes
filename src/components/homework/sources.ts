@@ -72,9 +72,9 @@ export function byDue(a: NoteDoc, b: NoteDoc): number {
   return b.meta.created - a.meta.created;
 }
 
-/** Unfinished homework in its non-empty groups, each soonest first. */
-export function groupHomework(list: NoteDoc[], now = Date.now()): { key: DueGroup; label: string; items: NoteDoc[] }[] {
-  const todo = list.filter((n) => n.meta.homework && !n.meta.homework.done).sort(byDue);
+/** Unfinished homework in its non-empty groups, each soonest first. `held` ones were ticked a moment ago and stay put for now. */
+export function groupHomework(list: NoteDoc[], now = Date.now(), held: ReadonlySet<string> = new Set()): { key: DueGroup; label: string; items: NoteDoc[] }[] {
+  const todo = list.filter((n) => n.meta.homework && (!n.meta.homework.done || held.has(n.meta.id))).sort(byDue);
   return DUE_GROUPS.map((g) => ({ ...g, items: todo.filter((n) => dueGroup(n.meta.homework!.due, now) === g.key) })).filter((g) => g.items.length);
 }
 

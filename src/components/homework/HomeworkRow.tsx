@@ -1,4 +1,5 @@
 import { memo, useState } from 'react';
+import { create } from 'zustand';
 import { Check, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
@@ -8,18 +9,53 @@ import { displayTitle } from '../../lib/displayTitle';
 import { cx } from '../../lib/util';
 import { noteMenu } from '../FileTree';
 import { openContextMenu } from '../common/ContextMenu';
-import { toast } from '../common/toast';
+import { toast, useToasts } from '../common/toast';
 import { menuUnder } from '../classes/ClassesView';
+
+// The "Marked as done" toast of each homework, so ticking it back off takes its Undo away too.
+const doneToasts = new Map<string, string>();
 
 /** Ticks a homework off (or back on), with Undo: a ticked row drops into the folded Done list. */
 export function setDone(note: NoteDoc, done: boolean) {
+  const id = note.meta.id;
   const update = (d: boolean) => {
-    const cur = useVault.getState().notes[note.meta.id]?.meta.homework;
-    if (cur) useVault.getState().updateMeta(note.meta.id, { homework: { ...cur, done: d } });
+    const cur = useVault.getState().notes[id]?.meta.homework;
+    if (cur) useVault.getState().updateMeta(id, { homework: { ...cur, done: d } });
+    if (!d) useJustDone.getState().release(id);
   };
   update(done);
-  if (done) toast.info('Marked as done', undefined, { label: 'Undo', run: () => update(false) });
+  const shown = doneToasts.get(id);
+  if (shown) useToasts.getState().dismiss(shown);
+  doneToasts.delete(id);
+  // Longer than most toasts: in a list, the row only leaves for Done a moment after the tick.
+  if (done) doneToasts.set(id, toast.info('Marked as done', undefined, { label: 'Undo', run: () => update(false) }, 6000));
 }
+
+const HOLD_MS = 1500;
+let holdTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Homework just ticked in a list. As in Reminders, a ticked row stays where it is, checked, for a moment
+ * before it goes to Done, so the next row doesn't slide under the pointer and take a second click. Each
+ * tick restarts the wait, so rows ticked one after another leave together.
+ */
+export const useJustDone = create<{ ids: ReadonlySet<string>; hold(id: string): void; release(id: string): void }>((set, get) => ({
+  ids: new Set(),
+  hold: (id) => {
+    set({ ids: new Set(get().ids).add(id) });
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => set({ ids: new Set() }), HOLD_MS);
+  },
+  release: (id) => {
+    if (!get().ids.has(id)) return;
+    const ids = new Set(get().ids);
+    ids.delete(id);
+    set({ ids });
+  },
+}));
+
+/** Whether a homework is still on the to-do side of a list: not done, or ticked a moment ago. */
+export const isTodo = (n: NoteDoc, held: ReadonlySet<string>) => !!n.meta.homework && (!n.meta.homework.done || held.has(n.meta.id));
 
 /**
  * A homework in a list, as Reminders shows a to-do: a round checkbox (the class colour once ticked), the
@@ -58,6 +94,7 @@ export const HomeworkRow = memo(function HomeworkRow({
         aria-label={done ? `Mark ${name} not done` : `Mark ${name} done`}
         onClick={(e) => {
           e.stopPropagation();
+          if (!done) useJustDone.getState().hold(note.meta.id);
           setDone(note, !done);
         }}
       >

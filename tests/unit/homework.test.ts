@@ -92,6 +92,14 @@ test('the Homework list groups by days from today, whatever the weekday, and lea
   assert.equal(dueInGroup(new Date(2026, 9, 22, 23, 59).getTime(), now), null);
   assert.equal(dueInGroup(new Date(2026, 9, 22, 15, 0).getTime(), now)?.text.replace(/\s/g, ' '), new Date(2026, 9, 22, 15, 0).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' '));
   assert.equal(dueInGroup(now - 2 * DAY, now)?.overdue, true);
+  // Homework ticked a moment ago stays in its group until it's let go.
+  const ticked = hw('just ticked', now + 3 * DAY, true);
+  const list = [hw('in three days', now + 3 * DAY), ticked];
+  assert.deepEqual(groupHomework(list, now)[0].items.map((n) => n.meta.title), ['in three days']);
+  assert.deepEqual(
+    groupHomework(list, now, new Set([ticked.meta.id]))[0].items.map((n) => n.meta.title),
+    ['in three days', 'just ticked'],
+  );
 });
 
 test('cards and the Homework list count days the same way, across a clock change', async () => {
