@@ -58,7 +58,7 @@ export function rdp(points: P[], eps: number): P[] {
   return [a, b];
 }
 
-/** Densely samples a polyline so erasing / lasso behave like freehand ink. */
+/** Densely samples a polyline so erasing and selecting treat it like freehand ink. */
 function densify(points: P[], step = 4): P[] {
   const out: P[] = [];
   for (let i = 0; i < points.length - 1; i++) {

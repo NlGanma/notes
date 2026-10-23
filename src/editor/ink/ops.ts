@@ -89,7 +89,7 @@ export function appendInkBlock(editor: Editor, strokes: Stroke[], line: number):
 
 /**
  * Replaces ink on several blocks at once and optionally appends a new
- * handwriting area — one undo step (used by the eraser and lasso moves).
+ * handwriting area — one undo step (used by the eraser and by moving a selection).
  * Returns the new area's id.
  *
  * `nudge` is for arrow-key moves: a burst of them should undo as one step.

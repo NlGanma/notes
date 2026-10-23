@@ -651,7 +651,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
     else delete el.dataset.inkCursor;
   }
 
-  /** A hand over ink you can pick up (with the lasso, or ⌘ and the pen), arrows over the resize handles. */
+  /** A hand over ink you can pick up (with Select, or ⌘ and the pen), arrows over the resize handles. */
   function hoverCursor(meta: boolean): string | null {
     const h = hover.current;
     if (!h || isUi(h.target)) return null;
@@ -1329,7 +1329,7 @@ export const InkLayer = forwardRef<InkLayerHandle, Props>(function InkLayer(prop
       setHeld('press');
     };
 
-    /** Pressing on a sketch in the text with the lasso pulls it back out as handwriting. */
+    /** Pressing on a sketch in the text with Select pulls it back out as handwriting. */
     const startPopOut = (e: PointerEvent, p: Pt, dom: HTMLElement): boolean => {
       const ed = propsRef.current.editor;
       let pos = -1;

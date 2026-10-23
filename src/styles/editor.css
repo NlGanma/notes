@@ -533,7 +533,7 @@
   transition: background 0.12s;
 }
 .ink-resize:hover span {
-  background: #bdc1c6;
+  background: rgba(20, 20, 19, 0.25);
 }
 .ink-resize:active span {
   background: var(--accent);
@@ -1248,7 +1248,8 @@
   border-radius: var(--radius-l);
   box-shadow: var(--shadow);
   white-space: nowrap;
-  animation: pop-in var(--dur-fast) var(--ease);
+  /* (a fade only: a keyframed transform would replace the inline one that places it) */
+  animation: fade-in var(--dur-fast) var(--ease);
 }
 .sel-btn {
   height: 32px;
@@ -1317,7 +1318,8 @@
     0 0 0 1px rgba(20, 20, 19, 0.1),
     0 4px 8px rgba(11, 11, 11, 0.06),
     0 14px 32px -4px rgba(11, 11, 11, 0.12);
-  animation: pop-in var(--dur-fast) var(--ease);
+  /* (a fade only: a keyframed transform would replace the inline one that places it) */
+  animation: fade-in var(--dur-fast) var(--ease);
 }
 .snip-ask-row {
   display: flex;
@@ -1583,7 +1585,7 @@
   display: block;
   height: 6px;
   border-radius: 3px;
-  background: #e1e3e6;
+  background: var(--bg-strong);
 }
 .sp-heading {
   line-height: 1.15;
@@ -1620,7 +1622,7 @@
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  border: 1.5px solid #bdc1c6;
+  border: 1.5px solid rgba(20, 20, 19, 0.25);
   display: grid;
   place-items: center;
   flex: none;

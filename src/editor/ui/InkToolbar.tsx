@@ -263,9 +263,9 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
               <Sigma {...ICON} />
               <Tip label="Math" kbd="$x$" />
             </button>
-            <button className="tb-btn" onClick={() => editorBus.emit('inlineInk:open', { editor })} aria-label="Sketch in the line">
+            <button className="tb-btn" onClick={() => editorBus.emit('inlineInk:open', { editor })} aria-label="Sketch inline">
               <Signature {...ICON} />
-              <Tip label="Sketch in the line" kbd={`${MOD}D`} />
+              <Tip label="Sketch inline" kbd={`${MOD}D`} />
             </button>
           </>
         );
