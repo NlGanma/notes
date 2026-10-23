@@ -244,7 +244,7 @@ function groupOf(note: NoteDoc) {
   const chapter = info ? note.meta.folder.slice(info.path.length + 1) : note.meta.folder.slice(top.length + 1);
   return {
     key: groupKeyOf(note, folderMeta),
-    name: info?.name ?? (top || 'Unfiled'),
+    name: info?.name ?? (top || 'Notes'),
     color: info?.color,
     chapter,
     language: info?.icon === 'languages' || /spanish|french|german|italian|latin|chinese|japanese|korean|español|language/i.test(info?.name ?? ''),

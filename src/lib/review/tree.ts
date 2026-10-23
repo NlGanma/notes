@@ -20,7 +20,7 @@ export interface ReviewChapter {
 }
 
 export interface ReviewGroup {
-  /** Class path, or `folder:<top folder>` / `folder:` (unfiled) for notes outside classes. */
+  /** Class path, or `folder:<top folder>` / `folder:` (the top of the vault) for notes outside classes. */
   key: string;
   name: string;
   cls: ClassInfo | null;
@@ -63,7 +63,7 @@ export function buildReviewTree(notes: Record<string, NoteDoc>, folders: string[
     // Archived classes and plain folders: grouped by their top folder.
     const top = folder.split('/')[0] ?? '';
     const key = `folder:${top}`;
-    if (!groups.has(key)) groups.set(key, { key, name: top || 'Unfiled', cls: null, chapters: [] });
+    if (!groups.has(key)) groups.set(key, { key, name: top || 'Notes', cls: null, chapters: [] });
     const g = groups.get(key)!;
     const rel = folder.slice(top.length + 1);
     chapterOf(g, rel ? folder : '', rel ? rel.split('/').join(' › ') : GENERAL_CHAPTER).notes.push(n);
@@ -73,7 +73,7 @@ export function buildReviewTree(notes: Record<string, NoteDoc>, folders: string[
     g.chapters.sort((a, b) => (a.path === '' ? -1 : b.path === '' ? 1 : byName(a, b)));
     for (const ch of g.chapters) ch.notes.sort(byTitle);
   }
-  // Classes first (in sidebar order), then other folders, unfiled last.
+  // Classes first (in sidebar order), then other folders, the top of the vault ("Notes") last.
   return out.sort((a, b) => {
     if (!!a.cls !== !!b.cls) return a.cls ? -1 : 1;
     if (a.cls && b.cls) return classes.indexOf(a.cls) - classes.indexOf(b.cls);

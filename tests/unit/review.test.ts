@@ -15,7 +15,7 @@ test('review material is grouped class › chapter › note, without homework, t
   const tree = buildReviewTree(byId([...v.list, guide, old, draft]), FOLDERS, CLASSES);
   assert.deepEqual(
     tree.map((g) => g.name),
-    ['Biology', 'Calculus I', 'Drafts', 'Old Class', 'Unfiled'],
+    ['Biology', 'Calculus I', 'Drafts', 'Old Class', 'Notes'],
   );
   const calc = tree.find((g) => g.name === 'Calculus I')!;
   assert.deepEqual(
