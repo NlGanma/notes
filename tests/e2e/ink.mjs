@@ -79,22 +79,21 @@ doc = await docJSON();
 const lastInk = doc.content.filter((b) => b.type === 'inkBlock').pop();
 const circle = lastInk?.attrs.ink?.[lastInk.attrs.ink.length - 1];
 check(circle?.brush === 'mono' && circle?.closed, `hold-to-snap turned the circle into a clean shape (brush=${circle?.brush})`);
+// The marker draws 1.6× its size; the clean line keeps that width, so it reads as the same pen.
+check(Math.abs(circle?.size - 1.6 * 1.6 * 0.95) < 0.01, `the snapped shape is as wide as the marker line it came from (${circle?.size?.toFixed(2)})`);
 await shot(page, 'ink-03-snapped');
 
-// 6. Lasso the circle and move it right.
+// 6. Select: drag a box around the circle (⌘⇧4-style, corner to corner), then move it right.
 await page.keyboard.press('Alt+l');
 await page.mouse.move(cx - 60, cy - 55);
 await page.mouse.down();
-for (const [x, y] of [
-  [cx + 60, cy - 55],
-  [cx + 60, cy + 55],
-  [cx - 60, cy + 55],
-  [cx - 60, cy - 55],
-])
-  await page.mouse.move(x, y, { steps: 6 });
+await page.mouse.move(cx + 60, cy + 55, { steps: 10 });
+await page.waitForTimeout(80);
+check(await page.locator(`${V} .ink-overlay .marquee`).count(), 'dragging on the bare page draws a Select box');
 await page.mouse.up();
 await page.waitForTimeout(250);
-check(await page.locator(`${V} .ink-sel-menu`).count(), 'lasso selection shows the action menu');
+check(await page.locator(`${V} .ink-sel-menu`).count(), 'a box around ink selects it and shows the action menu');
+check(!(await page.locator(`${V} .ink-overlay .marquee`).count()), 'and the box itself goes away');
 await shot(page, 'ink-04-lasso');
 await page.mouse.move(cx, cy);
 await page.mouse.down();
@@ -112,7 +111,7 @@ await page.keyboard.press('Escape');
 
 // 7. Precise eraser through the handwriting.
 await page.keyboard.press('Alt+e');
-await page.locator(`${V} .tb-seg button:has-text("Precise")`).click();
+await page.locator(`${V} .tb-seg button:has-text("Part")`).click();
 const inkOfFirst = async () => JSON.stringify((await docJSON()).content.find((b) => b.type === 'inkBlock').attrs.ink);
 const before = await inkOfFirst();
 const heightBefore = (await docJSON()).content.find((b) => b.type === 'inkBlock').attrs.height;
@@ -434,7 +433,7 @@ await page.waitForTimeout(200);
 
 // 11j. Resizing from a corner handle scales about the opposite corner; one undo puts it back.
 was = byId(await inkNow());
-const padOf = (s) => s.size * 0.7; // fountain pen: strokeBounds adds 0.7 × size
+const padOf = (s) => s.size * 1.0; // felt marker: strokeBounds adds 1 × size
 const boxOf = (list) => ({
   minX: Math.min(...list.flatMap((s) => s.pts.map((q) => q[0] - padOf(s)))),
   minY: Math.min(...list.flatMap((s) => s.pts.map((q) => q[1] - padOf(s)))),
@@ -542,7 +541,11 @@ await page.mouse.move(farFrom[0] + 20, dockBottom + 8, { steps: 12 });
 await page.waitForTimeout(700);
 await page.mouse.move(farFrom[0] + 20, 520, { steps: 8 });
 await page.waitForTimeout(150);
+// ⌥ keeps it as ink: how far the page scrolled varies from run to run, and over a line of text a small word
+// would otherwise go into the sentence.
+await page.keyboard.down('Alt');
 await page.mouse.up();
+await page.keyboard.up('Alt');
 await page.waitForTimeout(300);
 const scrollAfter = await scroller.evaluate((el) => el.scrollTop);
 const w1 = await wrapBox();
@@ -678,7 +681,7 @@ for (const [dy, want] of [
 
 // 12e. Let go at the very start of a typed line, a word joins the sentence instead of sitting on its first letters.
 const tinyNow = (await inkNow()).filter((s) => tinyIds.includes(s.id));
-const tinyLeft = Math.min(...tinyNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const tinyLeft = Math.min(...tinyNow.flatMap((s) => s.pts.map((q) => q[0]))) - tinyNow[0].size;
 const p2 = await textAtOffset(1, 'Chlorophyll');
 await drag([wrap.x + tinyNow[0].pts[2][0], wrap.y + tinyNow[0].pts[2][1]], p2.x - 1 - (wrap.x + tinyLeft), p2.base - (wrap.y + R(13)));
 check((await inlineIn(1)) === 1, 'a word let go at the start of a typed line joins the sentence');
@@ -770,7 +773,7 @@ const bigIds = await newIds(() => writeText(page, 'Big', wrap.x + 300, wrap.y + 
 await page.keyboard.press('Alt+l');
 const bigNow = (await inkNow()).filter((s) => bigIds.includes(s.id));
 const height = (list) => Math.max(...list.flatMap((s) => s.pts.map((q) => q[1]))) - Math.min(...list.flatMap((s) => s.pts.map((q) => q[1])));
-const bigLeft = Math.min(...bigNow.flatMap((s) => s.pts.map((q) => q[0]))) - 1.5;
+const bigLeft = Math.min(...bigNow.flatMap((s) => s.pts.map((q) => q[0]))) - bigNow[0].size;
 const into = await textAtOffset(0, 'energy into');
 await drag([wrap.x + bigNow[0].pts[3][0], wrap.y + bigNow[0].pts[3][1]], into.x + 1 - (wrap.x + bigLeft), into.base - (wrap.y + R(19)));
 const fitNow = await page.evaluate(() => {
@@ -892,6 +895,163 @@ await page.waitForTimeout(200);
 check(zs > 1.3 && (await selCount()) === zIds.length, `zoomed in (×${zs.toFixed(2)}), a tap still picks up one whole word (${await selCount()} of ${zIds.length})`);
 await page.keyboard.press('Escape');
 await page.keyboard.press(`${MOD}+0`);
+await page.waitForTimeout(300);
+
+
+// 13. The Select box, in a fresh note: Esc, Space, ⌥, ⇧, a box over text, a tap.
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForTimeout(400);
+await page.keyboard.type('Select box');
+await page.keyboard.press('Enter');
+await page.keyboard.type('A typed line to ask about.');
+await page.waitForTimeout(200);
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(150);
+wrap = await wrapBox();
+const abIds = await newIds(() => writeText(page, 'ab', wrap.x + 40, wrap.y + R(4), 18));
+const cdIds = await newIds(() => writeText(page, 'cd', wrap.x + 340, wrap.y + R(4), 18));
+const boxAround = (ids) => {
+  const pts = [];
+  return inkNow().then((all) => {
+    for (const st of all) if (ids.includes(st.id)) pts.push(...st.pts);
+    const xs = pts.map((q) => q[0]);
+    const ys = pts.map((q) => q[1]);
+    return { x0: wrap.x + Math.min(...xs) - 12, y0: wrap.y + Math.min(...ys) - 12, x1: wrap.x + Math.max(...xs) + 12, y1: wrap.y + Math.max(...ys) + 12 };
+  });
+};
+const ab = await boxAround(abIds);
+const cd = await boxAround(cdIds);
+await page.keyboard.press('Alt+l');
+await page.waitForTimeout(150);
+const selectedIds = () =>
+  page.evaluate(() => Number(document.querySelector('.note-view:not(.is-hidden) .ink-sel-menu')?.dataset.strokes ?? 0));
+
+// 13a. Esc lets a box go; what it would catch glows while it is dragged.
+await page.mouse.move(ab.x0, ab.y0);
+await page.mouse.down();
+await page.mouse.move(ab.x1, ab.y1, { steps: 8 });
+await page.waitForTimeout(120);
+const halo = await page.evaluate(() => document.querySelectorAll('.note-view:not(.is-hidden) .ink-pen g[filter*="caught"] path').length);
+check(halo === abIds.length, `while the box is dragged, the ink it would catch glows (${halo} of ${abIds.length})`);
+await shot(page, 'ink-21-select-box');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(80);
+await page.mouse.up();
+await page.waitForTimeout(150);
+check(!(await page.locator(`${V} .ink-overlay .marquee`).count()) && (await selectedIds()) === 0, 'Esc lets the box go and selects nothing');
+
+// 13b. Holding Space moves the box at its size: dragged around "ab", then carried over "cd".
+const docBeforeSpace = JSON.stringify(await docJSON());
+await page.mouse.move(ab.x0, ab.y0);
+await page.mouse.down();
+await page.mouse.move(ab.x1, ab.y1, { steps: 8 });
+await page.keyboard.down('Space');
+await page.mouse.move(ab.x1 + (cd.x0 - ab.x0), ab.y1 + (cd.y0 - ab.y0), { steps: 10 });
+await page.keyboard.up('Space');
+await page.mouse.move(Math.max(ab.x1 + (cd.x0 - ab.x0), cd.x1), Math.max(ab.y1 + (cd.y0 - ab.y0), cd.y1), { steps: 3 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+const typedNothing = JSON.stringify(await docJSON()) === docBeforeSpace;
+check((await selectedIds()) === cdIds.length && typedNothing, `holding Space moves the box (it caught ${await selectedIds()} of the ${cdIds.length} strokes it was moved over; the Space typed ${typedNothing ? 'nothing' : 'into the note'})`);
+
+// 13c. ⇧ adds a box to the selection.
+await page.keyboard.down('Shift');
+await page.mouse.move(ab.x0, ab.y0);
+await page.mouse.down();
+await page.mouse.move(ab.x1, ab.y1, { steps: 8 });
+await page.mouse.up();
+await page.keyboard.up('Shift');
+await page.waitForTimeout(200);
+check((await selectedIds()) === abIds.length + cdIds.length, `⇧ adds a box to the selection (${await selectedIds()} strokes)`);
+
+// 13d. ⌥ grows the box from where it was pressed: pressed on the bare page between the two words and dragged
+// past "cd", it reaches back over "ab" too.
+await page.mouse.click(wrap.x + 600, wrap.y + R(9));
+await page.waitForTimeout(150);
+check((await selectedIds()) === 0, 'a tap on the bare page clears the selection');
+const between = [(ab.x1 + cd.x0) / 2, (ab.y0 + ab.y1) / 2];
+await page.mouse.move(...between);
+await page.keyboard.down('Alt');
+await page.mouse.down();
+await page.mouse.move(Math.max(cd.x1, between[0] + (between[0] - ab.x0)) + 20, ab.y1 + 2, { steps: 8 });
+await page.mouse.up();
+await page.keyboard.up('Alt');
+await page.waitForTimeout(200);
+check((await selectedIds()) === abIds.length + cdIds.length, `⌥ grows the box from its centre, both ways (${await selectedIds()} of ${abIds.length + cdIds.length})`);
+await page.mouse.click(wrap.x + 600, wrap.y + R(9));
+
+// 13e. A box over typed text only stays as an area, with the Ask composer under it; Esc puts both away.
+const line2 = await page.locator(`${V} .ProseMirror > p`).first().boundingBox();
+await page.mouse.move(line2.x - 6, line2.y + 2);
+await page.mouse.down();
+await page.mouse.move(line2.x + 200, line2.y + line2.height + 2, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+check(
+  (await page.locator(`${V} .area-frame`).count()) === 1 && (await page.locator(`${V} .snip-ask`).count()) === 1 && (await selectedIds()) === 0,
+  'a box over typed text stays as an area and opens the Ask composer under it',
+);
+await shot(page, 'ink-22-area');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+check(!(await page.locator(`${V} .area-frame`).count()) && !(await page.locator(`${V} .snip-ask`).count()), 'Esc puts the area and its composer away');
+
+// 14. A one-stroke arrow, held at its end, snaps to a clean arrow of the marker's width.
+await page.keyboard.press('Alt+p');
+const ay0 = wrap.y + R(7);
+const arrowIds = await newIds(async () => {
+  await page.mouse.move(wrap.x + 60, ay0);
+  await page.mouse.down();
+  await page.mouse.move(wrap.x + 240, ay0 + 3, { steps: 18 });
+  await page.mouse.move(wrap.x + 222, ay0 - 9, { steps: 4 });
+  await page.mouse.move(wrap.x + 240, ay0 + 3, { steps: 4 });
+  await page.mouse.move(wrap.x + 222, ay0 + 15, { steps: 4 });
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+});
+const arrowStroke = await page.evaluate((id) => {
+  const ed = document.querySelector('.note-view:not(.is-hidden) .ProseMirror').editor;
+  let out = null;
+  ed.state.doc.forEach((n) => {
+    for (const st of n.attrs.ink ?? []) if (st.id === id) out = st;
+  });
+  return out;
+}, arrowIds[0]);
+const arrowXs = arrowStroke ? arrowStroke.pts.filter((_, i) => i % 3 === 0) : [];
+const tipI = arrowXs.indexOf(Math.max(...arrowXs));
+const tipAt = arrowXs[tipI] ?? 0;
+const level = arrowStroke ? Math.abs(arrowStroke.pts[1] - arrowStroke.pts[tipI * 3 + 1]) : NaN;
+check(
+  arrowIds.length === 1 && arrowStroke?.brush === 'mono' && !arrowStroke.closed && Math.abs(arrowStroke.size - 1.6 * 1.6 * 0.95) < 0.01,
+  `a line that ends in a V head, held, becomes a clean arrow at the marker's width (brush ${arrowStroke?.brush}, size ${arrowStroke?.size?.toFixed(2)})`,
+);
+check(Math.abs(tipAt - 240) < 4 && level < 0.01, `its shaft is level and ends at the tip (tip x ${tipAt.toFixed(1)}, rise ${level.toFixed(2)})`);
+await shot(page, 'ink-23-arrow');
+
+// 15. The bar: the active size retunes its slot; in a narrow window the settings fold into one button.
+await page.locator(`${V} .tb-size.is-active`).click();
+await page.locator('.tool-pop.is-size input[type="range"]').fill('3');
+await page.waitForTimeout(100);
+const tools = await page.evaluate(() => JSON.parse(localStorage.getItem('nib.tools') || '{}').state);
+check(tools?.penSizes?.[1] === 3 && tools?.pen?.size === 3, `clicking the active size opens a slider that retunes that slot (${JSON.stringify(tools?.penSizes)})`);
+await page.locator('.tool-pop.is-size input[type="range"]').fill('1.6');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Alt+e');
+check((await page.locator(`${V} .tb-context button`).allTextContents()).join('|').includes('Whole stroke|Part|Highlighter only'), 'the eraser offers Whole stroke | Part and Highlighter only');
+await page.setViewportSize({ width: 720, height: 760 });
+await page.waitForTimeout(500);
+const fit = await page.evaluate(() => {
+  const bar = document.querySelector('.note-view:not(.is-hidden) .ink-toolbar');
+  const edge = bar.closest('.note-scroll').getBoundingClientRect().right;
+  const all = [...bar.querySelectorAll('.tb-tool, .tb-more, .tb-context > *')].every((el) => el.getBoundingClientRect().right <= edge);
+  return { folded: bar.classList.contains('is-folded'), all, sw: bar.scrollWidth, cw: bar.clientWidth };
+});
+check(fit.folded && fit.all && fit.sw <= fit.cw + 1, `in a narrow window the eraser's settings fold into one button and nothing is cut off (${JSON.stringify(fit)})`);
+await page.locator(`${V} .tb-summary`).click();
+check((await page.locator('.tool-pop.is-summary button:has-text("Part")').count()) === 1, 'the folded button opens the same settings');
+await shot(page, 'ink-24-folded');
+await page.keyboard.press('Escape');
+await page.setViewportSize({ width: 1440, height: 1000 });
 await page.waitForTimeout(300);
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
