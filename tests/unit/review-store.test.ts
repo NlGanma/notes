@@ -9,6 +9,7 @@ import { buildItem, hintFor, mulberry32, type Item } from '../../src/lib/review/
 import { chunkNote } from '../../src/lib/ai/rag';
 import { DAY, freshState, isMastered, type Confidence, type Level } from '../../src/lib/review/mastery';
 import type { NoteDoc, VaultBackend } from '../../src/lib/vault/types';
+import { note, p } from './fixtures';
 
 /** The Review store driven the way a student would, on the demo notes, with the model offline. */
 
@@ -469,4 +470,109 @@ test('naming the idea an example shows, and being sure of it, is not a misconcep
   await review().submit('banana', 'sure');
   assert.equal(review().misconceptions.length, 1);
   assert.equal(review().file.states[item.conceptId].misconception, 'banana');
+});
+
+/**
+ * An untitled note: its opening text is an idea named "This note" (shown by the note's name), beside a
+ * definition long enough to be connected to it. Both were learned before and are due now, a rung up.
+ */
+function untitledDue(wholeLevel: Level, otherLevel: Level) {
+  const lines = [
+    'Federalism splits sovereignty between a central government and regional governments, each with its own powers.',
+    'A unitary state keeps sovereignty in the central government, which can create or abolish the regions.',
+    '**Confederation** is a loose union of sovereign states that keep their own armies, currencies, courts and most of their powers.',
+  ];
+  const n = note('', 'Politics', lines.map((t) => p(t)));
+  useVault.setState({ notes: { ...notes(), [n.meta.id]: n }, folders: [...useVault.getState().folders, 'Politics'] });
+  const cs = conceptsOf(n);
+  const whole = cs.find((c) => c.whole)!;
+  const other = cs.find((c) => !c.whole && c.cap === 3)!;
+  const learned = (level: Level) => ({ ...freshState(clock.now), p: 0.6, attempts: 3, correct: 2, best: level, level, last: clock.now - DAY, due: clock.now });
+  useReview.setState({ file: { ...review().file, states: { [whole.id]: learned(wholeLevel), [other.id]: learned(otherLevel) } } });
+  const chunkText = chunkNote(n)[0].text;
+  const items = (c: typeof whole) =>
+    ([1, 2, 3] as Level[]).map((level) => buildItem(c, level, { title: '', siblings: cs, avoid: [], rng: mulberry32(1), chunkText }));
+  return { n, whole, other, items };
+}
+
+/** Runs a session to its end, keeping what each question was. */
+async function runSession(noteId: string, onShow: () => Promise<void> = async () => undefined) {
+  const shown: { concept: string; level: Level; prompt: string; origin: string }[] = [];
+  review().start([noteId]);
+  for (let i = 0; i < 12 && review().session && review().current; i++) {
+    await onShow();
+    const cur = review().current!;
+    shown.push({ concept: cur.concept.id, level: cur.item.level, prompt: cur.item.prompt, origin: cur.item.origin });
+    await answer(true, 'sure');
+    review().next();
+  }
+  return shown;
+}
+
+test('an untitled note’s opening is never asked about as “This note”, even with a phrasing cached from before', async () => {
+  for (const [wholeLevel, otherLevel] of [
+    [1, 3],
+    [3, 1],
+  ] as [Level, Level][]) {
+    const { n, whole, other, items } = untitledDue(wholeLevel, otherLevel);
+    // What the model phrased before: about "This note", under every key a question about it (or connecting
+    // to it) can have; and one good phrasing for the named idea, which is still used.
+    const stale = 'In your own words, what do your notes say about This note?';
+    const questions: Record<string, { prompt: string; points: string[]; fact: string }[]> = {};
+    for (const it of [...items(whole), ...items(other).filter((x) => x.format === 'connect')])
+      questions[`${it.key}#${whole.chunkHash}`] = [{ prompt: stale, points: [], fact: it.fact }];
+    const explain = items(other).find((x) => x.format === 'explain')!;
+    questions[`${explain.key}#${other.chunkHash}`] = [
+      { prompt: 'What makes a confederation different from a federation, according to your notes?', points: [], fact: explain.fact },
+    ];
+    useReview.setState({ file: { ...review().file, questions } });
+
+    const shown = await runSession(n.meta.id);
+    assert.ok(shown.some((s) => s.concept === whole.id && s.level >= 1), `the opening is asked about a rung up (${wholeLevel})`);
+    for (const s of shown) assert.doesNotMatch(s.prompt, /This note/, `${s.level}: ${s.prompt}`);
+    if (otherLevel === 1) assert.ok(shown.some((s) => s.concept === other.id && s.origin === 'model'), 'a named idea still gets the phrasing cached for it');
+    review().end();
+    review().closeSummary();
+  }
+});
+
+test('the model is never asked to phrase a question about “This note”, nor to connect an idea to it', async () => {
+  const tasks: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: { content: string }[] };
+    const content = body.messages?.at(-1)?.content ?? '';
+    if (content.startsWith('Task: question')) tasks.push(content);
+    // Whatever it is asked about, it asks about that name.
+    const name = /question about "([^"]*)"/.exec(content)?.[1] ?? '';
+    const proof = /"""\n(.{0,60})/.exec(content)?.[1] ?? '';
+    const reply = content.startsWith('Task: question')
+      ? { question: `In your own words, what do your notes say about ${name}?`, proof, keyPoints: [] }
+      : { skip: true };
+    const nd = `${JSON.stringify({ message: { content: JSON.stringify(reply) }, done: false })}\n${JSON.stringify({ done: true, done_reason: 'stop' })}\n`;
+    return new Response(nd, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } });
+  }) as typeof fetch;
+  const settle = () => new Promise<void>((r) => setTimeout(r, 20));
+  try {
+    useAI.setState({ status: 'online', chatModel: 'stub', provider: 'ollama', baseUrl: 'http://stub.invalid', models: [] });
+    for (const [wholeLevel, otherLevel] of [
+      [1, 3],
+      [3, 1],
+    ] as [Level, Level][]) {
+      const { n } = untitledDue(wholeLevel, otherLevel);
+      const shown = await runSession(n.meta.id, settle);
+      await settle();
+      for (const s of shown) assert.doesNotMatch(s.prompt, /This note/, `${s.level}: ${s.prompt}`);
+      review().end();
+      review().closeSummary();
+    }
+    assert.ok(tasks.length, 'the named idea is still phrased by the model');
+    for (const t of tasks) {
+      assert.doesNotMatch(t, /"This note"/);
+      assert.doesNotMatch(t, /relates to ""/);
+    }
+    for (const list of Object.values(review().file.questions)) for (const q of list) assert.doesNotMatch(q.prompt, /This note/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

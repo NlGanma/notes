@@ -454,9 +454,19 @@ export const useReview = create<ReviewState>((set, get) => {
   /** Questions being phrased right now (so a prefetch and a show don't ask twice). */
   const phrasing = new Set<string>();
 
+  /**
+   * An untitled note's opening has no name a model could ask by (it would ask about "This note"): questions
+   * about it, or connecting an idea to it, are always the built-in ones.
+   */
+  const aboutWhole = (item: Item, c: Concept) => !!c.whole || (item.format === 'connect' && !!conceptById(item.key.split(':')[1])?.whole);
+
   /** A model-phrased question for a level-1+ item, prefetched in the background and cached if it passes. */
   const phrase = async (item: Item, c: Concept) => {
-    if (!online() || item.level < 1 || item.format === 'rate' || get().file.bad.includes(item.key)) return;
+    if (!online() || item.level < 1 || item.format === 'rate' || aboutWhole(item, c) || get().file.bad.includes(item.key)) return;
+    const level = item.format === 'apply' ? 'apply' : item.format === 'connect' ? 'connect' : 'explain';
+    const partner = item.prompt.match(/\*\*([^*]+)\*\*[^*]*\*\*([^*]+)\*\*/)?.[2];
+    // A connecting question needs both names to ask about.
+    if (level === 'connect' && !partner) return;
     const ch = chunkOf(c);
     if (!ch) return;
     const cacheKey = `${item.key}#${c.chunkHash}`;
@@ -465,13 +475,7 @@ export const useReview = create<ReviewState>((set, get) => {
     phrasing.add(cacheKey);
     const gen = generation;
     const note = noteOf(c.noteId);
-    const level = item.format === 'apply' ? 'apply' : item.format === 'connect' ? 'connect' : 'explain';
-    const hint =
-      level === 'apply'
-        ? LEVEL_HINT.apply(item.source.text.replace(/\*\*|==/g, ''))
-        : level === 'connect'
-          ? LEVEL_HINT.connect(item.prompt.match(/\*\*([^*]+)\*\*[^*]*\*\*([^*]+)\*\*/)?.[2] ?? '')
-          : LEVEL_HINT.explain;
+    const hint = level === 'apply' ? LEVEL_HINT.apply(item.source.text.replace(/\*\*|==/g, '')) : level === 'connect' ? LEVEL_HINT.connect(partner!) : LEVEL_HINT.explain;
     try {
       const { value } = await chatJSON(
         {
@@ -699,7 +703,7 @@ export const useReview = create<ReviewState>((set, get) => {
     if (bad.includes(item.key)) return null;
     // A cached question the model phrased (and the checks passed).
     const cached = get().file.questions[`${item.key}#${c.chunkHash}`];
-    if (cached?.length && item.level >= 1) {
+    if (cached?.length && item.level >= 1 && !aboutWhole(item, c)) {
       const q = cached[st.attempts % cached.length];
       item = { ...item, prompt: q.prompt, points: q.points.length ? q.points : item.points, fact: q.fact, origin: 'model' };
     }
