@@ -1115,6 +1115,15 @@ await shot(page, 'ink-25-second-box');
 await page.keyboard.press(`${MOD}+j`);
 await page.waitForFunction(() => !document.querySelector('.assistant'));
 
+// 16b. Move to… from the ⋯ menu doesn't offer the classes' Homework folders (a plain note there would drop out of sight).
+await page.locator(`${V} .tb-more`).click();
+await page.click('.more-menu .menu-item:has-text("Move to")');
+await page.waitForSelector('.folder-pick');
+const targets = await page.locator('.folder-pick-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('title') ?? ''));
+check(targets.includes('Calculus I') && !targets.some((t) => /(^|\/)Homework$/.test(t)), `Move to… lists the classes but none of their Homework folders (${targets.filter(Boolean).join(', ')})`);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+
 // 17. With the local model not running, the Ask composer says so and can't send; the selection's Ask is off.
 const setAI = (patch) =>
   page.evaluate(async (p) => {
