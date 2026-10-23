@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
-import { launch, shot, BASE, OUT, createClassDialog } from './lib.mjs';
+import { launch, shot, BASE, OUT, createClassDialog, newNoteFromSidebar, noteMenuItem } from './lib.mjs';
 
 const MOCK = process.env.MOCK_URL || 'http://127.0.0.1:11434';
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
@@ -34,7 +34,7 @@ const tmp = fs.mkdtempSync(path.join(OUT, 'hw-'));
 }
 
 await page.goto(BASE);
-await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
+await page.waitForSelector('[data-ai-status="online"]', { timeout: 15000 });
 await mock({ fail: 0, truncate: 0, firstTokenMs: 0 });
 
 // ---------------------------------------------------------------- classes
@@ -54,7 +54,9 @@ await page.click('.banner-info');
 check(/Dr\. Ruiz/.test(await page.textContent('.class-info')), '…and its details show the teacher');
 await page.keyboard.press('Escape');
 await page.click('.banner-customize');
-check((await page.locator('.icon-pick.is-active[aria-label="flask"]').count()) === 1, 'the class icon is guessed from its name (flask)');
+// The dialog shows the stored icon once it has read the class.
+const flask = await page.waitForSelector('.icon-pick.is-active[aria-label="flask"]', { timeout: 3000 }).catch(() => null);
+check(!!flask && (await page.locator('.icon-pick.is-active').count()) === 1, 'the class icon is guessed from its name (flask)');
 await page.keyboard.press('Escape');
 check(await page.locator('.tree-row.is-class:has-text("Organic Chemistry")').count(), 'the new class is in the sidebar');
 
@@ -245,12 +247,13 @@ check(true, 'flashcards are made from the class from its page');
 
 // ---------------------------------------------------------------- Polish files loose notes into classes
 await page.click('.nav-item:has-text("All notes")');
-await page.click('.notes-view .btn.is-create');
+await newNoteFromSidebar(page, 'Squared');
+check((await page.locator(`${V} .page.paper-grid`).count()) === 1, 'a note made from the New note menu is on the paper picked there');
 await page.locator(`${V} .page-title`).fill('Exam review');
 await page.locator(`${V} .page-title`).press('Enter');
 await page.keyboard.type('Squeeze theorem: if g is below f and h above, and both limits equal L, the limit of f is L. A removable discontinuity is a hole.');
 await page.waitForTimeout(700);
-await page.click('.top-btn[aria-label="Polish"]');
+await noteMenuItem(page, 'Polish');
 const moveRow = page.locator('.polish-row:has-text("Move to Calculus I")');
 check(await moveRow.count(), 'Polish suggests filing an unfiled note in the class it matches');
 await moveRow.locator('button').click();

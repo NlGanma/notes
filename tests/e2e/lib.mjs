@@ -52,18 +52,62 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
   return { browser, context, page, errors };
 }
 
-/** Opens a note filed in a class: the class in the drawer, its Classwork tab, then the note's row. */
-export async function openClassNote(page, cls, title) {
-  await page.click(`.tree-row.is-class:has-text("${cls}")`);
-  await page.click('.gtab:has-text("Classwork")');
-  await page.click(`.cw-row:has-text("${title}")`);
+/** Makes sure the sidebar is showing (it hides itself on narrow windows and beside the assistant). */
+export async function showSidebar(page) {
+  if (await page.locator('.sidebar.is-hidden').count()) {
+    await page.click('.mainbar-show');
+    await page.waitForSelector('.sidebar:not(.is-hidden)');
+  }
 }
 
-/** Opens the Create class dialog from the app bar's + menu. */
+/**
+ * Opens a note filed in a class: the class's row in the sidebar, then the note's row on the class page.
+ * The class page has had more than one layout; whichever lists the note is used, and if none does, the
+ * note is found with Search (⌘K) instead.
+ */
+export async function openClassNote(page, cls, title) {
+  await showSidebar(page);
+  await page.click(`.sidebar .nav-class:has-text("${cls}")`);
+  await page.waitForSelector('.class-view');
+  const row = page.locator(`.class-view :is(.note-row, .cw-row):has-text("${title}")`).first();
+  if (!(await row.isVisible().catch(() => false))) {
+    const classwork = page.locator('.class-view .gtab:has-text("Classwork")');
+    if (await classwork.count()) await classwork.click();
+  }
+  if (await row.isVisible().catch(() => false)) {
+    await row.click();
+  } else {
+    await page.click('.side-search');
+    await page.fill('.palette-input input', title);
+    await page.click(`.palette-item:has-text("${title}")`);
+  }
+  await page.waitForSelector(`.note-view:not(.is-hidden) .page-title`);
+}
+
+/** Opens the New class dialog from the Classes page (its button at the top right). */
 export async function createClassDialog(page) {
-  await page.click('button[aria-label="Create"]');
-  await page.click('.menu-item:has-text("Class")');
-  await page.waitForSelector('.class-name-input input');
+  await showSidebar(page);
+  await page.click('.sidebar .nav-classes-label');
+  const button = page.locator('.content button:visible', { hasText: /^\s*(New class|Add class)\s*$/ }).first();
+  await button.click();
+  // Older layouts put "Create class" in a small menu under the button.
+  const create = page.locator('.menu-item:has-text("Create class")');
+  if (await create.isVisible().catch(() => false)) await create.click();
+  await page.waitForSelector('.class-name-input input, .class-dialog input');
+}
+
+/** Makes a note from the sidebar's New note menu, on one of the three papers. */
+export async function newNoteFromSidebar(page, paper = 'Lined') {
+  await showSidebar(page);
+  await page.click('.sidebar .side-new');
+  await page.click(`.new-note-pop .paper-opt:has-text("${paper}")`);
+  await page.waitForSelector('.note-view:not(.is-hidden) .page-title');
+}
+
+/** Opens the open note's ⋯ menu and picks an item (Polish…, Export…). */
+export async function noteMenuItem(page, label) {
+  await page.click('.note-view:not(.is-hidden) .tb-more');
+  await page.click(`.more-menu .menu-item:has-text("${label}")`);
 }
 
 export async function shot(page, name, opts = {}) {

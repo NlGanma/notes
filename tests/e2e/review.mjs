@@ -67,7 +67,7 @@ async function answerRight(item) {
 }
 
 await page.goto(BASE);
-await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
+await page.waitForSelector('[data-ai-status="online"]', { timeout: 15000 });
 
 // A lecture written as plain prose: little structure for the rules to read, so the Mastery Engine reads it.
 await page.evaluate(() => {

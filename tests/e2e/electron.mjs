@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { OUT, openClassNote, createClassDialog } from './lib.mjs';
+import { OUT, openClassNote, createClassDialog, noteMenuItem } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const electronPath = require('electron');
@@ -55,12 +55,12 @@ const hwFile = JSON.parse(fs.readFileSync(path.join(vault, 'Calculus I', 'Homewo
 check(hwFile.meta.homework?.sources?.length === 1, 'homework links are saved in the note file');
 
 // Local model through the main-process proxy (no CORS involved).
-await win.waitForSelector('.ai-status.is-online', { timeout: 15000 }).catch(() => undefined);
-check(await win.locator('.ai-status.is-online').count(), 'connected to the local model through the main process');
+await win.waitForSelector('[data-ai-status="online"]', { timeout: 15000 }).catch(() => undefined);
+check(await win.locator('[data-ai-status="online"]').count(), 'connected to the local model through the main process');
 
 // Edit a note and see it saved to disk.
 await win.click('.nav-item:has-text("All notes")');
-await win.click('.note-card:has-text("Welcome to Nib")');
+await win.click('.notes-view .note-row:has-text("Welcome to Nib")');
 await win.waitForTimeout(500);
 await win.locator('.note-view:not(.is-hidden) .page-title').fill('Welcome to Nib (edited)');
 await win.locator('.note-view:not(.is-hidden) .page-title').press('Enter');
@@ -117,8 +117,8 @@ check(fs.existsSync(path.join(vault, 'Stats 101', 'Week 1.nib')) && !fs.existsSy
 // PDF export of the calculus note.
 await openClassNote(win, 'Calculus I', 'Lecture 4');
 await win.waitForTimeout(1200);
-await win.click('.top-btn[aria-label="Export"]');
-await win.click('.menu-item:has-text("PDF document")');
+await noteMenuItem(win, 'Export');
+await win.click('.more-menu .menu-item:has-text("PDF document")');
 await win.waitForTimeout(3000);
 const pdfs = fs.readdirSync(exportDir).filter((f) => f.endsWith('.pdf'));
 check(pdfs.length === 1, `exported a PDF (${pdfs.join(', ')})`);

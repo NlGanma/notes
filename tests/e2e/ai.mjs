@@ -1,7 +1,7 @@
 // End-to-end test of the local-AI features against scripts/mock-llm.mjs.
 //   node scripts/mock-llm.mjs &   (port 11434)
 //   node tests/e2e/ai.mjs
-import { launch, shot, BASE, openClassNote } from './lib.mjs';
+import { launch, shot, BASE, openClassNote, noteMenuItem } from './lib.mjs';
 
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
 const V = '.note-view:not(.is-hidden)';
@@ -15,8 +15,8 @@ const waitIdle = async () => {
 };
 
 await page.goto(BASE);
-await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
-const status = await page.textContent('.ai-status');
+await page.waitForSelector('[data-ai-status="online"]', { timeout: 15000 });
+const status = await page.getAttribute('[data-ai-status]', 'title');
 check(/qwen2\.5vl/.test(status), `connected to the local model server, chose a vision model (${status.trim()})`);
 
 // 1. Tutor on the handwritten worked example.
@@ -117,7 +117,7 @@ await shot(page, 'ai-09-quiz');
 // 8. Polish → read handwriting in the background-transcription path.
 await page.click('.tab:has-text("Lecture 4")');
 await page.waitForTimeout(500);
-await page.click('.top-btn[aria-label="Polish"]');
+await noteMenuItem(page, 'Polish');
 await page.waitForSelector('.polish');
 await shot(page, 'ai-10-polish');
 const read = page.locator('.polish-row:has-text("searchable") button');
@@ -137,8 +137,10 @@ const transcript = await page.evaluate(() => {
 check(transcript && /lim/.test(transcript.text), 'handwriting was read by the vision model and stored as a transcript');
 
 // 9. Settings shows the detected models.
-await page.click('.ai-status');
+await page.click('.side-settings');
+await page.click('.settings-nav-item:has-text("Local AI")');
 await page.waitForSelector('.status-card.is-online');
+check(/qwen2\.5vl/.test(await page.textContent('.status-card')), 'Settings names the models in use');
 await shot(page, 'ai-11-settings');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');

@@ -31,7 +31,7 @@ const ask = async (text) => {
 };
 
 await page.goto(BASE);
-await page.waitForSelector('.ai-status.is-online', { timeout: 15000 });
+await page.waitForSelector('[data-ai-status="online"]', { timeout: 15000 });
 
 // ---------------------------------------------------------------- per-note: covered
 await openClassNote(page, 'Calculus I', 'Lecture 4');
