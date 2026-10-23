@@ -1277,17 +1277,17 @@
   color: var(--text-2);
   flex: none;
 }
-.sel-btn .sel-chev {
-  margin-left: -2px;
-  color: var(--text-3);
-}
 .sel-btn.icon {
   width: 32px;
   padding: 0;
   justify-content: center;
 }
-.sel-btn:hover {
+.sel-btn:hover:not(:disabled) {
   background: var(--bg-hover);
+}
+.sel-btn:disabled,
+.sel-btn:disabled svg {
+  color: var(--text-4);
 }
 .sel-btn.is-danger:hover,
 .sel-btn.is-danger:hover svg {
@@ -1389,6 +1389,45 @@
 .snip-quick button:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+.snip-quick button:disabled {
+  color: var(--text-4);
+  background: none;
+}
+/* The local model isn't running (or is still starting): said above the question, with the way to fix it. */
+.snip-ask .composer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px 8px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-2);
+  box-shadow: 0 1px 0 var(--hairline);
+}
+.snip-ask .composer-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--danger);
+}
+.snip-ask .composer-status.is-loading .composer-status-dot {
+  background: var(--warning-line);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.snip-ask .composer-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.snip-ask .composer-status-link {
+  color: var(--link);
+  font-size: 13px;
+  flex: none;
+}
+.snip-ask .composer-status-link:hover {
+  text-decoration: underline;
 }
 .snip-quick .snip-close {
   width: 28px;

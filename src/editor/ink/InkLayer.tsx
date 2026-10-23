@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import { ChevronDown, Copy, CopyPlus, MessageCircle, Sigma, Trash2, Type } from 'lucide-react';
+import { Copy, CopyPlus, MessageCircleQuestion, Sigma, Trash2, Type } from 'lucide-react';
 import type { Bounds, Stroke } from '../../lib/ink/types';
 import { livePath, strokePath, strokeSvgAttrs } from '../../lib/ink/render';
 import {
@@ -57,6 +57,7 @@ import {
 } from './typeFlow';
 import { cx, uid } from '../../lib/util';
 import { SnipAsk, type AskMode } from './SnipAsk';
+import { useAvailability } from '../../components/ai/ComposerStatus';
 import { useSideShift } from './inView';
 
 const EMPTY: Stroke[] = [];
@@ -1909,6 +1910,8 @@ function SelectionMenu(props: {
   const { frame, inv, scale } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [below, setBelow] = useState(false);
+  const availability = useAvailability();
+  const unanswerable = availability === 'offline' ? 'Local AI isn’t running' : availability === 'nomodel' ? 'No chat model chosen' : null;
   // Clear of the frame and its handles: above it, unless that would put it under the toolbar.
   const gap = 8 * inv;
   useLayoutEffect(() => {
@@ -1938,10 +1941,9 @@ function SelectionMenu(props: {
       style={{ left, top, transform: `translate(-50%, ${below ? '0' : '-100%'}) scale(${inv})`, transformOrigin: below ? '50% 0' : '50% 100%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button className="sel-btn is-ask" onClick={props.onAsk} title="Ask about this">
-        <MessageCircle size={15} />
+      <button className="sel-btn is-ask" onClick={props.onAsk} disabled={!!unanswerable} title={unanswerable ?? 'Ask about this'}>
+        <MessageCircleQuestion size={15} />
         Ask
-        <ChevronDown size={13} className="sel-chev" />
       </button>
       <span className="sel-sep" />
       <button className="sel-btn" onClick={() => props.onConvert('text')} title="Turn into typed text">

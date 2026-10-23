@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, X } from 'lucide-react';
 import type { Bounds } from '../../lib/ink/types';
 import { useSideShift } from './inView';
+import { ComposerStatus, useAvailability } from '../../components/ai/ComposerStatus';
 
 import type { AskMode } from '../../lib/ai/prompts';
 export type { AskMode };
@@ -31,6 +32,9 @@ export function SnipAsk({
   onCancel(): void;
 }) {
   const [text, setText] = useState('');
+  const availability = useAvailability();
+  // While the model is only starting, a question waits for it; with none running, it couldn't be answered.
+  const answerable = availability !== 'offline' && availability !== 'nomodel';
   const ref = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const shift = useSideShift(boxRef, inv, [bounds.minX, bounds.maxX, inv]);
@@ -61,11 +65,12 @@ export function SnipAsk({
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      <ComposerStatus availability={availability} />
       <form
         className="snip-ask-row"
         onSubmit={(e) => {
           e.preventDefault();
-          if (text.trim()) onSubmit('custom', text.trim());
+          if (text.trim() && answerable) onSubmit('custom', text.trim());
         }}
       >
         <input
@@ -79,13 +84,13 @@ export function SnipAsk({
             if (e.key === 'Escape') onCancel();
           }}
         />
-        <button type="submit" className="snip-send" disabled={!text.trim()} aria-label="Ask">
+        <button type="submit" className="snip-send" disabled={!text.trim() || !answerable} aria-label="Ask">
           <ArrowUp size={16} strokeWidth={2.25} />
         </button>
       </form>
       <div className="snip-quick">
         {QUICK.map((q) => (
-          <button key={q.mode} type="button" onClick={() => onSubmit(q.mode)}>
+          <button key={q.mode} type="button" disabled={!answerable} onClick={() => onSubmit(q.mode)}>
             {q.label}
           </button>
         ))}
