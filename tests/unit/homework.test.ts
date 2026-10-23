@@ -49,3 +49,89 @@ test('due labels', () => {
   assert.equal(dueLabel(at(5), now)?.tone, 'later');
   assert.match(dueLabel(at(20), now)!.text, /^Due /);
 });
+
+test('the Homework list groups by days from today, whatever the weekday, and leaves done homework out', async () => {
+  const { dueGroup, dueInGroup, groupHomework } = await import('../../src/components/homework/sources');
+  const { note } = await import('./fixtures');
+  const DAY = 86_400_000;
+  // Every weekday: the groups must not depend on where the week starts (it once hid a deadline two days out).
+  for (let wd = 0; wd < 7; wd++) {
+    const now = new Date(2026, 9, 18 + wd, 10, 0).getTime();
+    const eod = (d: number) => new Date(2026, 9, 18 + wd + d, 23, 59).getTime();
+    assert.equal(dueGroup(eod(-1), now), 'overdue');
+    assert.equal(dueGroup(eod(0), now), 'today');
+    assert.equal(dueGroup(eod(1), now), 'tomorrow');
+    assert.equal(dueGroup(eod(2), now), 'week');
+    assert.equal(dueGroup(eod(6), now), 'week');
+    assert.equal(dueGroup(eod(7), now), 'later');
+    assert.equal(dueGroup(undefined, now), 'none');
+  }
+  const now = new Date(2026, 9, 22, 10, 0).getTime();
+  const hw = (title: string, due: number | undefined, done = false, created = 1) => note(title, 'Calculus I/Homework', [], { created, homework: { sources: [], folders: [], due, done } });
+  const groups = groupHomework(
+    [
+      hw('later', now + 20 * DAY),
+      hw('no date, older', undefined, false, 1),
+      hw('no date, newer', undefined, false, 2),
+      hw('overdue', now - 2 * DAY),
+      hw('done', now - 5 * DAY, true),
+      hw('in three days', now + 3 * DAY),
+    ],
+    now,
+  );
+  assert.deepEqual(
+    groups.map((g) => [g.label, g.items.map((n) => n.meta.title)]),
+    [
+      ['Overdue', ['overdue']],
+      ['This week', ['in three days']],
+      ['Later', ['later']],
+      ['No due date', ['no date, newer', 'no date, older']],
+    ],
+  );
+  // A row says only what its group doesn't: nothing for "today" at the end of the day, the date when overdue.
+  assert.equal(dueInGroup(new Date(2026, 9, 22, 23, 59).getTime(), now), null);
+  assert.equal(dueInGroup(new Date(2026, 9, 22, 15, 0).getTime(), now)?.text.replace(/\s/g, ' '), new Date(2026, 9, 22, 15, 0).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' '));
+  assert.equal(dueInGroup(now - 2 * DAY, now)?.overdue, true);
+  // This week: the whole weekday, or the short one when a time follows it.
+  const wk = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime();
+  assert.equal(dueInGroup(wk(23, 59), now)?.text, new Date(wk(23, 59)).toLocaleDateString(undefined, { weekday: 'long' }));
+  assert.ok(dueInGroup(wk(15, 30), now)!.text.startsWith(new Date(wk(15, 30)).toLocaleDateString(undefined, { weekday: 'short' }) + ', '));
+  // Homework ticked a moment ago stays in its group until it's let go.
+  const ticked = hw('just ticked', now + 3 * DAY, true);
+  const list = [hw('in three days', now + 3 * DAY), ticked];
+  assert.deepEqual(groupHomework(list, now)[0].items.map((n) => n.meta.title), ['in three days']);
+  assert.deepEqual(
+    groupHomework(list, now, new Set([ticked.meta.id]))[0].items.map((n) => n.meta.title),
+    ['in three days', 'just ticked'],
+  );
+});
+
+test('cards and the Homework list count days the same way, across a clock change', async () => {
+  const { dueGroup } = await import('../../src/components/homework/sources');
+  const agree = (due: number, now: number) => {
+    const label = dueLabel(due, now)!;
+    const group = dueGroup(due, now);
+    assert.equal(label.text === 'Due today', group === 'today', `${new Date(now)} → ${new Date(due)}`);
+    assert.equal(label.text === 'Due tomorrow', group === 'tomorrow', `${new Date(now)} → ${new Date(due)}`);
+    assert.equal(label.tone === 'overdue', group === 'overdue', `${new Date(now)} → ${new Date(due)}`);
+  };
+  // Whatever this machine's time zone: a year of mornings and evenings, deadlines a day back to a week out.
+  for (let day = 0; day < 370; day++) {
+    for (const hour of [0, 9, 23]) {
+      const now = new Date(2026, 0, 1 + day, hour, 30).getTime();
+      for (let d = -1; d <= 7; d++) agree(new Date(2026, 0, 1 + day + d, 23, 59).getTime(), now);
+    }
+  }
+  // And in a zone that changes its clocks: New York falls back on the night of Oct 31 to Nov 1, 2026.
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const now = new Date(2026, 9, 31, 10, 0).getTime();
+    const due = new Date(2026, 10, 1, 23, 59).getTime();
+    assert.equal(dueLabel(due, now)?.text, 'Due tomorrow');
+    assert.equal(dueGroup(due, now), 'tomorrow');
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});

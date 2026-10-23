@@ -1,438 +1,574 @@
 /*
- * Homework detail surfaces, copied from Google Classroom (2025): the student's assignment page header and
- * "Your work" card, the full-window Create assignment form, and the Google Drive picker it opens.
+ * Homework: the list (Things / Reminders: round checkboxes, groups by due date, Done folded away), the
+ * row under a homework's title, the due-date picker, the New homework dialog and Choose notes.
  */
 
-/* ------------------------------------------------------------ assignment header (in the page) */
+/* ------------------------------------------------------------------ a homework row */
 
-.hw-bar {
-  margin: 8px 0 4px;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text);
-}
-.hw-meta {
-  color: var(--text-2);
-}
-.hw-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 8px;
-}
-.hw-link-btn,
-.hw-due-btn {
-  font-weight: 500;
-  color: var(--text);
-  border-radius: var(--radius-xs);
-}
-.hw-link-btn:hover,
-.hw-due-btn:hover {
-  text-decoration: underline;
-}
-.hw-due-btn.is-missing {
-  color: var(--danger);
-}
-/* The one colour stroke on the page: the class colour. */
-.hw-rule {
-  height: 1px;
-  margin: 16px 0 24px;
-  background: var(--class-main, var(--accent));
-}
-
-/* "Your work": Classroom's right-rail card, laid out across the page (its narrow-window form). */
-.hw-work {
-  container-type: inline-size;
-  padding: 16px;
-  border-radius: var(--radius-s);
-  background: #fff;
-  box-shadow: var(--shadow-s);
-}
-.hw-work-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  min-height: 40px;
-}
-.hw-work-title {
-  margin: 0;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  color: var(--text);
-}
-.hw-status {
-  font-weight: 500;
-}
-.hw-status.is-assigned {
-  color: var(--success);
-}
-.hw-status.is-missing {
-  color: var(--danger);
-}
-.hw-status.is-done {
-  color: var(--text-2);
-}
-.hw-work-actions {
-  display: flex;
-  gap: 8px;
-}
-.hw-work-actions .btn {
-  height: 40px;
-  padding: 0 24px;
-}
-.hw-work-actions .hw-add-btn {
-  padding: 0 24px 0 16px;
-}
-@container (max-width: 520px) {
-  .hw-work-actions {
-    width: 100%;
-  }
-  .hw-work-actions .btn {
-    flex: 1;
-  }
-}
-.hw-atts {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
-  margin-top: 16px;
-}
-.hw-atts:empty {
-  display: none;
-}
-.hw-att {
-  display: flex;
-  align-items: center;
-  height: 56px;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  overflow: hidden;
-  background: #fff;
-  transition: background 0.15s var(--ease);
-}
-.hw-att:hover {
-  background: var(--bg-hover);
-}
-.hw-att-main {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
+.hw-row-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  text-align: left;
+  min-height: 44px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: default;
 }
-.hw-att-thumb {
-  width: 56px;
-  height: 100%;
+.hw-row-item + .hw-row-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 42px;
+  right: 10px;
+  height: 1px;
+  background: rgba(20, 20, 19, 0.06);
+}
+.hw-row-item:hover,
+.hw-row-item:focus-visible {
+  background: var(--bg-hover);
+}
+.hw-row-item:hover::before,
+.hw-row-item:hover + .hw-row-item::before {
+  opacity: 0;
+}
+/* Reminders' checkbox: a ring, filled with the class colour once ticked. */
+.hw-check {
+  width: 20px;
+  height: 20px;
   flex: none;
   display: grid;
   place-items: center;
-  background: #f8f9fa;
-  border-right: 1px solid var(--border);
-  color: var(--class-main, var(--accent));
-  overflow: hidden;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+  transition:
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
-.hw-att-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
+.hw-check:hover {
+  box-shadow: inset 0 0 0 1.5px var(--class, var(--text-3));
 }
-.hw-att-text {
+.hw-check.is-on {
+  background: var(--class, var(--text));
+  box-shadow: none;
+}
+.hw-row-title {
+  flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.hw-att-title,
-.hw-att-sub {
+  font-size: 14px;
+  line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hw-att-title {
-  font-weight: 500;
+.hw-row-item.is-done .hw-row-title {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: rgba(20, 20, 19, 0.3);
 }
-.hw-att-sub {
-  font-size: 12px;
-  line-height: 16px;
+.hw-row-class {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 140px;
+  flex: none;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.hw-row-class-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-row-due {
+  flex: none;
+  min-width: 0;
+  font-size: 13px;
   color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
-.hw-att-x {
-  width: 40px;
-  height: 40px;
-  margin-right: 4px;
+.hw-row-due.is-overdue {
+  color: var(--danger);
 }
-.hw-att:hover .hw-att-x {
+/* On the Homework page the dates sit in one column, so the class tags beside them end at one edge. 96px
+   fits the longest label ("Wed, 11:30 PM", "Dec 31, 2025"). */
+.homework-view .hw-row-due {
+  width: 96px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hw-row-item:hover .row-more,
+.hw-row-item:focus-within .row-more {
+  opacity: 1;
+}
+
+/* "Done (5)" */
+.hw-done-list {
+  margin-top: 12px;
+}
+.hw-done-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 0 8px 0 4px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.hw-done-head:hover {
+  background: var(--bg-hover);
   color: var(--text);
 }
-.hw-att-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
+.hw-done-rows {
+  margin-top: 2px;
 }
-.hw-att-group > .hw-att {
-  align-self: stretch;
+
+/* ------------------------------------------------------------------ the Homework page */
+
+.hw-filter {
+  max-width: 180px;
+  margin-left: 8px;
 }
-.hw-read-row {
+.hw-filter-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-filter svg {
+  color: var(--text-3);
+  flex: none;
+}
+.hw-group.is-overdue .list-caption {
+  color: var(--danger);
+}
+.hw-col .list-section:first-of-type {
+  margin-top: 4px;
+}
+
+/* A scan dragged over a class or the Homework page. */
+.class-view.is-drop,
+.homework-view.is-drop {
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ the row under a homework's title */
+
+/* The chips' 8px inner padding hangs outside the title's left edge, so their text lines up with it. */
+.hw-bar > .hw-meta-row {
+  margin-left: -8px;
+}
+
+.hw-bar {
+  margin: 10px 0 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+}
+.hw-meta-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 4px;
 }
-.hw-read-row .spinner {
-  width: 16px;
-  height: 16px;
+/* Linear's properties: quiet until hovered. */
+.hw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 240px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease);
+}
+.hw-chip > svg {
+  flex: none;
+  color: var(--text-3);
+}
+button.hw-chip:hover,
+.hw-chip.is-on {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.hw-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hw-chip.is-none {
+  color: var(--text-3);
+}
+.hw-chip.hw-class {
+  color: var(--text);
+  font-weight: 500;
+}
+.hw-chip.is-overdue,
+.hw-chip.is-overdue > svg {
+  color: var(--danger);
+}
+.hw-chip.is-warn,
+.hw-chip.is-warn > svg {
+  color: var(--warning);
+}
+.hw-add svg {
+  color: var(--text-3);
+}
+.btn.hw-done.is-on {
+  background: var(--class-light, var(--bg-active));
+  color: var(--class-dark, var(--text));
+}
+.btn.hw-done.is-on svg {
+  color: var(--class, var(--text));
+}
+
+.hw-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.hw-source-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  max-width: 280px;
+  border-radius: var(--radius-s);
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.hw-source-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  border-radius: inherit;
+}
+.hw-source-chip:has(.hw-source-x) .hw-source-open {
+  padding-right: 4px;
+}
+.hw-source-open svg {
+  flex: none;
+  color: var(--text-3);
+}
+.hw-source-open:hover .hw-source-name {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.hw-source-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-source-x {
+  width: 20px;
+  height: 20px;
+  margin-right: 3px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text-3);
+}
+.hw-source-x:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.hw-sheet-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hw-suggestions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hw-suggestions-text {
+  color: var(--text-3);
+}
+.hw-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  max-width: 280px;
+  padding: 0 8px 0 6px;
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.hw-suggest:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.hw-suggest svg {
+  flex: none;
+  color: var(--text-3);
+}
+.btn.hw-read {
+  height: 26px;
+  font-size: 12.5px;
+}
+.hw-read .spinner {
+  width: 12px;
+  height: 12px;
 }
 .hw-read-hint {
+  margin-top: 6px;
   font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.hw-no-sources {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  color: var(--text-2);
-}
-.hw-no-sources .btn {
-  max-width: 100%;
+  color: var(--text-3);
 }
 .hw-work-note {
-  margin-top: 12px;
+  margin-top: 8px;
   font-size: 12px;
   line-height: 16px;
-  color: var(--text-2);
+  color: var(--text-3);
+}
+.hw-work-note.hw-no-sources {
+  color: var(--warning);
 }
 
-/* The help card (where Classroom has "Private comments"). */
-.hw-help {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: var(--radius-s);
-  background: #fff;
-  box-shadow: var(--shadow-s);
-}
-.hw-help-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  line-height: 24px;
-}
-.hw-help-head svg {
-  color: var(--text-2);
-}
-.hw-help-link {
-  margin-top: 12px;
-  font-weight: 500;
-  color: var(--accent);
-}
-.hw-help-link:hover {
-  text-decoration: underline;
-}
-.hw-help-input {
-  display: flex;
-  align-items: center;
-  height: 40px;
-  margin-top: 12px;
-  padding-left: 16px;
-  border-radius: 20px;
-  background: var(--bg-field);
-}
-.hw-help-input input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font-size: 14px;
-  user-select: text;
-}
-.hw-help-input input::placeholder {
-  color: var(--text-2);
-}
-.hw-help-input .icon-btn {
-  width: 40px;
-  height: 40px;
-  color: var(--accent);
-}
-.hw-help-input .icon-btn:disabled {
-  opacity: 1;
-  color: rgba(20, 20, 19, 0.38);
+/* ------------------------------------------------------------------ due date */
+
+/* Menus opened from inside a dialog float above it. */
+.popover.hw-pop {
+  z-index: 700;
 }
 
-.hw-add-menu {
-  width: 256px;
+.due-pop {
+  padding: 10px;
 }
-
-/* ------------------------------------------------------------ due date picker (GM3 docked) */
-
 .due-picker {
-  width: 304px;
-  padding: 4px 12px 8px;
+  width: 238px;
 }
 .due-picker-head {
   display: flex;
   align-items: center;
-  height: 48px;
-  padding-left: 12px;
+  gap: 2px;
+  padding: 0 0 6px 6px;
 }
 .due-picker-month {
   flex: 1;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-2);
 }
 .due-picker-grid {
   display: grid;
-  grid-template-columns: repeat(7, 40px);
-}
-.due-picker-wd,
-.due-picker-day {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  font-size: 14px;
+  grid-template-columns: repeat(7, 32px);
+  gap: 2px;
+  justify-content: space-between;
 }
 .due-picker-wd {
-  color: var(--text);
+  height: 24px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
 }
 .due-picker-day {
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 .due-picker-day:hover {
   background: var(--bg-hover);
 }
 .due-picker-day.is-today {
-  color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .due-picker-day.is-selected {
-  background: var(--accent);
+  background: var(--text);
   color: #fff;
   box-shadow: none;
 }
-.due-picker-actions {
+.due-picker-foot {
   display: flex;
   align-items: center;
-  padding-top: 8px;
-}
-.due-picker-actions .btn {
-  height: 40px;
+  margin: 8px -4px -4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
 }
 
-/* ------------------------------------------------------------ new homework (Create assignment form) */
+/* ------------------------------------------------------------------ New homework */
 
-.modal-backdrop:has(> .hw-create) {
-  padding: 0;
-}
-.modal.hw-create {
-  width: 100% !important;
-  height: 100%;
-  max-height: none;
-  border-radius: 0;
-  box-shadow: none;
-  animation: hw-rise 0.22s var(--ease);
-}
-@keyframes hw-rise {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-}
-.hw-create-frame {
+.hw-new {
   position: relative;
+}
+.hw-new-body {
+  padding: 20px 24px 6px;
+}
+.hw-new-kicker {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.hw-title-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 2px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--text);
+  user-select: text;
+}
+.hw-title-input::placeholder {
+  color: var(--text-4);
+  font-weight: 500;
+}
+.hw-props {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  gap: 6px;
+  margin-top: 16px;
 }
-.hw-appbar {
-  height: 64px;
-  flex: none;
+.hw-prop {
   display: flex;
   align-items: center;
-  padding: 0 24px 0 8px;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  min-height: 32px;
+  min-width: 0;
 }
-.hw-appbar-close {
-  width: 40px;
-  height: 40px;
+.hw-prop-label {
+  width: 92px;
+  flex: none;
+  font-size: 13px;
+  color: var(--text-3);
 }
-.hw-appbar-icon {
-  width: 36px;
-  height: 36px;
-  margin-left: 4px;
+.hw-prop.is-paper {
+  align-items: flex-start;
+}
+.hw-prop.is-paper .hw-prop-label {
+  padding-top: 8px;
+}
+.hw-prop.is-paper .paper-picker {
+  margin-left: -6px;
+}
+.hw-prop .chip {
+  max-width: 300px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.hw-prop .chip > svg {
+  flex: none;
+  color: var(--text-3);
+}
+.hw-chip-text.is-none {
+  color: var(--text-3);
+}
+.class-square.is-none {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.hw-uses {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--text);
+}
+.hw-uses.is-none {
+  color: var(--text-3);
+}
+.btn.hw-uses-change {
+  margin-left: -4px;
+  color: var(--link);
+}
+.hw-sheet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 0;
+  max-width: 360px;
+  padding: 0 2px 0 4px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.hw-sheet-thumb {
+  width: 24px;
+  height: 24px;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: var(--info-soft);
-  color: var(--accent);
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
 }
-.hw-appbar-title {
-  margin: 0 0 0 12px;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  color: var(--text-2);
+.hw-sheet-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.hw-appbar-status {
-  margin-right: 16px;
-  font-size: 14px;
-  font-style: italic;
-  color: var(--text-2);
+.hw-sheet-thumb .spinner {
+  width: 12px;
+  height: 12px;
 }
-/* Split button: Create | ▾ */
-.hw-split {
-  display: flex;
-  gap: 1px;
+.hw-sheet-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
-.hw-split .hw-create-btn {
-  height: 40px;
-  padding: 0 24px;
-  border-radius: 20px 0 0 20px;
+.hw-sheet-sub {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
 }
-.hw-split-arrow {
-  width: 40px;
-  height: 40px;
+.hw-sheet.is-failed .hw-sheet-sub {
+  color: var(--danger);
+}
+.hw-new-hint {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.hw-new.is-drop::after {
+  content: 'Drop to attach the worksheet';
+  position: absolute;
+  inset: 8px;
   display: grid;
   place-items: center;
-  border-radius: 0 20px 20px 0;
-  background: var(--accent);
-  color: #fff;
-  transition: background 0.15s var(--ease);
-}
-.hw-split-arrow:hover:not(:disabled) {
-  background: #1a5fd8;
-}
-.hw-split-arrow:disabled {
-  background: rgba(20, 20, 19, 0.12);
-  color: rgba(20, 20, 19, 0.38);
-}
-/* Material's arrow_drop_down. */
-.hw-caret {
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid currentColor;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  color: var(--text-2);
+  pointer-events: none;
 }
 .spinner.is-light {
   display: inline-block;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-color: rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
 }
@@ -441,573 +577,128 @@
   border-top-color: rgba(20, 20, 19, 0.38);
 }
 
-.hw-create-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-.hw-form {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 24px 48px;
-  background: var(--bg-shell);
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-.hw-card {
-  width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: #fff;
-}
-.hw-card-title {
-  margin: 0 0 16px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-}
+/* ------------------------------------------------------------------ Choose notes */
 
-/* Instructions: a filled field with Classroom's formatting toolbar inside it. */
-.hw-instr {
-  position: relative;
-  margin-top: 16px;
-  min-height: 168px;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  background: var(--bg-field);
-  box-shadow: inset 0 -1px 0 var(--text-2);
-  transition: background 0.15s var(--ease);
-}
-.hw-instr:hover {
-  background: var(--bg-subtle);
-}
-.hw-instr.is-focused {
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-.hw-instr-input {
-  flex: 1;
-  min-height: 116px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 24px 16px 8px;
-  outline: none;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-  cursor: text;
-}
-.hw-instr-input ul,
-.hw-instr-input ol {
-  margin: 0;
-  padding-left: 24px;
-}
-.hw-instr-label {
-  position: absolute;
-  left: 16px;
-  top: 16px;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text-2);
-  pointer-events: none;
-  transition:
-    top 0.15s var(--ease),
-    font-size 0.15s var(--ease),
-    color 0.15s var(--ease);
-}
-.hw-instr.has-value .hw-instr-label,
-.hw-instr.is-focused .hw-instr-label {
-  top: 6px;
-  font-size: 12px;
-  line-height: 16px;
-}
-.hw-instr.is-focused .hw-instr-label {
-  color: var(--accent);
-}
-.hw-instr-tools {
-  display: flex;
-  gap: 4px;
-  padding: 0 8px 8px;
-}
-
-/* Attach: round 50px tiles with the label under them. */
-.hw-attach-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.hw-attach-tile {
-  width: 80px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text);
-  text-align: center;
-}
-.hw-attach-circle {
-  width: 50px;
-  height: 50px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text-2);
-  transition: background 0.15s var(--ease);
-}
-.hw-attach-tile:hover .hw-attach-circle {
-  background: var(--bg-hover);
-}
-.hw-attach-tile.is-notes .hw-attach-circle {
-  color: var(--accent);
-}
-.hw-attach-tile.is-blank .hw-attach-circle {
-  color: var(--success);
-}
-.hw-attach-tile:disabled {
-  color: rgba(20, 20, 19, 0.38);
-}
-.hw-attached {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 24px;
-}
-.hw-attached-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 72px;
-  padding-right: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  overflow: hidden;
-}
-.hw-attached-thumb {
-  width: 112px;
-  height: 100%;
-  flex: none;
-  display: grid;
-  place-items: center;
-  background: #f8f9fa;
-  border-right: 1px solid var(--border);
-  color: var(--text-2);
-  overflow: hidden;
-}
-.hw-attached-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
-}
-.hw-attached-thumb .spinner {
-  width: 16px;
-  height: 16px;
-}
-.hw-attached-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.hw-attached-title,
-.hw-attached-sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hw-attached-title {
-  font-weight: 500;
-}
-.hw-attached-sub {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.hw-attached-sub.is-error {
-  color: var(--danger);
-}
-
-/* The right panel: label, control, then the next group. */
-.hw-side {
-  width: 380px;
-  flex: none;
-  overflow-y: auto;
-  padding: 32px 24px;
-  background: #fff;
-  border-left: 1px solid var(--border);
-}
-.hw-side-group + .hw-side-group {
-  margin-top: 28px;
-}
-.hw-side-label {
-  margin-bottom: 8px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text);
-}
-.hw-select {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 48px;
-  padding: 0 44px 0 16px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-field);
-  font-size: 14px;
-  color: var(--text);
-  text-align: left;
-  transition: background 0.15s var(--ease);
-}
-.hw-select:hover {
-  background: var(--bg-subtle);
-}
-.hw-select::after {
-  content: '';
-  position: absolute;
-  right: 19px;
-  top: 50%;
-  margin-top: -2px;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid var(--text-2);
-  pointer-events: none;
-}
-.hw-select select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0 44px 0 16px;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  border-radius: inherit;
-  outline: none;
-  background: transparent;
-  font-size: 14px;
-  color: var(--text);
-  text-overflow: ellipsis;
-}
-.hw-select:has(select:focus-visible),
-button.hw-select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-}
-.hw-select-dot {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  margin-top: -6px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-}
-.hw-select:has(.hw-select-dot) select {
-  padding-left: 40px;
-}
-/* Unit: Classroom's taller filled select with an underline (its Topic field). */
-.hw-select.is-filled {
-  height: 56px;
-  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  box-shadow: inset 0 -1px 0 var(--text-2);
-}
-.hw-select.is-filled select {
-  font-size: 16px;
-}
-.hw-select.is-disabled select {
-  color: rgba(20, 20, 19, 0.38);
-}
-.hw-select.is-disabled::after {
-  border-top-color: rgba(20, 20, 19, 0.38);
-}
-/* "Answers from": an outlined pill that sums up the choice (Classroom's "Assign to: All students"). */
-.hw-answers {
-  width: 100%;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  border-radius: 24px;
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--accent);
-  transition: background 0.15s var(--ease);
-}
-.hw-answers:hover {
-  background: var(--accent-tint);
-}
-.hw-answers svg {
-  flex: none;
-}
-.hw-answers span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hw-drop {
-  position: absolute;
-  inset: 64px 0 0;
-  display: grid;
-  place-items: center;
-  background: rgba(211, 227, 253, 0.5);
-  box-shadow: inset 0 0 0 2px var(--accent);
-  pointer-events: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--on-selected);
-}
-@media (max-width: 760px) {
-  .hw-create-body {
-    flex-direction: column;
-    overflow-y: auto;
-  }
-  .hw-form {
-    flex: none;
-    overflow: visible;
-    padding: 16px;
-  }
-  .hw-side {
-    width: auto;
-    overflow: visible;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-  }
-}
-
-/* Menus and the date picker open over the full-window form. */
-.popover.hw-pop {
-  z-index: 700;
-}
-
-.hw-small-dialog .gdialog-actions {
-  justify-content: flex-end;
-}
-
-/* ------------------------------------------------------------ link notes (Google Drive picker) */
-
-.modal.link-dialog {
-  max-width: calc(100vw - 96px);
-  height: min(650px, calc(100vh - 96px));
-  max-height: none;
-}
 .link-frame {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
+  max-height: min(640px, calc(100vh - 48px));
 }
 .link-head {
-  height: 64px;
-  flex: none;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
-  padding: 0 16px 0 24px;
+  padding: 20px 24px 8px;
 }
-.link-head svg:first-child {
-  flex: none;
-}
-.link-head-title {
-  flex: none;
-  /* Leaves room for the mark, four gaps, the search at its minimum and the close button. */
-  max-width: calc(100% - 364px);
-  margin-right: 12px;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.link-head .dialog-title {
+  margin: 0;
 }
 .link-search {
-  flex: 0 1 476px;
-  min-width: 240px;
-  height: 48px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 4px 0 16px;
-  border-radius: var(--radius-s);
-  background: var(--bg-field);
-  color: var(--text-2);
-  transition:
-    background 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
+  color: var(--text-3);
+  transition: box-shadow var(--dur-fast) var(--ease);
 }
 .link-search:focus-within {
-  background: #fff;
-  box-shadow: var(--shadow-s);
+  box-shadow:
+    0 0 0 1px var(--focus),
+    0 0 6px 1px var(--focus-glow);
 }
 .link-search input {
   flex: 1;
   min-width: 0;
-  height: 100%;
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
   color: var(--text);
   user-select: text;
 }
 .link-search input::placeholder {
+  color: var(--text-4);
+}
+.link-search .icon-btn {
+  margin: 0;
+}
+.link-tabs {
+  align-self: flex-start;
+}
+.link-up {
+  margin: 4px 24px 0 18px;
+  align-self: flex-start;
+}
+.link-up-here {
+  margin-left: 4px;
   color: var(--text-2);
-}
-.link-close {
-  width: 40px;
-  height: 40px;
-}
-/* Drive's tabs: 32px between labels, an underline the width of the label. */
-.gtabs.link-tabs {
-  padding-left: 8px;
-  box-shadow: inset 0 -1px 0 #e0e0e0;
-}
-.link-tabs .gtab {
-  padding: 0 16px;
-}
-.link-tabs .gtab:not(.is-active) {
-  color: var(--text-3);
-}
-.link-tabs .gtab.is-active::after {
-  left: 15px;
-  right: 15px;
-}
-.link-crumbs {
-  height: 40px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 16px;
-  color: var(--text-2);
-}
-.link-crumbs button {
-  height: 32px;
-  padding: 0 8px;
-  border-radius: var(--radius-xs);
-  font-size: 14px;
-  color: var(--text-2);
-}
-.link-crumbs button:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.link-crumbs button:disabled {
-  color: var(--text);
-  font-weight: 500;
-}
-.link-cols,
-.link-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px 0 24px;
-}
-.link-cols {
-  height: 40px;
-  flex: none;
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
-  color: var(--text-2);
-  border-bottom: 1px solid #e0e0e0;
 }
 .link-list {
-  flex: 1;
-  min-height: 0;
+  /* One height for every tab and search, so the dialog never moves under the pointer. */
+  flex: 0 1 auto;
+  height: min(380px, 50vh);
+  min-height: 160px;
   overflow-y: auto;
+  padding: 4px 16px 8px;
   outline: none;
+}
+/* Inside a folder the way back takes 28px, which the list gives up. */
+.link-up + .link-list {
+  height: calc(min(380px, 50vh) - 28px);
 }
 .link-row {
-  height: 48px;
-  font-size: 14px;
-  color: var(--text);
-  border-bottom: 1px solid var(--border);
-  outline: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
 }
-.link-row:hover {
+.link-row:hover,
+.link-row:focus-visible {
   background: var(--bg-hover);
 }
-.link-row.is-on {
-  background: var(--bg-selected);
-  color: var(--on-selected);
-}
-.link-row.is-on:hover {
-  background: #b3dcfa;
-}
-.link-row:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.link-lead {
-  width: 40px;
-  height: 100%;
+.link-box {
+  width: 16px;
+  height: 16px;
   flex: none;
   display: grid;
   place-items: center;
-}
-.link-glyph {
-  display: grid;
-  color: var(--text-2);
-}
-/* The checkbox takes the glyph's place on hover and when selected (Drive). */
-.link-box {
-  display: none;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 2px var(--text-2);
+  border-radius: 4px;
   color: #fff;
-}
-.link-row:hover .link-glyph,
-.link-row:focus-visible .link-glyph,
-.link-row.is-on .link-glyph {
-  display: none;
-}
-.link-row:hover .link-box,
-.link-row:focus-visible .link-box,
-.link-row.is-on .link-box {
-  display: grid;
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.25);
 }
 .link-row.is-on .link-box {
   background: var(--accent);
   box-shadow: none;
 }
-/* Included with a linked folder: selected, but greyed. */
+/* A note already in a chosen folder: ticked, in a lighter ink. */
 .link-row.is-included .link-box {
-  background: rgba(20, 20, 19, 0.38);
+  background: rgba(20, 20, 19, 0.35);
 }
-.link-row.is-included .link-name {
-  color: var(--text-2);
+.link-folder {
+  width: 18px;
+  margin: 0 3px;
+  flex: none;
+  color: var(--text-3);
 }
-.link-name {
+.paper-thumb.link-paper {
+  width: 24px;
+  height: 30px;
+}
+.link-text {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
 }
 .link-title {
-  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1015,70 +706,57 @@ button.hw-select:focus-visible {
 .link-hit {
   background: none;
   color: inherit;
-  font-weight: 500;
+  font-weight: 700;
 }
-.link-why {
-  /* The reason gives way before the title does. */
-  flex: 0 1000 auto;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.link-class,
-.link-date {
-  flex: none;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.link-class {
-  width: 180px;
-}
-.link-date {
-  width: 120px;
-  text-align: right;
-}
-.link-open {
-  width: 40px;
-  flex: none;
-  display: grid;
-  place-items: center;
-}
-.link-empty {
-  padding: 96px 24px 0;
-  text-align: center;
-  font-size: 14px;
-  color: var(--text-2);
-}
-.link-foot {
-  height: 64px;
-  flex: none;
+.link-sub {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 24px;
-  border-top: 1px solid #e0e0e0;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
-.link-foot .btn {
-  height: 40px;
+.link-sub > * {
+  flex: none;
 }
-.link-foot .btn.is-primary {
-  padding: 0 24px;
+.link-class {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 140px;
+}
+.link-class-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-sub > .link-why {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.link-open {
+  flex: none;
+}
+.link-empty {
+  padding: 56px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-3);
+}
+.link-dialog .dialog-actions {
+  border-top: 1px solid var(--border);
+  padding: 12px 24px 16px;
 }
 .link-count {
-  font-size: 14px;
-  color: var(--text-2);
-}
-
-/* Mac app: the traffic lights sit in the form's app bar corner, as they do in the main window's. */
-html.is-electron.is-mac .hw-appbar {
-  padding-left: 80px;
-  -webkit-app-region: drag;
-}
-html.is-electron.is-mac .hw-appbar button {
-  -webkit-app-region: no-drag;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-3);
 }

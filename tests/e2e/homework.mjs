@@ -19,11 +19,18 @@ const waitIdle = async () => {
 };
 const mock = (faults) => fetch(`${MOCK}/__mock`, { method: 'POST', body: JSON.stringify(faults) }).then((r) => r.json());
 const lastBot = () => page.locator('.assistant .msg.is-bot').last();
-/** Opens the Homework page's folded sections: which one holds the seed's "in two days" deadline depends on the weekday. */
-const unfoldHomework = async () => {
+/** Opens the folded "Done (n)" list at the bottom of the Homework page (the due groups never fold). */
+const openDone = async () => {
   await page.waitForSelector('.homework-view');
-  for (const head of await page.locator('.hw-section:not(.is-open) .hw-section-head:not([disabled])').all()) await head.click();
+  const head = page.locator('.homework-view .hw-done-head[aria-expanded="false"]');
+  if (await head.count()) await head.click();
 };
+/** Picks an item from the open class page's ⋯ menu (Edit class…, Delete class…). */
+const classPageMenu = async (label) => {
+  await page.click('.class-view .class-head-more');
+  await page.click(`.context-menu .menu-item:has-text("${label}")`);
+};
+const folderMeta = () => page.evaluate(() => window.__nib.vault.getState().folderMeta);
 
 // A worksheet as a real PDF (with a text layer) and as a photo (no text).
 const sheet = `<html><body style="font: 18px Georgia; padding: 48px"><h1>Problem Set 5</h1><ol>
@@ -49,24 +56,54 @@ check(classRows.length === 5, `the demo notebooks are classes (${classRows.map((
 check((await page.textContent('.nav-item:has-text("Homework") .nav-count')) === '1', 'Homework shows one assignment to do');
 
 await createClassDialog(page);
+check(!(await page.locator('.class-dialog :is(.gfield, input[placeholder*="code" i], input[placeholder*="teacher" i])').count()), 'New class asks for no course code, teacher or term');
 await page.fill('.class-name-input input', 'Organic Chemistry');
-await page.fill('.class-form .gfield:has-text("Course code") input', 'CHEM 8A');
-await page.fill('.class-form .gfield:has-text("Teacher") input', 'Dr. Ruiz');
+check((await page.locator('.class-dialog .icon-pick.is-active[aria-label="flask"]').count()) === 1, 'the class icon follows the name as it is typed (flask)');
 await page.click('.class-form button[type="submit"]');
-await page.waitForSelector('.banner-name:has-text("Organic Chemistry")');
-check(/CHEM 8A/.test(await page.textContent('.banner-section')), 'the class banner shows its course code');
-await page.click('.banner-info');
-check(/Dr\. Ruiz/.test(await page.textContent('.class-info')), '…and its details show the teacher');
-await page.keyboard.press('Escape');
-await page.click('.banner-customize');
-// The dialog shows the stored icon once it has read the class.
-const flask = await page.waitForSelector('.icon-pick.is-active[aria-label="flask"]', { timeout: 3000 }).catch(() => null);
-check(!!flask && (await page.locator('.icon-pick.is-active').count()) === 1, 'the class icon is guessed from its name (flask)');
-await page.keyboard.press('Escape');
+await page.waitForSelector('.class-view .class-title:has-text("Organic Chemistry")');
 check(await page.locator('.tree-row.is-class:has-text("Organic Chemistry")').count(), 'the new class is in the sidebar');
+{
+  const m = (await folderMeta())['Organic Chemistry'];
+  check(m?.kind === 'class' && !('code' in m) && !('instructor' in m) && !('term' in m), 'a new class stores its colour and icon, nothing from Classroom');
+}
+await classPageMenu('Edit class');
+// The dialog shows the guessed icon (nothing stored yet, so it still follows the name).
+const flask = await page.waitForSelector('.class-dialog .icon-pick.is-active[aria-label="flask"]', { timeout: 3000 }).catch(() => null);
+check(!!flask && (await page.locator('.icon-pick.is-active').count()) === 1, 'the class icon is guessed from its name (flask)');
+check(await page.locator('.class-dialog .class-to-folder').count(), 'Edit class offers to turn the class back into a plain folder');
+await page.keyboard.press('Escape');
+
+// A name that differs only in case from a class that exists is never an error: it gets a number.
+await createClassDialog(page);
+await page.fill('.class-name-input input', 'organic chemistry');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.class-view .class-title:has-text("organic chemistry 2")');
+check((await folderMeta())['organic chemistry 2']?.kind === 'class', 'a class named like another in any case gets its own folder (“organic chemistry 2”)');
+// Deleting it from its page's ⋯ (which has only Edit, Show in Finder and Delete).
+await page.click('.class-view .class-head-more');
+const pageMenu = (await page.locator('.context-menu .menu-item').allTextContents()).map((t) => t.trim());
+check(!pageMenu.some((t) => /New note|New homework|Review/.test(t)), `the class page's ⋯ leaves out what its buttons already do (${pageMenu.join(', ')})`);
+await page.click('.context-menu .menu-item:has-text("Delete class")');
+await page.click('.modal .btn:has-text("Delete class")');
+await page.waitForSelector('.toast:has-text("Deleted organic chemistry 2")');
+
+// Editing a seeded class keeps what older versions stored (course code, teacher, the old colour).
+await showSidebar(page);
+await page.click('.sidebar .nav-class:has-text("Calculus I")');
+await classPageMenu('Edit class');
+await page.click('.class-form button[type="submit"]');
+await page.waitForTimeout(300);
+{
+  const m = (await folderMeta())['Calculus I'];
+  check(m?.code === 'MATH 1A' && m?.instructor === 'Prof. Alvarez' && m?.color === '#2160e8', 'saving Edit class keeps the stored course code, teacher and colour');
+}
 
 // New note from the class page lands in the class.
-await page.click('.stream-actions .btn:has-text("New note")');
+await showSidebar(page);
+await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
+await page.click('.class-actions .btn:has-text("New note")');
+check(/In Organic Chemistry/.test(await page.textContent('.new-note-pop .menu-caption')), 'the class page’s New note says where the note goes');
+await page.click('.new-note-pop .paper-opt:has-text("Lined")');
 await page.waitForSelector(`${V} .page-title`);
 await page.locator(`${V} .page-title`).fill('Lecture 1 — SN2 reactions');
 await page.locator(`${V} .page-title`).press('Enter');
@@ -76,49 +113,109 @@ await page.waitForTimeout(600);
 check(/Organic Chemistry/.test(await page.textContent(`${V} .crumb.is-class`)), 'a note made from the class page belongs to the class');
 
 // ---------------------------------------------------------------- homework from a PDF
+await showSidebar(page);
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
-await page.waitForSelector('.banner');
-await page.click('.stream-actions .btn:has-text("Add homework")');
+await page.waitForSelector('.class-view');
+await page.click('.class-actions .btn:has-text("New homework")');
 await page.waitForSelector('.hw-dialog');
-check((await page.$eval('.hw-dialog .hw-for select', (s) => s.selectedOptions[0]?.textContent ?? ''))?.includes('Organic Chemistry'), 'new homework defaults to the current class');
+check(/Organic Chemistry/.test(await page.textContent('.hw-dialog .hw-for')), 'new homework defaults to the current class');
+check(!(await page.locator('.hw-dialog :is(textarea, [contenteditable])').count()), 'New homework has no instructions field (they go on the homework page)');
 const chooser = page.waitForEvent('filechooser');
-await page.click('.hw-attach-tile.is-scan');
+await page.click('.hw-dialog .hw-worksheet-add');
 await (await chooser).setFiles(path.join(tmp, 'Problem Set 5.pdf'));
 await page
-  .waitForFunction(() => document.querySelector('.hw-form .hw-title input')?.value === 'Problem Set 5', null, { timeout: 5000 })
+  .waitForFunction(() => document.querySelector('.hw-dialog .hw-title-input')?.value === 'Problem Set 5', null, { timeout: 5000 })
   .catch(() => undefined);
-check((await page.inputValue('.hw-form .hw-title input')) === 'Problem Set 5', 'the title comes from the file name');
-await page.click('.hw-dialog .btn.is-primary');
+check((await page.inputValue('.hw-dialog .hw-title-input')) === 'Problem Set 5', 'the title comes from the file name');
+await page.click('.hw-dialog .hw-create');
 await page.waitForSelector(`${V} .hw-bar`, { timeout: 15000 });
 await page.waitForTimeout(800);
 check(await page.locator(`${V} .ProseMirror img`).count(), 'the PDF page is in the homework, ready to write on');
 const alt = await page.locator(`${V} .ProseMirror img`).first().getAttribute('alt');
 check(/nucleophile/.test(alt ?? ''), 'the PDF text layer is kept for the assistant');
 check(/All Organic Chemistry notes/.test(await page.textContent(`${V} .hw-source-chip`)), 'homework uses the class notes as its sources by default');
+check(/answers only from these notes/.test(await page.textContent(`${V} .hw-work-note`)), 'under its sources the homework says the assistant answers only from them');
 await shot(page, 'hw-01-pdf-homework');
+await showSidebar(page);
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
-await page.click('.gtab:has-text("Classwork")');
-check(
-  await page.locator('.class-view .topic:has(.topic-title:has-text("Homework")) .cw-row:has-text("Problem Set 5")').count(),
-  'it is filed under the class’s Homework topic in Classwork',
-);
+check(await page.locator('.class-view .class-homework .hw-row-item:has-text("Problem Set 5")').count(), 'it is listed under the class page’s Homework');
+
+// A worksheet dropped on the class page starts New homework with it.
+{
+  const pdf = fs.readFileSync(path.join(tmp, 'Problem Set 5.pdf')).toString('base64');
+  await page.evaluate((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'Dropped sheet.pdf', { type: 'application/pdf' }));
+    const el = document.querySelector('.class-view .class-col');
+    el.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, pdf);
+  await page.waitForSelector('.hw-dialog .hw-sheet-name:has-text("Dropped sheet.pdf")', { timeout: 5000 }).catch(() => undefined);
+  check(
+    (await page.locator('.hw-dialog .hw-sheet-name:has-text("Dropped sheet.pdf")').count()) && /Organic Chemistry/.test(await page.textContent('.hw-dialog .hw-for')),
+    'a PDF dropped on the class page opens New homework for that class with the worksheet attached',
+  );
+  await page.click('.hw-dialog .btn:has-text("Cancel")');
+  check(!(await page.locator('.drop-hint').count()), '…and the drop overlay goes away');
+}
 
 // ---------------------------------------------------------------- homework from a photo (OCR)
 await page.click('.nav-item:has-text("Homework")');
-await page.click('.homework-view .btn.is-primary');
-await page.click('.menu-item:has-text("Homework")');
-await page.selectOption('.hw-dialog .hw-for select', { label: 'Organic Chemistry' });
+await page.click('.homework-view .btn.is-primary:has-text("New homework")');
+await page.click('.hw-dialog .hw-for');
+await page.click('.hw-class-menu .menu-item:has-text("Organic Chemistry")');
 const chooser2 = page.waitForEvent('filechooser');
-await page.click('.hw-attach-tile.is-scan');
+await page.click('.hw-dialog .hw-worksheet-add');
 await (await chooser2).setFiles(path.join(tmp, 'worksheet-photo.png'));
-await page.click('.hw-dialog .btn.is-primary');
+await page.click('.hw-dialog .hw-create');
 await page.waitForSelector(`${V} .hw-bar`);
 await page.waitForFunction((v) => /Problem Set 5/.test(document.querySelector(`${v} .ProseMirror img`)?.getAttribute('alt') ?? ''), V, { timeout: 15000 });
 check(true, 'a photographed worksheet is read by the vision model');
+// A page nobody has read yet: the worksheet chip offers to read it.
+await page.evaluate((v) => {
+  const ed = document.querySelector(`${v} .ProseMirror`).editor;
+  ed.commands.command(({ tr }) => {
+    tr.doc.descendants((n, pos) => {
+      if (n.type.name === 'image') tr.setNodeMarkup(pos, undefined, { ...n.attrs, alt: '' });
+    });
+    return true;
+  });
+}, V);
+await page.waitForSelector(`${V} .hw-read`);
+check(/^Read 1 page$/.test((await page.textContent(`${V} .hw-read`)).trim()), 'an unread worksheet page shows Read 1 page beside the worksheet');
+await page.click(`${V} .hw-read`);
+await page.waitForSelector('.toast:has-text("Pages read")', { timeout: 15000 });
+await page.waitForSelector(`${V} .hw-read`, { state: 'detached' });
+check(/Problem Set 5/.test((await page.locator(`${V} .ProseMirror img`).first().getAttribute('alt')) ?? ''), '…and reading it puts the questions where the assistant can see them');
 await page.click('.nav-item:has-text("Homework")');
-await unfoldHomework();
+await page.waitForSelector('.homework-view');
 check((await page.locator('.hw-row-item').count()) === 3, 'the Homework page lists all three assignments');
+check(!(await page.locator('.homework-view :is(.gtab, [role="tab"])').count()), '…in one list, with no Assigned / Missing / Done tabs');
 await shot(page, 'hw-02-list');
+
+// Two quick clicks on one checkbox tick it and untick it; they never reach the row below.
+{
+  const box = await page.locator('.homework-view .hw-row-item:has-text("worksheet-photo") .hw-check').boundingBox();
+  const undone = () => page.locator('.homework-view .hw-row-item:not(.is-done)').count();
+  check((await undone()) === 3, 'three homework to do before the clicks');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(150);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(1800);
+  check((await undone()) === 3 && !(await page.locator('.homework-view .hw-done-head').count()), 'a quick second click unticks the same homework instead of ticking the next one');
+  check(!(await page.locator('.toast:has-text("Marked as done")').count()), '…and takes its Marked as done toast away');
+}
+
+// Ticking a row's checkbox finishes it: it stays a moment, checked, then moves into Done. Undo brings it back.
+await page.click('.hw-row-item:has-text("worksheet-photo") .hw-check');
+await page.waitForSelector('.toast:has-text("Marked as done")');
+check(await page.locator('.homework-view .hw-row-item.is-done:has-text("worksheet-photo") .hw-check[aria-checked="true"]').count(), 'a ticked homework stays in its place for a moment, checked');
+await page.waitForSelector('.homework-view .hw-row-item:has-text("worksheet-photo")', { state: 'detached', timeout: 5000 });
+check(/Done \(1\)/.test(await page.textContent('.hw-done-head')), '…then moves into the folded Done list');
+await page.click('.toast:has-text("Marked as done") .toast-action:has-text("Undo")');
+await page.waitForSelector('.hw-row-item:has-text("worksheet-photo")');
+check(true, '…and Undo puts it back');
 
 // ---------------------------------------------------------------- grounded answers
 await page.click('.hw-row-item:has-text("Problem Set 4")');
@@ -175,6 +272,7 @@ check(await page.locator(`${V} .callout[data-variant="outside"]`).count(), 'inse
 // ---------------------------------------------------------------- linking notes
 await page.click(`${V} .hw-source-chip button[aria-label^="Remove"]`);
 await page.waitForSelector(`${V} .hw-no-sources`);
+check(/Link notes so the assistant can answer from them/.test(await page.textContent(`${V} .hw-no-sources`)), 'with no sources the line under the bar asks for linked notes');
 check(await page.locator(`${V} .hw-suggest:has-text("Lecture 4")`).count(), 'with nothing linked, Lecture 4 is suggested');
 await page.click('.assistant .icon-btn[title="New conversation"]');
 await page.click('.starter:has-text("Give me a hint")');
@@ -227,19 +325,19 @@ check(!repeated && /\[\d\]\.$/.test(joinedText.trim()), 'the continued reply joi
 
 // ---------------------------------------------------------------- done
 await page.click(`${V} .hw-done`);
+check((await page.getAttribute(`${V} .hw-done`, 'aria-pressed')) === 'true', 'Mark done turns into a pressed Done');
 await page.click('.nav-item:has-text("Homework")');
-await unfoldHomework();
-check(!(await page.locator('.hw-row-item:has-text("Problem Set 4")').count()), 'marking done removes it from To do');
-await page.click('.homework-view .gtab:has-text("Done")');
-await unfoldHomework();
+await page.waitForSelector('.homework-view');
+check(!(await page.locator('.hw-row-item:has-text("Problem Set 4")').count()), 'marking done removes it from the list');
+await openDone();
 check(await page.locator('.hw-row-item.is-done:has-text("Problem Set 4")').count(), '…and lists it under Done');
 
 // ---------------------------------------------------------------- class-scoped Q&A and study tools
+await showSidebar(page);
 await page.click('.tree-row.is-class:has-text("Calculus I")');
-await page.click('.class-view button[aria-label="Ask your Calculus I notes"]');
-await page.waitForSelector('.library-title h1:has-text("Calculus I")');
-await page.fill('.library-composer textarea', 'What does the squeeze theorem say?');
-await page.press('.library-composer textarea', 'Enter');
+await page.fill('.class-view .class-ask textarea', 'What does the squeeze theorem say?');
+await page.press('.class-view .class-ask textarea', 'Enter');
+await page.waitForSelector('.library .msg.is-bot', { timeout: 20000 });
 await page.waitForFunction(() => !document.querySelector('.msg.is-streaming'), null, { timeout: 20000 });
 const srcFolders = await page.locator('.library .msg.is-bot').last().locator('.source-sec').allTextContents();
 check(
@@ -247,11 +345,10 @@ check(
   `class Q&A only cites that class’s notes, never homework (${srcFolders.join(' | ')})`,
 );
 
-await page.click('.tree-row.is-class:has-text("Calculus I")');
-await page.click('.gtab:has-text("Study")');
-await page.click('.class-study-tool:has-text("Flashcards")');
+// Study tools for the class live in Ask your notes, which the class page's composer opened on the class.
+await page.click('.library .study-tool:has-text("Flashcards")');
 await page.waitForSelector('.flashcard, .flashcards', { timeout: 20000 });
-check(true, 'flashcards are made from the class from its page');
+check(true, 'flashcards are made from the class in Ask your notes, opened from its page');
 
 // ---------------------------------------------------------------- Polish files loose notes into classes
 await page.click('.nav-item:has-text("All notes")');
@@ -324,14 +421,14 @@ const bodyTop = await page.locator(`${V} .surface`).evaluate((el) => el.getBound
 check(Math.abs(bodyTop - titleTop) < 1, 'the first words put the paper choice away without moving the page');
 
 // ---------------------------------------------------------------- renaming a class keeps links
+await showSidebar(page);
 await page.click('.tree-row.is-class:has-text("Organic Chemistry")');
-await page.click('.class-view button[aria-label="Class settings"]');
+await classPageMenu('Edit class');
 await page.fill('.class-name-input input', 'Orgo');
 await page.click('.class-form button[type="submit"]');
-await page.waitForSelector('.banner-name:has-text("Orgo")');
-await page.click('.gtab:has-text("Classwork")');
-check((await page.locator('.class-view .topic:has(.topic-title:has-text("Homework")) .cw-row').count()) === 2, 'renaming the class keeps its homework');
-await page.click('.class-view .cw-row:has-text("Problem Set 5")');
+await page.waitForSelector('.class-view .class-title:has-text("Orgo")');
+check((await page.locator('.class-view .class-homework .hw-row-item').count()) === 2, 'renaming the class keeps its homework');
+await page.click('.class-view .hw-row-item:has-text("Problem Set 5")');
 check(/All Orgo notes/.test(await page.textContent(`${V} .hw-source-chip`)), 'homework links follow the renamed class');
 
 // ---------------------------------------------------------------- deleting a class can be undone
@@ -347,6 +444,17 @@ await page.click('.toast:has-text("Deleted Orgo") .toast-action:has-text("Undo")
 await page.waitForSelector('.sidebar .nav-class:has-text("Orgo")');
 await page.waitForTimeout(300);
 check((await orgoLive()) === orgoBefore && (await page.evaluate(() => window.__nib.vault.getState().folderMeta.Orgo?.kind)) === 'class', '…and Undo brings the class back with all of them');
+
+// ---------------------------------------------------------------- a class can go back to being a plain folder
+await createClassDialog(page);
+await page.fill('.class-name-input input', 'Scratch');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.class-view .class-title:has-text("Scratch")');
+await classPageMenu('Edit class');
+await page.click('.class-dialog .class-to-folder');
+await page.click('.modal .btn:has-text("Turn into folder")');
+await page.waitForSelector('.notes-view .list-title:has-text("Scratch")');
+check((await folderMeta()).Scratch?.kind !== 'class' && !(await page.locator('.sidebar .nav-class:has-text("Scratch")').count()), 'Turn into a plain folder makes the class a folder in All notes');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 // 503s are the injected faults above.

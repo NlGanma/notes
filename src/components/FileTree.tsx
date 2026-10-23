@@ -40,8 +40,11 @@ export const short = (s: string) => (s.length > 40 ? `${s.slice(0, 39).trimEnd()
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
-/** The menu for a class, a plain folder or a folder inside a class. */
-export function folderMenu(path: string): MenuItem[] {
+/**
+ * The menu for a class, a plain folder or a folder inside a class. On the class page itself (`onPage`) the
+ * class menu leaves out New note, New homework and Review: the page has its own buttons for them.
+ */
+export function folderMenu(path: string, { onPage = false } = {}): MenuItem[] {
   const { folderMeta, notes: all, folders } = useVault.getState();
   const isClass = folderMeta[path]?.kind === 'class';
   const name = path.split('/').pop()!;
@@ -51,9 +54,13 @@ export function folderMenu(path: string): MenuItem[] {
   if (isClass) {
     return [
       { label: 'Edit class…', icon: <Settings2 {...ICON} />, run: () => editClass(path) },
-      { label: 'New note', icon: <FilePlus {...ICON} />, run: () => newNote(path) },
-      { label: 'New homework', icon: <ClipboardList {...ICON} />, run: () => newHomework(path) },
-      ...(count ? [{ label: 'Review this class', icon: <Repeat {...ICON} />, run: () => reviewFolder(path) }] : []),
+      ...(onPage
+        ? []
+        : [
+            { label: 'New note', icon: <FilePlus {...ICON} />, run: () => newNote(path) },
+            { label: 'New homework', icon: <ClipboardList {...ICON} />, run: () => newHomework(path) },
+            ...(count ? [{ label: 'Review this class', icon: <Repeat {...ICON} />, run: () => reviewFolder(path) }] : []),
+          ]),
       ...reveal,
       { separator: true },
       {

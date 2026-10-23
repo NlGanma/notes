@@ -1,54 +1,60 @@
-import { useMemo, useRef, useState } from 'react';
-import { ClipboardList, FolderInput, GraduationCap, LibraryBig, Maximize2, Minimize2, MoreVertical, Plus, Target } from 'lucide-react';
+import { useMemo } from 'react';
+import { FileText, MoreHorizontal, Plus } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import type { NoteDoc } from '../../lib/vault/types';
-import { classForFolder, classHomework, classInfo, listClasses, themeVars, type ClassInfo } from '../../lib/classes';
-import { dueDay, isMissing } from '../../lib/homework';
-import { newClass, openClass, openLibrary, reviewFolder } from '../../lib/commands';
+import { classCounts, classHomework, classNotes, countLine, listClasses, themeVars, type ClassInfo } from '../../lib/classes';
+import { dueLabel } from '../../lib/homework';
+import { displayTitle } from '../../lib/displayTitle';
+import { newClass, openClass } from '../../lib/commands';
+import { cx, formatRelativeTime } from '../../lib/util';
 import { folderMenu } from '../FileTree';
-import { openContextMenu } from '../common/ContextMenu';
-import { Popover } from '../common/Popover';
-import { pickFolder } from '../common/dialogs';
+import { openContextMenu, type MenuItem } from '../common/ContextMenu';
+import { byDue } from '../homework/sources';
 import { ClassGlyph } from './ClassIcon';
-import { cx } from '../../lib/util';
 
-/** Decorative art for a class banner or card header: a big circle arcing in from the right with the class icon on it. */
-export function ClassArt({ icon, h, compact }: { icon: ClassInfo['icon']; h: number; compact?: boolean }) {
-  const d = h * 1.6;
-  // On a card the teacher avatar covers the header's bottom-right, so the glyph is smaller and sits higher.
-  const s = Math.round(h * (compact ? 0.4 : 0.55));
+/** The class icon on a darker circle arcing in from the right of a coloured header. */
+export function ClassArt({ icon, h }: { icon: ClassInfo['icon']; h: number }) {
+  const d = h * 1.7;
+  const s = Math.round(h * 0.36);
   return (
     <span className="class-art" aria-hidden>
-      <span className="class-art-circle" style={{ width: d, height: d, right: -(d / 2 - h * 0.18), top: h * 0.85 - d / 2 }} />
-      <span className="class-art-icon" style={compact ? { right: h * 0.24, top: h * 0.14 } : { right: h * 0.32 - s / 2, top: h * 0.5 - s / 2 }}>
+      <span className="class-art-circle" style={{ width: d, height: d, right: -(d / 2 - h * 0.3), top: h / 2 - d / 2 + h * 0.18 }} />
+      <span className="class-art-icon" style={{ right: h * 0.28, bottom: h * 0.16 }}>
         <ClassGlyph icon={icon} size={s} />
       </span>
     </span>
   );
 }
 
-/** "Prof. Alvarez" → "A" (the teacher avatar on a class card). */
-export function teacherInitial(name?: string): string {
-  if (!name) return '';
-  const rest = name.replace(/^(prof|professor|dr|mr|mrs|ms|mx|sr|sra|srta|mme|m|herr|frau)\.?\s+/i, '').trim();
-  return (rest || name).charAt(0).toUpperCase();
+/** Opens a menu under a ⋯ button, right-aligned to it. */
+export function menuUnder(e: React.MouseEvent, items: MenuItem[]) {
+  e.stopPropagation();
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  openContextMenu({ clientX: r.right - 220, clientY: r.bottom + 4, preventDefault: () => undefined }, items);
 }
 
-/** Due text in Classroom's words: "Due today", "Due Saturday", "Due Oct 28"; past due is "Missing". */
-export function dueText(n: NoteDoc): string {
-  const hw = n.meta.homework!;
-  if (isMissing(hw)) return 'Missing';
-  if (!hw.due) return 'No due date';
-  const day = dueDay(hw.due);
-  return `Due ${day === 'Today' || day === 'Tomorrow' ? day.toLowerCase() : day}`;
+type CardRow = { note: NoteDoc; kind: 'homework' | 'note' };
+
+/** What a card shows under its header: unfinished homework, soonest due first, then the notes edited last; two at most. */
+function cardRows(path: string, notes: Record<string, NoteDoc>): CardRow[] {
+  const due = classHomework(path, notes)
+    .filter((n) => !n.meta.homework!.done)
+    .sort(byDue)
+    .slice(0, 2)
+    .map((note): CardRow => ({ note, kind: 'homework' }));
+  const recent = classNotes(path, notes)
+    .sort((a, b) => b.meta.updated - a.meta.updated)
+    .slice(0, 2 - due.length)
+    .map((note): CardRow => ({ note, kind: 'note' }));
+  return [...due, ...recent];
 }
 
-/** A class card (Google Classroom): themed header with the name, section and teacher; upcoming work; footer actions. */
-export function ClassCard({ cls, due }: { cls: ClassInfo; due: NoteDoc[] }) {
-  const section = [cls.code, cls.term].filter(Boolean).join(' · ');
-  const initial = teacherInitial(cls.instructor);
+/** A class card: the class-colour header with its name and counts, then what's due and what changed. */
+export function ClassCard({ cls, notes }: { cls: ClassInfo; notes: Record<string, NoteDoc> }) {
   const open = () => openClass(cls.path);
+  const line = countLine(classCounts(cls.path, notes));
+  const rows = cardRows(cls.path, notes);
   return (
     <div
       className="class-card"
@@ -56,165 +62,78 @@ export function ClassCard({ cls, due }: { cls: ClassInfo; due: NoteDoc[] }) {
       onContextMenu={(e) => openContextMenu(e, folderMenu(cls.path))}
       data-class={cls.name}
     >
-      <div className="class-card-head" onClick={open} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && open()}>
-        <ClassArt icon={cls.icon} h={100} compact />
+      <div className="class-card-head" onClick={open} role="link" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && open()} title={cls.name}>
+        <ClassArt icon={cls.icon} h={96} />
         <div className="class-card-name">{cls.name}</div>
-        {section && <div className="class-card-section">{section}</div>}
-        {cls.instructor && <div className="class-card-teacher">{cls.instructor}</div>}
+        {line && <div className="class-card-meta">{line}</div>}
       </div>
-      {initial && (
-        <div className="class-card-avatar" aria-hidden>
-          {initial}
-        </div>
-      )}
-      <div className={cx('class-card-body', initial && 'has-avatar')}>
-        {due.slice(0, 2).map((n) => (
-          <button key={n.meta.id} className="class-card-due" onClick={() => useUI.getState().openNote(n.meta.id)}>
-            <span className={cx('class-card-due-when', isMissing(n.meta.homework) && 'is-missing')}>{dueText(n)}</span>
-            <span className="class-card-due-title">{n.meta.title || 'Untitled homework'}</span>
-          </button>
-        ))}
-      </div>
-      <div className="class-card-foot">
-        <button className="icon-btn" onClick={() => openLibrary({ kind: 'folder', path: cls.path })} aria-label={`Ask your ${cls.name} notes`} title={`Ask your ${cls.name} notes`}>
-          <LibraryBig size={20} />
-        </button>
-        <button className="icon-btn" onClick={() => reviewFolder(cls.path)} aria-label={`Review ${cls.name}`} title={`Review ${cls.name}`}>
-          <Target size={20} />
-        </button>
-        <button className="icon-btn" onClick={(e) => openContextMenu(e, folderMenu(cls.path))} aria-label="Options" title="Options">
-          <MoreVertical size={20} />
-        </button>
+      <button className="icon-btn class-card-more" onClick={(e) => menuUnder(e, folderMenu(cls.path))} aria-label={`${cls.name} options`} title="Options">
+        <MoreHorizontal size={18} strokeWidth={1.75} />
+      </button>
+      {/* The whole card lifts on hover, so a click on its body (not on a row) opens the class too. */}
+      <div className="class-card-body" onClick={(e) => e.target === e.currentTarget && open()}>
+        {rows.map(({ note, kind }) => {
+          const due = kind === 'homework' ? dueLabel(note.meta.homework!.due) : null;
+          return (
+            <button key={note.meta.id} className={cx('class-card-row', `is-${kind}`)} onClick={() => useUI.getState().openNote(note.meta.id)}>
+              {kind === 'homework' ? <span className="class-card-ring" aria-hidden /> : <FileText size={14} strokeWidth={1.5} className="class-card-glyph" />}
+              <span className="class-card-title">{displayTitle(note)}</span>
+              <span className={cx('class-card-when', due?.tone === 'overdue' && 'is-overdue')}>{due ? due.text : kind === 'note' ? formatRelativeTime(note.meta.updated) : ''}</span>
+            </button>
+          );
+        })}
+        {!rows.length && (
+          <div className="class-card-empty" onClick={open}>
+            No notes yet
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/** Home: the "Due soon" module and every class as a card, as Google Classroom's home does it. */
+/** The start page: every class as a card, alphabetically, with New class at the top right. */
 export function ClassesView() {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
   const folderMeta = useVault((s) => s.folderMeta);
-  const [dueOpen, setDueOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const addBtn = useRef<HTMLButtonElement>(null);
-
   const classes = useMemo(() => listClasses(folders, folderMeta), [folders, folderMeta]);
-  const dueOf = (cls: ClassInfo) =>
-    classHomework(cls.path, notes)
-      .filter((n) => !n.meta.homework!.done && n.meta.homework!.due)
-      .sort((a, b) => a.meta.homework!.due! - b.meta.homework!.due!);
-  const dueSoon = useMemo(() => {
-    const week = Date.now() + 7 * 86_400_000;
-    return Object.values(notes)
-      .filter((n) => !n.meta.trashed && n.meta.homework && !n.meta.homework.done && n.meta.homework.due && n.meta.homework.due < week)
-      .sort((a, b) => a.meta.homework!.due! - b.meta.homework!.due!);
-  }, [notes]);
-  const looseFolders = folders.filter((f) => !f.includes('/') && !classForFolder(f, folderMeta));
-
-  const useFolder = async () => {
-    setAddOpen(false);
-    const path = await pickFolder('Use a folder as a class', '', { only: looseFolders, action: 'Use as class' });
-    if (path) {
-      useVault.getState().setIsClass(path, true);
-      useUI.getState().openDialog({ kind: 'class', path });
-    }
-  };
 
   return (
-    <div className="classes-view">
-      <div className="classes-scroll">
-        <section className={cx('module due-module', dueOpen && 'is-open')}>
-          <div className="module-head">
-            <h2 className="module-title">Due soon</h2>
-            <span className="grow" />
-            <button className="icon-btn" onClick={() => setDueOpen((v) => !v)} aria-label={dueOpen ? 'Collapse' : 'Expand'} aria-expanded={dueOpen}>
-              {dueOpen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            </button>
-          </div>
-          {dueOpen && (
-            <div className="due-list">
-              {dueSoon.slice(0, 5).map((n) => {
-                const p = classForFolder(n.meta.folder, folderMeta);
-                const cls = p ? classInfo(p, folderMeta[p]) : null;
-                return (
-                  <button
-                    key={n.meta.id}
-                    className="due-row"
-                    style={cls ? (themeVars(cls.theme) as React.CSSProperties) : undefined}
-                    onClick={() => useUI.getState().openNote(n.meta.id)}
-                  >
-                    <span className="item-circle">
-                      <ClipboardList size={20} />
-                    </span>
-                    <span className="due-row-text">
-                      <span className="due-row-title">{n.meta.title || 'Untitled homework'}</span>
-                      <span className="due-row-class">{cls?.name ?? 'No class'}</span>
-                    </span>
-                    <span className={cx('due-row-when', isMissing(n.meta.homework) && 'is-missing')}>{dueText(n)}</span>
-                  </button>
-                );
-              })}
-              {!dueSoon.length && <div className="due-empty">No work due soon</div>}
-              <div className="due-foot">
-                <button className="btn is-ghost" onClick={() => useUI.getState().setView({ kind: 'homework' })}>
-                  View all
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="module classes-module">
-          <div className="module-head">
-            <h2 className="module-title">Classes</h2>
-            <span className="grow" />
-            <button ref={addBtn} className="btn is-ghost" onClick={() => setAddOpen((v) => !v)}>
-              <Plus size={18} /> Add class
-            </button>
-          </div>
+    <div className="screen classes-view">
+      <div className="screen-scroll">
+        <div className="classes-col">
           {classes.length > 0 ? (
+            // The header spans the grid's columns, so New class sits over the right edge of the last one.
             <div className="class-grid">
+              <header className="classes-head">
+                <h1 className="page-h1">Classes</h1>
+                <span className="grow" />
+                <button className="btn is-primary" onClick={newClass}>
+                  <Plus size={16} strokeWidth={2} /> New class
+                </button>
+              </header>
               {classes.map((c) => (
-                <ClassCard key={c.path} cls={c} due={dueOf(c)} />
+                <ClassCard key={c.path} cls={c} notes={notes} />
               ))}
             </div>
           ) : (
-            <div className="module-empty">
-              <div className="module-empty-title">Add a class to get started</div>
-              <div className="module-empty-actions">
-                <button className="btn is-ghost" onClick={newClass}>
-                  Create class
+            <>
+              <header className="classes-head">
+                <h1 className="page-h1">Classes</h1>
+              </header>
+              {/* With no classes, the empty state has the one New class button. */}
+              <div className="page-empty">
+                <div className="page-empty-title">No classes yet</div>
+                <div className="page-empty-sub">Classes keep a subject’s notes and homework together.</div>
+                <button className="btn is-primary" onClick={newClass}>
+                  <Plus size={16} strokeWidth={2} /> New class
                 </button>
-                {looseFolders.length > 0 && (
-                  <button className="btn is-ghost" onClick={() => void useFolder()}>
-                    Use a folder as a class
-                  </button>
-                )}
               </div>
-            </div>
+            </>
           )}
-        </section>
-      </div>
-
-      <Popover anchor={addBtn.current} open={addOpen} onClose={() => setAddOpen(false)} align="end" className="menu-pop">
-        <div className="menu">
-          <button className="menu-item" disabled={!looseFolders.length} onClick={() => void useFolder()} title={looseFolders.length ? undefined : 'Every folder is already a class'}>
-            <FolderInput size={20} />
-            <span className="menu-label">Use a folder as a class</span>
-          </button>
-          <button
-            className="menu-item"
-            onClick={() => {
-              setAddOpen(false);
-              newClass();
-            }}
-          >
-            <GraduationCap size={20} />
-            <span className="menu-label">Create class</span>
-          </button>
         </div>
-      </Popover>
+      </div>
     </div>
   );
 }

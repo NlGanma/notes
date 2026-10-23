@@ -1,21 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { Field } from '../common/Field';
 import { useUI } from '../../state/ui';
 import { useVault } from '../../state/vault';
-import { CLASS_COLORS, CLASS_ICONS, CLASS_THEMES, classInfo, guessClassIcon, listClasses, themeVars, type ClassIconName } from '../../lib/classes';
+import {
+  CLASS_COLORS,
+  CLASS_ICONS,
+  CLASS_THEMES,
+  classInfo,
+  guessClassIcon,
+  listClasses,
+  settleClassName,
+  themeFor,
+  themeVars,
+  type ClassIconName,
+} from '../../lib/classes';
 import { ClassGlyph } from './ClassIcon';
-import { ClassArt } from './ClassesView';
-import { cx, sanitizeFolderName } from '../../lib/util';
+import { cx } from '../../lib/util';
 import { openClass } from '../../lib/commands';
 import { confirmDialog } from '../common/dialogs';
-import { toast } from '../common/toast';
+import { short } from '../FileTree';
+
+type Icon = ClassIconName | 'auto';
+const isIcon = (s: string | undefined): s is ClassIconName => (CLASS_ICONS as readonly string[]).includes(s ?? '');
 
 /**
- * Google Classroom's "Create class" dialog: four calm fields, Cancel and
- * Create as text buttons. A new class gets the next theme and an icon guessed
- * from its name; the banner's "Customize" changes them.
+ * New class / Edit class: a name (optional), a colour and an icon. Nothing is required and nothing is an
+ * error: a blank name becomes "Untitled class" and a taken one gets a number. Until an icon is picked,
+ * the icon follows the name (a chemistry class gets the flask).
  */
 export function ClassDialog() {
   const dialog = useUI((s) => s.dialog);
@@ -24,211 +36,162 @@ export function ClassDialog() {
   const folderMeta = useVault((s) => s.folderMeta);
   const folders = useVault((s) => s.folders);
   const existing = path ? classInfo(path, folderMeta[path]) : null;
+  const classCount = useMemo(() => listClasses(folders, folderMeta, { archived: true }).length, [folders, folderMeta]);
 
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [instructor, setInstructor] = useState('');
-  const [term, setTerm] = useState('');
-  const [error, setError] = useState('');
+  // null: keep the class's stored colour as it is (older versions stored other hexes; they are never rewritten).
+  const [color, setColor] = useState<string | null>(null);
+  const [icon, setIcon] = useState<Icon>('auto');
+  const [iconTouched, setIconTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const classCount = useMemo(() => listClasses(folders, folderMeta, { archived: true }).length, [folders, folderMeta]);
-  // Most students take every class in the same term — reuse the last one typed.
-  const lastTerm = useMemo(
-    () =>
-      listClasses(folders, folderMeta, { archived: true })
-        .map((c) => c.term)
-        .filter(Boolean)
-        .pop() ?? '',
-    [folders, folderMeta],
-  );
-
-  useEffect(() => {
+  // Before the first paint, so the dialog never shows (or saves) the last class's name for a moment.
+  useLayoutEffect(() => {
     if (!open) return;
-    setError('');
     setName(existing?.name ?? '');
-    setCode(existing?.code ?? '');
-    setInstructor(existing?.instructor ?? '');
-    setTerm(existing ? (existing.term ?? '') : lastTerm);
+    setColor(existing ? null : CLASS_COLORS[classCount % CLASS_COLORS.length]);
+    const stored = path ? folderMeta[path]?.icon : undefined;
+    setIcon(isIcon(stored) ? stored : 'auto');
+    setIconTouched(false);
+    setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, path]);
 
   if (!open) return null;
   const close = () => useUI.getState().openDialog(null);
-  const clash = folders.find((f) => !f.includes('/') && f.toLowerCase() === sanitizeFolderName(name).toLowerCase() && f !== path);
-  const clashError = clash && (path !== null || folderMeta[clash]?.kind === 'class') ? (folderMeta[clash]?.kind === 'class' ? 'You already have a class with this name' : 'There is already a folder with this name') : '';
+  const theme = themeFor(color ?? (path ? folderMeta[path]?.color : undefined));
+  const shownIcon: ClassIconName = icon === 'auto' ? guessClassIcon(name.trim() || existing?.name || '') : icon;
 
   const save = async () => {
-    // The name becomes a folder on disk, so it's cleaned the same way the vault cleans it.
-    const n = sanitizeFolderName(name);
-    if (!n) {
-      setError(name.trim() ? 'Use letters or numbers; a class name can’t start with a dot' : '');
-      return;
-    }
-    if (clashError) return;
-    // Editing only the details of a class must never rename its folder.
-    const keepName = !!path && !!existing && name === existing.name;
-    const color = existing ? (folderMeta[path!]?.color ?? CLASS_COLORS[0]) : CLASS_COLORS[classCount % CLASS_COLORS.length];
-    const icon: ClassIconName = existing?.icon ?? guessClassIcon(n);
-    const info = { name: n, code: code.trim(), instructor: instructor.trim(), term: term.trim(), color, icon };
+    if (busy) return;
+    setBusy(true);
     const vault = useVault.getState();
     try {
-      if (path) {
-        const next = await vault.updateClass(path, keepName ? { ...info, name: undefined } : info);
+      if (path && existing) {
+        // Clearing the name keeps the old one; a clash with another folder gets a number.
+        const next = name.trim() ? settleClassName(name, folders, path) : existing.name;
+        const patch: { name?: string; color?: string; icon?: string } = {};
+        if (next !== existing.name) patch.name = next;
+        if (color) patch.color = color;
+        if (iconTouched) patch.icon = icon === 'auto' ? undefined : icon;
+        const moved = await vault.updateClass(path, patch);
         const v = useUI.getState().view;
-        if (v.kind === 'class' && v.path === path) useUI.getState().setView({ ...v, path: next });
+        if (v.kind === 'class' && v.path === path) useUI.getState().setView({ kind: 'class', path: moved });
         close();
         return;
       }
-      // A plain folder with the same name becomes the class (keeping its notes).
-      const created = clash ? await vault.updateClass(clash, info) : await vault.createClass(info);
+      const created = await vault.createClass({
+        name: settleClassName(name, folders),
+        color: color ?? CLASS_COLORS[0],
+        icon: icon === 'auto' ? undefined : icon,
+      });
       close();
       openClass(created);
-      toast.success(`Created ${n}`);
-    } catch (e) {
-      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const canSave = !!sanitizeFolderName(name) && !clashError && name.length <= 100;
+  const toFolder = async () => {
+    if (!path || !existing) return;
+    const ok = await confirmDialog({
+      title: `Turn ${short(existing.name)} into a plain folder?`,
+      message: 'It moves to All notes. Its notes and homework stay.',
+      confirm: 'Turn into folder',
+    });
+    if (!ok) return;
+    useVault.getState().setIsClass(path, false);
+    close();
+    useUI.getState().setView({ kind: 'folder', path });
+  };
 
   return (
-    <Modal open onClose={close} width={448} bare className="class-dialog">
+    <Modal open onClose={close} width={440} bare className="class-dialog">
       <form
-        className="gdialog class-form"
+        className="dialog-form class-form"
+        style={themeVars(theme) as React.CSSProperties}
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSave) void save();
+          void save();
         }}
       >
-        <h2 className="gdialog-title">{path ? 'Edit class' : 'Create class'}</h2>
-        <div className="gdialog-fields">
-          <Field
-            label="Class name (required)"
-            value={name}
-            autoFocus
-            maxLength={120}
-            onChange={(v) => {
-              setName(v);
-              setError('');
-            }}
-            error={name.length > 100 ? '100 characters max' : clashError || error}
-            className="class-name-input"
-          />
-          <Field label="Course code" value={code} onChange={setCode} />
-          <Field label="Teacher" value={instructor} onChange={setInstructor} />
-          <Field label="Term" value={term} onChange={setTerm} />
+        <div className="dialog-body">
+          <h2 className="dialog-title">{path ? 'Edit class' : 'New class'}</h2>
+          <div className="class-name-input">
+            <input
+              className="input"
+              value={name}
+              autoFocus
+              maxLength={100}
+              // Cleared in Edit class, the field shows the name Save keeps.
+              placeholder={existing?.name ?? 'Untitled class'}
+              aria-label="Class name"
+              spellCheck={false}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="class-field">
+            <div className="class-field-label" id="class-colour-label">
+              Colour
+            </div>
+            <div className="class-swatches" role="radiogroup" aria-labelledby="class-colour-label">
+              {CLASS_THEMES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={t.key === theme.key}
+                  className={cx('class-swatch', t.key === theme.key && 'is-active')}
+                  style={{ background: t.banner }}
+                  onClick={() => setColor(t.banner)}
+                  aria-label={t.label}
+                  title={t.label}
+                >
+                  {t.key === theme.key && <Check size={14} strokeWidth={2.5} />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="class-field">
+            <div className="class-field-label" id="class-icon-label">
+              Icon
+            </div>
+            <div className="class-icons" role="radiogroup" aria-labelledby="class-icon-label">
+              {CLASS_ICONS.map((ic) => (
+                <button
+                  key={ic}
+                  type="button"
+                  role="radio"
+                  aria-checked={ic === shownIcon}
+                  className={cx('icon-pick', ic === shownIcon && 'is-active')}
+                  onClick={() => {
+                    setIcon(ic);
+                    setIconTouched(true);
+                  }}
+                  aria-label={ic}
+                  title={icon === 'auto' && ic === shownIcon ? 'Picked from the name' : undefined}
+                >
+                  <ClassGlyph icon={ic} size={18} />
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="gdialog-actions">
+        <div className="dialog-actions">
           {path && existing && (
-            <button
-              type="button"
-              className="btn is-ghost is-quiet"
-              onClick={async () => {
-                if (
-                  await confirmDialog({
-                    title: `Turn “${existing.name}” back into a folder?`,
-                    message: 'Its notes and homework stay where they are. Only the class details are removed.',
-                    confirm: 'Make folder',
-                  })
-                ) {
-                  useVault.getState().setIsClass(path, false);
-                  close();
-                  useUI.getState().setView({ kind: 'folder', path });
-                }
-              }}
-            >
-              Make folder
+            <button type="button" className="btn is-ghost is-quiet class-to-folder" onClick={() => void toFolder()}>
+              Turn into a plain folder…
             </button>
           )}
           <span className="grow" />
-          <button type="button" className="btn is-ghost" onClick={close}>
+          <button type="button" className="btn is-secondary" onClick={close}>
             Cancel
           </button>
-          <button type="submit" className="btn is-ghost" disabled={!canSave}>
+          <button type="submit" className="btn is-primary" disabled={busy}>
             {path ? 'Save' : 'Create'}
           </button>
         </div>
       </form>
-    </Modal>
-  );
-}
-
-/** Classroom's "Customize appearance": a live banner preview, the theme colour and the banner icon. */
-export function CustomizeDialog() {
-  const dialog = useUI((s) => s.dialog);
-  const open = dialog?.kind === 'customize';
-  const path = open ? dialog.path : null;
-  const folderMeta = useVault((s) => s.folderMeta);
-  const cls = path ? classInfo(path, folderMeta[path]) : null;
-  const [theme, setTheme] = useState(CLASS_THEMES[0]);
-  const [icon, setIcon] = useState<ClassIconName>('cap');
-
-  useEffect(() => {
-    if (cls) {
-      setTheme(cls.theme);
-      setIcon(cls.icon);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, path]);
-
-  if (!open || !cls || !path) return null;
-  const close = () => useUI.getState().openDialog(null);
-  const save = async () => {
-    await useVault.getState().updateClass(path, { color: theme.banner, icon });
-    close();
-  };
-
-  return (
-    <Modal open onClose={close} width={560} bare className="customize-dialog">
-      <div className="gdialog">
-        <h2 className="gdialog-title">Customize appearance</h2>
-        <div className="customize-preview" style={themeVars(theme) as React.CSSProperties}>
-          <ClassArt icon={icon} h={128} />
-          <div className="customize-preview-name">{cls.name}</div>
-        </div>
-        <div className="customize-label">Theme colour</div>
-        <div className="theme-swatches" role="radiogroup" aria-label="Theme colour">
-          {CLASS_THEMES.map((t) => (
-            <button
-              key={t.key}
-              role="radio"
-              aria-checked={t.key === theme.key}
-              className={cx('theme-swatch', t.key === theme.key && 'is-active')}
-              style={{ background: t.banner, ['--ring' as string]: t.banner }}
-              onClick={() => setTheme(t)}
-              aria-label={t.label}
-              title={t.label}
-            >
-              {t.key === theme.key && <Check size={18} />}
-            </button>
-          ))}
-        </div>
-        <div className="customize-label">Banner icon</div>
-        <div className="icon-picks" role="radiogroup" aria-label="Banner icon">
-          {CLASS_ICONS.map((ic) => (
-            <button
-              key={ic}
-              role="radio"
-              aria-checked={ic === icon}
-              className={cx('icon-pick', ic === icon && 'is-active')}
-              style={themeVars(theme) as React.CSSProperties}
-              onClick={() => setIcon(ic)}
-              aria-label={ic}
-            >
-              <ClassGlyph icon={ic} size={20} />
-            </button>
-          ))}
-        </div>
-        <div className="gdialog-actions">
-          <span className="grow" />
-          <button className="btn is-ghost" onClick={close}>
-            Cancel
-          </button>
-          <button className="btn is-ghost" onClick={() => void save()}>
-            Save
-          </button>
-        </div>
-      </div>
     </Modal>
   );
 }

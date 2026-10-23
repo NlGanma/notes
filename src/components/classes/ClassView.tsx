@@ -1,454 +1,260 @@
-import { useMemo, useRef, useState } from 'react';
-import {
-  ChevronRight,
-  ClipboardList,
-  FileText,
-  FolderOpen,
-  FolderPlus,
-  Info,
-  LibraryBig,
-  MoreVertical,
-  Pencil,
-  Plus,
-  ScanText,
-  Settings,
-} from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUp, ClipboardList, FolderPlus, MoreHorizontal, Plus, Repeat } from 'lucide-react';
 import { useVault } from '../../state/vault';
-import { useUI, type ClassTab } from '../../state/ui';
+import { useUI } from '../../state/ui';
+import { useAI } from '../../state/ai';
 import { useAssistant } from '../../state/assistant';
+import { conceptsOf, useReview } from '../../state/review';
+import { isDue } from '../../lib/review/mastery';
+import { isReviewable } from '../../lib/review/tree';
 import type { NoteDoc } from '../../lib/vault/types';
-import { classHomework, classInfo, HOMEWORK_SUBFOLDER, inFolder, themeVars } from '../../lib/classes';
-import { dueDay, isMissing } from '../../lib/homework';
-import { editClass, newFolder, newHomework, newNote, openLibrary, reviewFolder } from '../../lib/commands';
-import { SCAN_TYPES } from '../../lib/import';
-import type { StudyTool } from '../../lib/ai/prompts';
-import { folderMenu, noteMenu, noteTitle } from '../FileTree';
-import { ToolIcon, toolStyle } from '../library/StudioPanel';
-import { TOOL_LOOK } from '../library/notebook';
-import { openContextMenu } from '../common/ContextMenu';
-import { Popover } from '../common/Popover';
-import { Tabs } from '../common/Tabs';
-import { ClassArt, dueText } from './ClassesView';
-import { isElectron } from '../../lib/platform';
+import { classCounts, classHomework, classInfo, classNotes, countLine, HOMEWORK_SUBFOLDER, themeVars, type ClassInfo } from '../../lib/classes';
+import { dueLabel } from '../../lib/homework';
+import { newFolder, newHomework, openLibrary, reviewFolder } from '../../lib/commands';
+import { importDropped, SCAN_TYPES } from '../../lib/import';
 import { cx } from '../../lib/util';
+import { folderMenu, short } from '../FileTree';
+import { dateGroup, FolderRow, NoteRow } from '../NoteGrid';
+import { NewNotePopover } from '../NewNoteMenu';
+import { DoneList, HomeworkRow, isTodo, useJustDone } from '../homework/HomeworkRow';
+import { byDue } from '../homework/sources';
+import { menuUnder } from './ClassesView';
 
-const when = (t: number) => {
-  const d = new Date(t);
-  return new Date().toDateString() === d.toDateString()
-    ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const isScan = (f: File) => SCAN_TYPES.includes(f.name.split('.').pop()?.toLowerCase() ?? '');
+
+/** Ideas due for review in a class, counted a moment after the notes or the review file change. */
+function useReviewDue(path: string, notes: Record<string, NoteDoc>) {
+  const file = useReview((s) => s.file);
+  const [due, setDue] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const now = Date.now();
+      let n = 0;
+      for (const note of classNotes(path, notes)) if (isReviewable(note)) n += conceptsOf(note, file).filter((c) => isDue(file.states[c.id], now)).length;
+      setDue(n);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [path, notes, file]);
+  return due;
+}
+
+// The same states and words as the Ask page's composer (ComposerStatus on the AI side).
+type Availability = 'online' | 'loading' | 'offline' | 'nomodel';
+const STATUS_TEXT: Record<Exclude<Availability, 'online'>, string> = {
+  loading: 'Starting the local model…',
+  offline: 'Local AI isn’t running',
+  nomodel: 'No chat model chosen',
 };
 
-/** A Classwork item row: the class-colour circle with the item's glyph, its title, and plain grey details. */
-function ItemRow({ note, onOpen }: { note: NoteDoc; onOpen(): void }) {
-  const hw = note.meta.homework;
-  const scanned = hw && (note.content.content ?? []).some((b) => b.type === 'image');
-  const meta = hw
-    ? hw.done
-      ? 'Done'
-      : isMissing(hw)
-        ? 'Missing'
-        : hw.due
-          ? `Due ${dueDay(hw.due, Date.now(), 'short')}`
-          : 'No due date'
-    : `Edited ${when(note.meta.updated)}`;
+/** Claude's project composer: one line until it's used, then room to write. Asking opens Ask your notes on this class. */
+function AskComposer({ cls }: { cls: ClassInfo }) {
+  const availability = useAI((s): Availability => (s.status === 'online' ? (s.chatModel ? 'online' : 'nomodel') : s.status === 'offline' ? 'offline' : 'loading'));
+  const [text, setText] = useState('');
+  // Once used, it stays open: shrinking on blur would move the buttons under a click that is landing.
+  const [opened, setOpened] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // While the model is only starting, a question just waits for it.
+  const answerable = availability === 'online' || availability === 'loading';
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [text, opened]);
+
+  const ask = () => {
+    const prompt = text.trim();
+    if (!prompt || !answerable) return;
+    const scope = { kind: 'folder' as const, path: cls.path };
+    openLibrary(scope);
+    void useAssistant.getState().askLibrary({ prompt, scope, scopeLabel: cls.name });
+    setText('');
+  };
+
   return (
-    <div
-      className={cx('cw-row', hw?.done && 'is-done')}
-      role="link"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
-      onContextMenu={(e) => openContextMenu(e, noteMenu(note))}
+    <form
+      className={cx('class-ask', (opened || !!text) && 'is-open')}
+      onSubmit={(e) => {
+        e.preventDefault();
+        ask();
+      }}
+      onClick={() => ref.current?.focus()}
     >
-      <span className="item-circle">{hw ? scanned ? <ScanText size={20} /> : <ClipboardList size={20} /> : <FileText size={20} />}</span>
-      <span className="cw-row-title">{noteTitle(note)}</span>
-      <span className={cx('cw-row-meta', hw && !hw.done && isMissing(hw) && 'is-missing', hw?.done && 'is-done')}>{meta}</span>
-      <button
-        className="icon-btn cw-row-more"
-        onClick={(e) => {
-          e.stopPropagation();
-          openContextMenu(e, noteMenu(note));
-        }}
-        aria-label="More"
-      >
-        <MoreVertical size={20} />
-      </button>
-    </div>
+      {availability !== 'online' && (
+        <div className={cx('class-ask-status', `is-${availability}`)} role="status">
+          <span className="class-ask-dot" aria-hidden />
+          <span className="class-ask-status-text">{STATUS_TEXT[availability]}</span>
+          <button type="button" className="link-btn" onClick={() => useUI.getState().openSettings('ai')}>
+            Open settings
+          </button>
+        </div>
+      )}
+      <div className="class-ask-row">
+        <textarea
+          ref={ref}
+          rows={1}
+          value={text}
+          placeholder={`Ask about your ${short(cls.name)} notes`}
+          aria-label={`Ask about your ${cls.name} notes`}
+          spellCheck={false}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={() => setOpened(true)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              ask();
+            }
+          }}
+        />
+        <button type="submit" className="class-ask-send" disabled={!text.trim() || !answerable} aria-label="Ask" title="Ask">
+          <ArrowUp size={16} strokeWidth={2} />
+        </button>
+      </div>
+    </form>
   );
 }
 
-// The class's study tools, in NotebookLM's Studio order.
-const STUDY: (StudyTool | 'review')[] = ['guide', 'summary', 'terms', 'flashcards', 'quiz', 'review'];
-
-/** A class's page, as Google Classroom shows a class: Stream, Classwork and Study tabs under a breadcrumb. */
-export function ClassView({ path, tab = 'stream' }: { path: string; tab?: ClassTab }) {
+/**
+ * A class's page, as Claude lays out a project: the class's name, a composer to ask its notes, a row of
+ * actions, then its homework (Reminders: tick to finish) and its notes (Apple Notes: folders, then notes
+ * by when they were last edited). Dropping a PDF or photo on it makes homework from it.
+ */
+export function ClassView({ path }: { path: string }) {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
   const folderMeta = useVault((s) => s.folderMeta);
   const [dropping, setDropping] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const newBtn = useRef<HTMLButtonElement>(null);
   const cls = classInfo(path, folderMeta[path]);
-  const section = [cls.code, cls.term].filter(Boolean).join(' · ');
-  const setTab = (t: ClassTab) => useUI.getState().setView({ kind: 'class', path, tab: t });
+  const reviewDue = useReviewDue(path, notes);
+  const held = useJustDone((s) => s.ids);
+
+  const homework = useMemo(() => classHomework(path, notes).sort(byDue), [path, notes]);
+  const todo = homework.filter((n) => isTodo(n, held));
+  const done = homework.filter((n) => !isTodo(n, held)).sort((a, b) => b.meta.updated - a.meta.updated);
+  const lecture = useMemo(() => classNotes(path, notes).sort((a, b) => b.meta.updated - a.meta.updated), [path, notes]);
+  const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
+  const subfolders = folders.filter((f) => f.startsWith(path + '/') && !f.slice(path.length + 1).includes('/') && f !== hwDir);
+  const countIn = (f: string) => lecture.filter((n) => n.meta.folder === f || n.meta.folder.startsWith(f + '/')).length;
+  const groups = useMemo(() => {
+    const out: { label: string; notes: NoteDoc[] }[] = [];
+    for (const n of lecture) {
+      const label = dateGroup(n.meta.updated);
+      const last = out[out.length - 1];
+      if (last?.label === label) last.notes.push(n);
+      else out.push({ label, notes: [n] });
+    }
+    return out;
+  }, [lecture]);
+  const line = countLine(classCounts(path, notes));
+  const empty = !homework.length && !lecture.length && !subfolders.length;
 
   return (
     <div
       className={cx('screen class-view', dropping && 'is-drop')}
       style={themeVars(cls.theme) as React.CSSProperties}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
-          e.preventDefault();
-          e.stopPropagation();
-          setDropping(true);
-        }
-      }}
-      onDragLeave={(e) => e.currentTarget === e.target && setDropping(false)}
-      onDrop={async (e) => {
-        setDropping(false);
-        const f = [...e.dataTransfer.files].find((x) => SCAN_TYPES.includes(x.name.split('.').pop()?.toLowerCase() ?? ''));
-        if (!f) return;
+        if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
         e.stopPropagation();
-        newHomework(path, { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+        setDropping(true);
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
+      onDrop={async (e) => {
+        if (!e.dataTransfer.files.length) return;
+        // Taken here, always: a file the page doesn't handle must never make the window open it.
+        e.preventDefault();
+        e.stopPropagation();
+        setDropping(false);
+        const scan = [...e.dataTransfer.files].find(isScan);
+        if (scan) newHomework(path, { name: scan.name, bytes: new Uint8Array(await scan.arrayBuffer()) });
+        else void importDropped(e.dataTransfer.files);
       }}
     >
-      <div className="screen-head">
-        <nav className="crumbs" aria-label="Breadcrumb">
-          <button className="crumb-root" onClick={() => useUI.getState().setView({ kind: 'classes' })}>
-            Classes
-          </button>
-          <ChevronRight size={20} className="crumb-sep" />
-          <span className="crumb-here">
-            <span className="crumb-name">{cls.name}</span>
-            {section && <span className="crumb-sub">{section}</span>}
-          </span>
-        </nav>
-      </div>
-      <Tabs
-        items={[
-          { id: 'stream', label: 'Stream' },
-          { id: 'classwork', label: 'Classwork' },
-          { id: 'study', label: 'Study' },
-        ]}
-        value={tab}
-        onChange={setTab}
-        className="is-class"
-      >
-        <button className="icon-btn" onClick={() => openLibrary({ kind: 'folder', path })} aria-label={`Ask your ${cls.name} notes`} title={`Ask your ${cls.name} notes`}>
-          <LibraryBig size={20} />
-        </button>
-        <button className="icon-btn" onClick={() => editClass(path)} aria-label="Class settings" title="Class settings">
-          <Settings size={20} />
-        </button>
-      </Tabs>
       <div className="screen-scroll">
-        {tab === 'stream' && <Stream path={path} notes={notes} onTab={setTab} />}
-        {tab === 'classwork' && <Classwork path={path} notes={notes} folders={folders} />}
-        {tab === 'study' && <Study path={path} />}
-      </div>
-      {dropping && <div className="drop-hint">Drop to create homework from this scan</div>}
-    </div>
-  );
-}
-
-function Stream({ path, notes, onTab }: { path: string; notes: Record<string, NoteDoc>; onTab(t: ClassTab): void }) {
-  const folderMeta = useVault((s) => s.folderMeta);
-  const cls = classInfo(path, folderMeta[path]);
-  const [info, setInfo] = useState(false);
-  const infoBtn = useRef<HTMLButtonElement>(null);
-  const upcoming = useMemo(
-    () =>
-      classHomework(path, notes)
-        .filter((n) => !n.meta.homework!.done && n.meta.homework!.due && n.meta.homework!.due < Date.now() + 7 * 86_400_000)
-        .sort((a, b) => a.meta.homework!.due! - b.meta.homework!.due!)
-        .slice(0, 3),
-    [path, notes],
-  );
-  const feed = useMemo(
-    () =>
-      Object.values(notes)
-        .filter((n) => !n.meta.trashed && inFolder(n, path))
-        .sort((a, b) => b.meta.created - a.meta.created)
-        .slice(0, 30),
-    [notes, path],
-  );
-
-  return (
-    <div className="stream">
-      <div className="banner">
-        <ClassArt icon={cls.icon} h={240} />
-        <div className="banner-name">{cls.name}</div>
-        {(cls.code || cls.term) && <div className="banner-section">{[cls.code, cls.term].filter(Boolean).join(' · ')}</div>}
-        <button className="banner-customize" onClick={() => useUI.getState().openDialog({ kind: 'customize', path })}>
-          <Pencil size={18} /> Customize
-        </button>
-        <button ref={infoBtn} className="icon-btn banner-info" onClick={() => setInfo((v) => !v)} aria-label="Class details" title="Class details">
-          <Info size={22} />
-        </button>
-        <Popover anchor={infoBtn.current} open={info} onClose={() => setInfo(false)} align="end" className="class-info-pop">
-          <dl className="class-info">
-            <dt>Course code</dt>
-            <dd>{cls.code || '—'}</dd>
-            <dt>Teacher</dt>
-            <dd>{cls.instructor || '—'}</dd>
-            <dt>Term</dt>
-            <dd>{cls.term || '—'}</dd>
-            <dt>Folder</dt>
-            <dd>{cls.path}</dd>
-          </dl>
-        </Popover>
-      </div>
-
-      <div className="stream-grid">
-        <aside className="upcoming">
-          <div className="upcoming-title">Upcoming</div>
-          {upcoming.length ? (
-            upcoming.map((n) => (
-              <button key={n.meta.id} className="upcoming-item" onClick={() => useUI.getState().openNote(n.meta.id)}>
-                <span className={cx('upcoming-when', isMissing(n.meta.homework) && 'is-missing')}>{dueText(n)}</span>
-                <span className="upcoming-name">{n.meta.title || 'Untitled homework'}</span>
+        <div className="class-col">
+          <header className="class-head">
+            <div className="class-head-row">
+              <span className="class-head-square" aria-hidden />
+              <h1 className="page-h1 class-title" title={cls.name}>
+                {cls.name}
+              </h1>
+              <span className="grow" />
+              <button className="icon-btn class-head-more" aria-label={`${cls.name} options`} title="Options" onClick={(e) => menuUnder(e, folderMenu(path, { onPage: true }))}>
+                <MoreHorizontal size={18} strokeWidth={1.5} />
               </button>
-            ))
-          ) : (
-            <div className="upcoming-empty">No work due soon</div>
-          )}
-          <div className="upcoming-foot">
-            <button className="btn is-ghost is-small is-class" onClick={() => useUI.getState().setView({ kind: 'homework' })}>
-              View all
-            </button>
-          </div>
-        </aside>
-
-        <div className="stream-main">
-          <div className="stream-actions">
-            <button className="btn is-tonal" onClick={() => newNote(path)}>
-              <Pencil size={18} /> New note
-            </button>
-            <button className="btn is-ghost is-class" onClick={() => newHomework(path)}>
-              <ClipboardList size={18} /> Add homework
-            </button>
-          </div>
-          {feed.length ? (
-            feed.map((n) => {
-              const edited = n.meta.updated - n.meta.created > 60_000;
-              return (
-                <div
-                  key={n.meta.id}
-                  className="stream-card"
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => useUI.getState().openNote(n.meta.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && useUI.getState().openNote(n.meta.id)}
-                  onContextMenu={(e) => openContextMenu(e, noteMenu(n))}
-                >
-                  <span className="item-circle is-40">{n.meta.homework ? <ClipboardList size={20} /> : <FileText size={20} />}</span>
-                  <div className="stream-card-text">
-                    <div className="stream-card-title">
-                      {n.meta.homework ? 'New homework' : 'New note'}: {noteTitle(n)}
-                    </div>
-                    <div className="stream-card-date">
-                      {when(n.meta.created)}
-                      {edited ? ` (Edited ${when(n.meta.updated)})` : ''}
-                    </div>
-                  </div>
-                  <button
-                    className="icon-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openContextMenu(e, noteMenu(n));
-                    }}
-                    aria-label="More"
-                  >
-                    <MoreVertical size={20} />
-                  </button>
-                </div>
-              );
-            })
-          ) : (
-            <div className="stream-card is-empty">
-              <div className="stream-empty-title">This is where your class activity shows up</div>
-              <div className="stream-empty-sub">Notes and homework you add to {cls.name} appear here.</div>
             </div>
-          )}
-          {feed.length > 0 && (
-            <button className="btn is-ghost is-class stream-more" onClick={() => onTab('classwork')}>
-              See everything in Classwork
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+            {line && <div className="class-head-meta">{line}</div>}
+          </header>
 
-function Classwork({ path, notes, folders }: { path: string; notes: Record<string, NoteDoc>; folders: string[] }) {
-  const [createOpen, setCreateOpen] = useState(false);
-  const createBtn = useRef<HTMLButtonElement>(null);
-  const hwDir = `${path}/${HOMEWORK_SUBFOLDER}`;
-  const open = (n: NoteDoc) => useUI.getState().openNote(n.meta.id);
-  const live = Object.values(notes).filter((n) => !n.meta.trashed && inFolder(n, path));
-  const homework = live.filter((n) => n.meta.homework).sort((a, b) => (a.meta.homework!.due ?? Infinity) - (b.meta.homework!.due ?? Infinity));
-  const topics = folders
-    .filter((f) => f.startsWith(path + '/') && f !== hwDir && !f.startsWith(hwDir + '/'))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const byTitle = (a: NoteDoc, b: NoteDoc) => noteTitle(a).localeCompare(noteTitle(b), undefined, { numeric: true });
-  const loose = live.filter((n) => !n.meta.homework && n.meta.folder === path).sort(byTitle);
-  const topicNotes = (f: string) => live.filter((n) => !n.meta.homework && n.meta.folder === f).sort(byTitle);
-  const anchor = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const empty = !live.length;
+          {lecture.length > 0 && <AskComposer cls={cls} />}
 
-  return (
-    <div className="classwork">
-      <nav className="topic-list" aria-label="Topics">
-        <button className="topic-link is-active" onClick={() => document.querySelector('.screen-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}>
-          All topics
-        </button>
-        {homework.length > 0 && (
-          <button className="topic-link" onClick={() => anchor('topic-homework')}>
-            Homework
-          </button>
-        )}
-        {topics.map((f) => (
-          <button key={f} className="topic-link" onClick={() => anchor(`topic-${f}`)}>
-            {f.slice(path.length + 1)}
-          </button>
-        ))}
-        {loose.length > 0 && (homework.length > 0 || topics.length > 0) && (
-          <button className="topic-link" onClick={() => anchor('topic-notes')}>
-            Notes
-          </button>
-        )}
-      </nav>
-      <div className="cw-main">
-        <div className="cw-toolbar">
-          <button ref={createBtn} className="btn is-primary is-create is-class" onClick={() => setCreateOpen((v) => !v)}>
-            <Plus size={22} /> Create
-          </button>
-          <span className="grow" />
-          {isElectron && (
-            <button className="btn is-ghost is-class" onClick={() => useVault.getState().backend?.revealFolder?.(path)}>
-              <FolderOpen size={18} /> Show in Finder
+          <div className="class-actions">
+            <button ref={newBtn} className={cx('btn is-secondary', newOpen && 'is-on')} onClick={() => setNewOpen(!newOpen)} aria-haspopup="menu" aria-expanded={newOpen}>
+              <Plus size={16} strokeWidth={1.75} /> New note
             </button>
-          )}
-        </div>
-        {/* Below 1100px the topic rail is hidden; Classroom swaps it for this outlined select under "+ Create". */}
-        {!empty && (
-          <label className="gselect cw-topic-select">
-            <span className="gselect-label">Topic filter</span>
-            <select
-              defaultValue=""
-              onChange={(e) => (e.target.value ? anchor(e.target.value) : document.querySelector('.screen-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }))}
-            >
-              <option value="">All topics</option>
-              {homework.length > 0 && <option value="topic-homework">Homework</option>}
-              {topics.map((f) => (
-                <option key={f} value={`topic-${f}`}>
-                  {f.slice(path.length + 1)}
-                </option>
-              ))}
-              {loose.length > 0 && (homework.length > 0 || topics.length > 0) && <option value="topic-notes">Notes</option>}
-            </select>
-          </label>
-        )}
-        {empty && (
-          <div className="screen-empty is-block">
-            <div className="screen-empty-title">This is where your notes and homework live</div>
-            <div>Add notes and homework for this class, then organise them into topics.</div>
-          </div>
-        )}
-        {homework.length > 0 && (
-          <section className="topic" id="topic-homework">
-            <div className="topic-head">
-              <h2 className="topic-title">Homework</h2>
-            </div>
-            {homework.map((n) => (
-              <ItemRow key={n.meta.id} note={n} onOpen={() => open(n)} />
-            ))}
-          </section>
-        )}
-        {topics.map((f) => {
-          const list = topicNotes(f);
-          return (
-            <section key={f} className="topic" id={`topic-${f}`}>
-              <div className="topic-head" onContextMenu={(e) => openContextMenu(e, folderMenu(f))}>
-                <h2 className="topic-title">{f.slice(path.length + 1)}</h2>
-                <button className="icon-btn topic-more" onClick={(e) => openContextMenu(e, folderMenu(f))} aria-label="Topic options">
-                  <MoreVertical size={20} />
-                </button>
-              </div>
-              {list.length ? list.map((n) => <ItemRow key={n.meta.id} note={n} onOpen={() => open(n)} />) : <div className="topic-empty">No items in this topic</div>}
-            </section>
-          );
-        })}
-        {loose.length > 0 && (
-          <section className={cx('topic', (homework.length > 0 || topics.length > 0) && 'is-loose')} id="topic-notes">
-            {(homework.length > 0 || topics.length > 0) && (
-              <div className="topic-head">
-                <h2 className="topic-title">Notes</h2>
-              </div>
+            <button className="btn is-secondary" onClick={() => newHomework(path)}>
+              <ClipboardList size={16} strokeWidth={1.5} /> New homework
+            </button>
+            <span className="grow" />
+            {lecture.length > 0 && (
+              <button className="btn is-secondary class-review" onClick={() => reviewFolder(path)}>
+                <Repeat size={16} strokeWidth={1.5} /> Review
+                {reviewDue > 0 && <span className="badge-count">{reviewDue}</span>}
+              </button>
             )}
-            {loose.map((n) => (
-              <ItemRow key={n.meta.id} note={n} onOpen={() => open(n)} />
-            ))}
-          </section>
-        )}
-      </div>
+          </div>
+          <NewNotePopover anchor={newBtn.current} open={newOpen} onClose={() => setNewOpen(false)} folder={path} placement="bottom" />
 
-      <Popover anchor={createBtn.current} open={createOpen} onClose={() => setCreateOpen(false)} align="start" className="menu-pop">
-        <div className="menu">
-          {(
-            [
-              ['Note', <FileText size={20} key="i" />, () => newNote(path)],
-              ['Homework', <ClipboardList size={20} key="i" />, () => newHomework(path)],
-              ['Import scan', <ScanText size={20} key="i" />, () => newHomework(path)],
-              null,
-              ['Topic', <FolderPlus size={20} key="i" />, () => void newFolder(path)],
-            ] as const
-          ).map((it, i) =>
-            it ? (
-              <button
-                key={it[0]}
-                className="menu-item"
-                onClick={() => {
-                  setCreateOpen(false);
-                  it[2]();
-                }}
-              >
-                {it[1]}
-                <span className="menu-label">{it[0]}</span>
-              </button>
-            ) : (
-              <div key={i} className="menu-sep" />
-            ),
+          {empty ? (
+            <div className="class-empty">
+              <div className="page-empty-title">Nothing here yet</div>
+              <div className="page-empty-sub">Drop a PDF or photo here to make homework.</div>
+            </div>
+          ) : (
+            <>
+              {homework.length > 0 && (
+                <section className="class-section class-homework">
+                  <h2 className="class-section-head">Homework</h2>
+                  {todo.map((n) => {
+                    const due = dueLabel(n.meta.homework!.due);
+                    return <HomeworkRow key={n.meta.id} note={n} cls={cls} due={due && { text: due.text, overdue: due.tone === 'overdue' }} />;
+                  })}
+                  {!todo.length && <div className="class-section-empty">All done</div>}
+                  <DoneList count={done.length}>{() => done.map((n) => <HomeworkRow key={n.meta.id} note={n} cls={cls} />)}</DoneList>
+                </section>
+              )}
+
+              {(lecture.length > 0 || subfolders.length > 0) && (
+                <section className="class-section class-notes">
+                  <div className="class-section-row">
+                    <h2 className="class-section-head">Notes</h2>
+                    <span className="grow" />
+                    <button className="btn is-ghost is-quiet class-new-folder" onClick={() => void newFolder(path)}>
+                      <FolderPlus size={14} strokeWidth={1.5} /> New folder
+                    </button>
+                  </div>
+                  {subfolders.map((f) => (
+                    <FolderRow key={f} path={f} count={countIn(f)} />
+                  ))}
+                  {groups.map((g) => (
+                    <Fragment key={g.label}>
+                      <h3 className="list-caption">{g.label}</h3>
+                      {g.notes.map((n) => (
+                        <NoteRow key={n.meta.id} note={n} />
+                      ))}
+                    </Fragment>
+                  ))}
+                </section>
+              )}
+            </>
           )}
         </div>
-      </Popover>
-    </div>
-  );
-}
-
-function Study({ path }: { path: string }) {
-  const folderMeta = useVault((s) => s.folderMeta);
-  const cls = classInfo(path, folderMeta[path]);
-  const scope = { kind: 'folder' as const, path };
-  const run = (tool: StudyTool | 'review') => {
-    if (tool === 'review') return reviewFolder(path);
-    openLibrary(scope);
-    void useAssistant.getState().askLibrary({ prompt: '', scope, scopeLabel: cls.name, tool });
-  };
-  return (
-    <div className="study-page">
-      <div className="study-intro">Made only from your {cls.name} notes. What you make opens in Ask your notes.</div>
-      <div className="study-tiles">
-        {STUDY.map((t) => (
-          <div key={t} className="studio-tile" style={toolStyle(t)}>
-            <button className="study-tool class-study-tool" onClick={() => run(t)}>
-              <ToolIcon tool={t} size={24} />
-              <span className="study-tool-name">{TOOL_LOOK[t].name}</span>
-            </button>
-          </div>
-        ))}
       </div>
+      {dropping && <div className="drop-hint">Drop a PDF or photo to make homework for {short(cls.name)}</div>}
     </div>
   );
 }
