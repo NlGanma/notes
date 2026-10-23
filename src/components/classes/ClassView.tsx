@@ -13,7 +13,7 @@ import { dueLabel } from '../../lib/homework';
 import { newFolder, newHomework, openLibrary, reviewFolder } from '../../lib/commands';
 import { importDropped, SCAN_TYPES } from '../../lib/import';
 import { cx } from '../../lib/util';
-import { folderMenu } from '../FileTree';
+import { folderMenu, short } from '../FileTree';
 import { dateGroup, FolderRow, NoteRow } from '../NoteGrid';
 import { NewNotePopover } from '../NewNoteMenu';
 import { DoneList, HomeworkRow, isTodo, useJustDone } from '../homework/HomeworkRow';
@@ -38,15 +38,23 @@ function useReviewDue(path: string, notes: Record<string, NoteDoc>) {
   return due;
 }
 
+// The same states and words as the Ask page's composer (ComposerStatus on the AI side).
+type Availability = 'online' | 'loading' | 'offline' | 'nomodel';
+const STATUS_TEXT: Record<Exclude<Availability, 'online'>, string> = {
+  loading: 'Starting the local model…',
+  offline: 'Local AI isn’t running',
+  nomodel: 'No chat model chosen',
+};
+
 /** Claude's project composer: one line until it's used, then room to write. Asking opens Ask your notes on this class. */
 function AskComposer({ cls }: { cls: ClassInfo }) {
-  const status = useAI((s) => s.status);
+  const availability = useAI((s): Availability => (s.status === 'online' ? (s.chatModel ? 'online' : 'nomodel') : s.status === 'offline' ? 'offline' : 'loading'));
   const [text, setText] = useState('');
   // Once used, it stays open: shrinking on blur would move the buttons under a click that is landing.
   const [opened, setOpened] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const offline = status === 'offline';
-  const loading = status !== 'online' && !offline;
+  // While the model is only starting, a question just waits for it.
+  const answerable = availability === 'online' || availability === 'loading';
 
   useEffect(() => {
     const el = ref.current;
@@ -57,7 +65,7 @@ function AskComposer({ cls }: { cls: ClassInfo }) {
 
   const ask = () => {
     const prompt = text.trim();
-    if (!prompt || offline) return;
+    if (!prompt || !answerable) return;
     const scope = { kind: 'folder' as const, path: cls.path };
     openLibrary(scope);
     void useAssistant.getState().askLibrary({ prompt, scope, scopeLabel: cls.name });
@@ -73,10 +81,10 @@ function AskComposer({ cls }: { cls: ClassInfo }) {
       }}
       onClick={() => ref.current?.focus()}
     >
-      {(offline || loading) && (
-        <div className="class-ask-status">
-          <span className={cx('class-ask-dot', offline ? 'is-offline' : 'is-loading')} />
-          {offline ? 'Local AI isn’t running.' : 'Starting the local model…'}
+      {availability !== 'online' && (
+        <div className={cx('class-ask-status', `is-${availability}`)} role="status">
+          <span className="class-ask-dot" aria-hidden />
+          <span className="class-ask-status-text">{STATUS_TEXT[availability]}</span>
           <button type="button" className="link-btn" onClick={() => useUI.getState().openSettings('ai')}>
             Open settings
           </button>
@@ -87,7 +95,7 @@ function AskComposer({ cls }: { cls: ClassInfo }) {
           ref={ref}
           rows={1}
           value={text}
-          placeholder={`Ask about your ${cls.name} notes`}
+          placeholder={`Ask about your ${short(cls.name)} notes`}
           aria-label={`Ask about your ${cls.name} notes`}
           spellCheck={false}
           onChange={(e) => setText(e.target.value)}
@@ -100,7 +108,7 @@ function AskComposer({ cls }: { cls: ClassInfo }) {
             }
           }}
         />
-        <button type="submit" className="class-ask-send" disabled={!text.trim() || offline} aria-label="Ask" title="Ask">
+        <button type="submit" className="class-ask-send" disabled={!text.trim() || !answerable} aria-label="Ask" title="Ask">
           <ArrowUp size={16} strokeWidth={2} />
         </button>
       </div>
@@ -246,7 +254,7 @@ export function ClassView({ path }: { path: string }) {
           )}
         </div>
       </div>
-      {dropping && <div className="drop-hint">Drop a PDF or photo to make homework for {cls.name}</div>}
+      {dropping && <div className="drop-hint">Drop a PDF or photo to make homework for {short(cls.name)}</div>}
     </div>
   );
 }

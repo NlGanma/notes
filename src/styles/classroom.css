@@ -461,7 +461,7 @@
   flex: none;
   background: var(--danger);
 }
-.class-ask-dot.is-loading {
+.class-ask-status.is-loading .class-ask-dot {
   background: var(--warning-line);
   animation: pulse 1.2s ease-in-out infinite;
 }
