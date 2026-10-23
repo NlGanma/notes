@@ -52,7 +52,15 @@ export function MainBar({ scrolled }: { scrolled?: boolean }) {
   return (
     <header className={cx('mainbar drag', scrolled && 'is-scrolled')}>
       {!sidebar && (
-        <button className="icon-btn mainbar-show no-drag" onClick={() => useUI.getState().toggleSidebar()} aria-label="Show sidebar" title={`Show sidebar  ${MOD}\\`}>
+        <button
+          className="icon-btn mainbar-show no-drag"
+          onClick={() => {
+            useUI.getState().toggleSidebar();
+            requestAnimationFrame(() => document.querySelector<HTMLElement>('.sidebar-hide')?.focus());
+          }}
+          aria-label="Show sidebar"
+          title={`Show sidebar  ${MOD}\\`}
+        >
           <PanelLeft size={18} strokeWidth={1.5} />
         </button>
       )}

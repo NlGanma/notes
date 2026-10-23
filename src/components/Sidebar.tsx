@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, FileText, LayoutGrid, ListChecks, MessagesSquare, MoreHorizontal, PanelLeft, Plus, Repeat, Search, Settings } from 'lucide-react';
 import { useVault } from '../state/vault';
 import { useUI } from '../state/ui';
@@ -126,7 +126,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
   // Hidden, it is out of the tab order and out of reach of screen readers too.
   const asideRef = useRef<HTMLElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (asideRef.current) asideRef.current.inert = !shown;
   }, [shown]);
 
@@ -171,7 +171,16 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
     <aside ref={asideRef} className={cx('sidebar', !shown && 'is-hidden', overlay && 'is-overlay')} aria-label="Navigation">
       <div className="sidebar-head drag">
         <span className="grow" />
-        <button className="icon-btn no-drag" onClick={() => useUI.getState().toggleSidebar()} aria-label="Hide sidebar" title={`Hide sidebar  ${MOD}\\`}>
+        <button
+          className="icon-btn sidebar-hide no-drag"
+          onClick={() => {
+            useUI.getState().toggleSidebar();
+            // The focus goes to the button that brings it back, not lost with the hidden sidebar.
+            requestAnimationFrame(() => document.querySelector<HTMLElement>('.mainbar-show')?.focus());
+          }}
+          aria-label="Hide sidebar"
+          title={`Hide sidebar  ${MOD}\\`}
+        >
           <PanelLeft size={18} strokeWidth={1.5} />
         </button>
       </div>
