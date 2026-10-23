@@ -418,19 +418,16 @@
     transform: translateX(16px);
   }
 }
-/* A narrow page: the panel floats over the conversation instead of squeezing it. */
+/* A narrow page: the panel takes the whole page instead of squeezing the conversation (Close goes back to it). */
 .lib-artifact.is-overlay {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(600px, calc(100% - 32px));
+  inset: 0;
   z-index: 20;
-  box-shadow: var(--shadow-l);
-  border-radius: var(--radius-l) 0 0 var(--radius-l);
+  box-shadow: none;
 }
+/* The same height as the conversation's header, so the two lines meet. */
 .art-head {
-  height: 52px;
+  height: 44px;
   flex: none;
   display: flex;
   align-items: center;
