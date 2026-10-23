@@ -103,6 +103,8 @@ await waitIdle();
 const answer = await page.textContent('.library .msg.is-bot .md');
 check(/squeeze|squeezed|g\(x\)/i.test(answer), 'library answer drawn from the calculus note');
 check(await page.locator('.library .sources .source').count(), 'sources listed under the answer');
+const chips = (await page.locator('.library .lib-dock .study-tool').allTextContents()).map((t) => t.trim()).join(' · ');
+check(chips === 'Summarize · Study guide · Key terms · Flashcards · Quiz me', `the study tools stay under the composer during a conversation (${chips})`);
 await page.locator('.library .msg.is-bot .cite').first().click();
 await page.waitForSelector('.cite-preview');
 await shot(page, 'ai-06-library-cited');
@@ -111,20 +113,37 @@ await page.waitForTimeout(900);
 check(await page.locator(`${V} .nib-flash-box`).count(), 'citation opened the note and highlighted the source block');
 await shot(page, 'ai-07-citation-jump');
 
-// 7. Study tools: flashcards and quiz.
+// 7. Study tools: flashcards and quiz, each opening beside the conversation.
 await page.click('.nav-item:has-text("Ask your notes")');
 await page.click('.library button[title="New conversation"]');
+check(/What do you want to know/.test(await page.textContent('.library')), 'a new conversation starts from the greeting');
 await page.click('.study-tool:has-text("Flashcards")');
-await page.waitForSelector('.flashcards', { timeout: 20000 });
+await page.waitForSelector('.lib-artifact .flashcards', { timeout: 20000 });
+check(/Make flashcards/.test(await page.locator('.library .msg.is-user').last().textContent()), 'the request reads as the student’s own words');
+check(await page.locator('.library .art-card.is-open').count(), '…and its card in the conversation shows it open');
 await page.click('.fc-card');
 await page.waitForTimeout(500);
 await shot(page, 'ai-08-flashcards');
 await page.click('.library button[title="New conversation"]');
+check(!(await page.locator('.lib-artifact').count()), 'a new conversation closes the open output');
+await page.fill('.library-composer textarea', 'limits');
 await page.click('.study-tool:has-text("Quiz")');
 await page.waitForSelector('.quiz', { timeout: 20000 });
+check(/Quiz me on limits/.test(await page.locator('.library .msg.is-user').last().textContent()), 'text in the box becomes the study tool’s topic');
+check((await page.inputValue('.library-composer textarea')) === '', '…and the box clears');
 await page.locator('.quiz-choice').nth(1).click();
 check(await page.locator('.quiz-choice.is-right').count(), 'quiz marks answers');
 await shot(page, 'ai-09-quiz');
+
+// History: earlier conversations come back, and the one they replace goes into History.
+await page.click('.library button[title="History"]');
+const earlier = await page.locator('.history-menu .menu-item').allTextContents();
+check(earlier.some((t) => /squeeze theorem/i.test(t)) && earlier.some((t) => /Flashcards/.test(t)), `History lists the earlier conversations (${earlier.length})`);
+await page.click('.history-menu .menu-item:has-text("Flashcards")');
+check(await page.locator('.library .art-card').count(), '…and opens one again, its flashcards with it');
+await page.click('.library button[title="History"]');
+check(await page.locator('.history-menu .menu-item:has-text("Quiz me: limits")').count(), '…while the quiz moves into History');
+await page.keyboard.press('Escape');
 
 // 8. Polish → read handwriting in the background-transcription path.
 await page.click('.tab:has-text("Lecture 4")');
