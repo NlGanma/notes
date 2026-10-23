@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, ExternalLink, FileText, Folder } from 'lucide-react';
+import { ChevronRight, ExternalLink, Folder } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useReview } from '../../state/review';
 import { buildReviewTree, type ReviewGroup } from '../../lib/review/tree';
-import { newNote } from '../../lib/commands';
-import { addCounts, ClassLetter, countIdeas, NO_COUNTS, type IdeaCounts } from './parts';
+import { displayTitle } from '../../lib/displayTitle';
+import { addCounts, countIdeas, GroupMark, NO_COUNTS, type IdeaCounts } from './parts';
 import { cx, plural } from '../../lib/util';
 
 type Check = 'all' | 'some' | 'none';
@@ -15,7 +15,7 @@ function checkOf(ids: string[], sel: Set<string>): Check {
   return n === 0 ? 'none' : n === ids.length ? 'all' : 'some';
 }
 
-/** A Material 3 checkbox that can also be half checked (some of a class or chapter picked). */
+/** A checkbox that can also be half checked (some of a class or chapter picked). */
 function Box({ state, label, onToggle }: { state: Check; label: string; onToggle(): void }) {
   return (
     <button
@@ -32,7 +32,7 @@ function Box({ state, label, onToggle }: { state: Check; label: string; onToggle
   );
 }
 
-/** New · Due · Mastery, in fixed right-aligned columns with grey zeros (Anki's deck list). */
+/** New · Due · Mastery, in fixed right-aligned columns with faint zeros (Anki's deck list). */
 function Counts({ c }: { c: IdeaCounts }) {
   return (
     <>
@@ -55,9 +55,8 @@ function Counts({ c }: { c: IdeaCounts }) {
 }
 
 /**
- * Pick any mix of notes to review — whole classes, chapters (a class's
- * subfolders) or single notes, across as many classes as you like — laid out
- * as Anki's deck list: a tree with New and Due counts and mastery per row.
+ * Pick any mix of notes to review: whole classes, chapters (a class's subfolders) or single notes,
+ * across as many classes as you like. Anki's deck list: a tree with New and Due counts and mastery per row.
  */
 export function ReviewPicker({ selected, onChange }: { selected: Set<string>; onChange(next: Set<string>): void }) {
   const notes = useVault((s) => s.notes);
@@ -78,7 +77,7 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
   }, [tree, file, loaded]);
   const countOf = (ids: string[]) => addCounts(ids.map((id) => counts.get(id) ?? NO_COUNTS));
 
-  // "Reviewed 12 questions today in 6 min" — Anki's line under the deck list.
+  // Anki's line under the deck list.
   const today = useMemo(() => {
     const start = new Date().setHours(0, 0, 0, 0);
     const done = file.sessions.filter((s) => s.at >= start);
@@ -97,97 +96,110 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
     onChange(next);
   };
 
-  if (!tree.length)
-    return (
-      <div className="rv-tree is-empty" role="tree">
-        <div className="screen-empty is-block">
-          <div className="screen-empty-title">Nothing to review yet</div>
-          <div>Write or import a note, then come back to quiz yourself on it.</div>
-          <button className="btn is-secondary rv-empty-btn" onClick={() => newNote()}>
-            New note
-          </button>
-        </div>
-      </div>
-    );
-
   return (
-    <div className="rv-tree" role="tree" aria-label="Choose notes">
-      <div className="rv-tree-head">
-        <span className="rv-cell-main">
-          <Box state={checkOf(allIds, selected)} label="Review all notes" onToggle={() => toggle(allIds)} />
-          <span>Notes</span>
-        </span>
-        <span className="rv-num">New</span>
-        <span className="rv-num">Due</span>
-        <span className="rv-mastery-cell">Mastery</span>
-        <span />
-      </div>
-      {tree.map((g: ReviewGroup) => {
-        const ids = g.chapters.flatMap((c) => c.notes.map((n) => n.meta.id));
-        const isOpen = open[g.key] ?? false;
-        const state = checkOf(ids, selected);
-        return (
-          <div key={g.key} className="rv-group" role="treeitem" aria-expanded={isOpen}>
-            <div className={cx('rv-row is-group', state === 'all' && 'is-checked')} onClick={() => setOpen({ ...open, [g.key]: !isOpen })}>
-              <span className="rv-cell-main">
-                <ChevronRight size={20} className={cx('rv-chev', isOpen && 'is-open')} />
-                <Box state={state} label={`Review all of ${g.name}`} onToggle={() => toggle(ids)} />
-                {g.cls ? <ClassLetter name={g.name} color={g.cls.color} /> : <Folder size={20} className="rv-folder" />}
-                <span className="rv-name">{g.name}</span>
-                {g.cls?.code && <span className="rv-code">{g.cls.code}</span>}
-              </span>
-              <Counts c={countOf(ids)} />
-              <span />
-            </div>
-            {isOpen &&
-              g.chapters.map((ch) => {
-                const chIds = ch.notes.map((n) => n.meta.id);
-                const single = g.chapters.length === 1 && !ch.path;
-                const chState = checkOf(chIds, selected);
-                return (
-                  <div key={ch.path || '_'} className="rv-chapter" role="group">
-                    {!single && (
-                      <div className={cx('rv-row is-chapter', chState === 'all' && 'is-checked')} onClick={() => toggle(chIds)}>
-                        <span className="rv-cell-main">
-                          <Box state={chState} label={`Review ${ch.name}`} onToggle={() => toggle(chIds)} />
-                          <Folder size={18} className="rv-folder" />
-                          <span className="rv-name">{ch.name}</span>
-                          <span className="rv-sub">{plural(chIds.length, 'note')}</span>
-                        </span>
-                        <Counts c={countOf(chIds)} />
-                        <span />
-                      </div>
-                    )}
-                    {ch.notes.map((n) => {
-                      const on = selected.has(n.meta.id);
-                      return (
-                        <div key={n.meta.id} className={cx('rv-row is-note', single && 'is-flat', on && 'is-checked')} onClick={() => toggle([n.meta.id])}>
+    <div className="rv-table-wrap">
+      <div className="rv-tree" role="tree" aria-label="Choose notes">
+        <div className="rv-tree-head">
+          <span className="rv-cell-main">
+            <Box state={checkOf(allIds, selected)} label="Review all notes" onToggle={() => toggle(allIds)} />
+            <span>All notes</span>
+          </span>
+          <span className="rv-num">New</span>
+          <span className="rv-num">Due</span>
+          <span className="rv-mastery-cell">Mastery</span>
+          <span />
+        </div>
+        {tree.map((g: ReviewGroup) => {
+          const ids = g.chapters.flatMap((c) => c.notes.map((n) => n.meta.id));
+          const isOpen = open[g.key] ?? false;
+          const state = checkOf(ids, selected);
+          const flip = () => setOpen({ ...open, [g.key]: !isOpen });
+          return (
+            <div key={g.key} className="rv-group" role="treeitem" aria-expanded={isOpen}>
+              <div className={cx('rv-row is-group', state === 'all' && 'is-checked')} onClick={flip}>
+                <span className="rv-cell-main">
+                  <Box state={state} label={`Review all of ${g.name}`} onToggle={() => toggle(ids)} />
+                  {/* The row opens on a click; the chevron is its keyboard way in. */}
+                  <button
+                    type="button"
+                    className="rv-chev-btn"
+                    aria-expanded={isOpen}
+                    aria-label={`Show notes in ${g.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      flip();
+                    }}
+                  >
+                    <ChevronRight size={16} strokeWidth={1.75} className={cx('rv-chev', isOpen && 'is-open')} />
+                  </button>
+                  <span className="rv-mark">
+                    <GroupMark color={g.cls?.color} />
+                  </span>
+                  <span className="rv-name" title={g.name}>
+                    {g.name}
+                  </span>
+                </span>
+                <Counts c={countOf(ids)} />
+                <span />
+              </div>
+              {isOpen &&
+                g.chapters.map((ch) => {
+                  const chIds = ch.notes.map((n) => n.meta.id);
+                  const single = g.chapters.length === 1 && !ch.path;
+                  const chState = checkOf(chIds, selected);
+                  return (
+                    <div key={ch.path || '_'} className="rv-chapter" role="group">
+                      {!single && (
+                        <div className={cx('rv-row is-chapter', chState === 'all' && 'is-checked')} onClick={() => toggle(chIds)}>
                           <span className="rv-cell-main">
-                            <Box state={on ? 'all' : 'none'} label={`Review ${n.meta.title || 'Untitled'}`} onToggle={() => toggle([n.meta.id])} />
-                            <FileText size={18} className="rv-file" />
-                            <span className="rv-name">{n.meta.title || 'Untitled'}</span>
+                            <Box state={chState} label={`Review ${ch.name}`} onToggle={() => toggle(chIds)} />
+                            <span className="rv-indent" />
+                            <span className="rv-mark">
+                              <Folder size={16} strokeWidth={1.5} className="rv-folder" />
+                            </span>
+                            <span className="rv-name" title={ch.name}>
+                              {ch.name}
+                            </span>
+                            <span className="rv-sub">{plural(chIds.length, 'note')}</span>
                           </span>
-                          <Counts c={counts.get(n.meta.id) ?? NO_COUNTS} />
-                          <button
-                            className="icon-btn is-tiny rv-open"
-                            title="Open note"
-                            aria-label={`Open ${n.meta.title || 'Untitled'}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              useUI.getState().openNote(n.meta.id);
-                            }}
-                          >
-                            <ExternalLink size={16} />
-                          </button>
+                          <Counts c={countOf(chIds)} />
+                          <span />
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-          </div>
-        );
-      })}
+                      )}
+                      {ch.notes.map((n) => {
+                        const on = selected.has(n.meta.id);
+                        const name = displayTitle(n);
+                        return (
+                          <div key={n.meta.id} className={cx('rv-row is-note', single && 'is-flat', on && 'is-checked')} onClick={() => toggle([n.meta.id])}>
+                            <span className="rv-cell-main">
+                              <Box state={on ? 'all' : 'none'} label={`Review ${name}`} onToggle={() => toggle([n.meta.id])} />
+                              <span className="rv-indent" />
+                              <span className={cx('rv-name', !n.meta.title && 'is-derived')} title={name}>
+                                {name}
+                              </span>
+                            </span>
+                            <Counts c={counts.get(n.meta.id) ?? NO_COUNTS} />
+                            <button
+                              className="icon-btn is-tiny rv-open"
+                              title="Open note"
+                              aria-label={`Open ${name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                useUI.getState().openNote(n.meta.id);
+                              }}
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })}
+      </div>
       {today.items > 0 && (
         <div className="rv-tree-foot">
           Reviewed {plural(today.items, 'question')} today in {Math.max(1, Math.round(today.ms / 60_000))} min

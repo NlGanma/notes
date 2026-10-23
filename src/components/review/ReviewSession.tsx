@@ -1,19 +1,19 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { BookOpen, Check, ExternalLink, Flag, Keyboard, Lightbulb, MessageCircleQuestion, X } from 'lucide-react';
-import { canOverride, factOf, useReview, type Current } from '../../state/review';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { BookOpen, Check, ExternalLink, Lightbulb, X } from 'lucide-react';
+import { canOverride, factOf, questionNumber, useReview, type Current } from '../../state/review';
 import { sectionShown } from '../../lib/review/items';
 import { useUI } from '../../state/ui';
 import { useAssistant } from '../../state/assistant';
 import { useVault } from '../../state/vault';
 import { renderMarkdown } from '../../lib/ai/markdown';
+import { displayTitle } from '../../lib/displayTitle';
 import type { Confidence } from '../../lib/review/mastery';
 import { cx } from '../../lib/util';
 import { toast } from '../common/toast';
 import { SELF_GRADES, sessionKey } from './sessionKeys';
-import { ReviewOptions } from './ReviewOptions';
-import { classStyle, Key, StudyBar } from './parts';
+import { Key } from './parts';
 
-/** Enter that ends a line — not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
+/** Enter that ends a line, not one that picks a candidate in an input method (Chinese, Japanese, Korean…). */
 const isEnter = (e: ReactKeyboardEvent<HTMLElement>) => e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
 
 /** Esc in an answer box leaves the box, keeping what's typed; pressed again, it ends the session. */
@@ -34,18 +34,18 @@ const GRADES = ['Missed it', 'Partly', 'Got it'];
 
 const md = (s: string) => renderMarkdown(s);
 
-/** Quizlet Learn's feedback lines (from its app strings), rotated so repeats feel human. */
-const RIGHT = ['Nice work!', 'Awesome!', 'Excellent!', 'You’re doing great!', 'You’ve got this!'];
-const WRONG = ['Not quite, you’re still learning!', 'No worries, learning is a process!'];
-const pick = (list: string[], seed: number) => list[Math.abs(Math.floor(seed / 7)) % list.length];
-
-/** Quizlet sizes the prompt by its length: short ones big, long ones smaller. */
+/** Short prompts read large, long ones smaller. */
 const promptSize = (s: string) => (s.length <= 80 ? 'is-l' : s.length <= 200 ? 'is-m' : 'is-s');
 
+/** The name a source goes by: the note's display name when it's still there. */
+function useSourceName(src: { noteId: string; title: string }) {
+  const note = useVault((s) => s.notes[src.noteId]);
+  return note ? displayTitle(note) : src.title;
+}
+
 /**
- * One question at a time, as Quizlet Learn: a header bar, the progress row with counts at both ends, a tall card
- * with the prompt at the top and the answers at the bottom — then Duolingo's feedback sheet with the note's own
- * words.
+ * One question at a time on a quiet white card, with a thin progress line along the top bar. The answer
+ * is marked in place and the notes' own words follow it on the card.
  */
 export function ReviewSession() {
   const session = useReview((s) => s.session)!;
@@ -54,13 +54,11 @@ export function ReviewSession() {
   const pastSessions = useReview((s) => s.file.sessions.length);
   const meta = current ? pool.find((p) => p.id === current.concept.id) : undefined;
   const groups = useMemo(() => [...new Set(pool.map((p) => p.groupName))], [pool]);
-  const [options, setOptions] = useState(false);
-  const [sheet, setSheet] = useState(0);
   const stage = useRef<HTMLDivElement>(null);
-  const card = useRef<HTMLDivElement>(null);
+  const sourceName = useSourceName(current?.item.source ?? { noteId: '', title: '' });
 
   // Esc leaves the answer box, then ends the session; Enter moves on from feedback; 1–4 pick a choice and 1–3 grade
-  // a self-check — when the key is meant for the session.
+  // a self-check, when the key is meant for the session.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target instanceof Element ? e.target : document.body;
@@ -88,50 +86,57 @@ export function ReviewSession() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // The sheet docks over the bottom of the pane: the stage keeps that much room free below the card, and scrolls
-  // the card's answers into view above it.
-  const feedback = current?.phase === 'feedback';
-  // Each question starts at the top, with the progress row in view.
+  // Each question starts at the top.
   useLayoutEffect(() => {
     stage.current?.scrollTo({ top: 0 });
   }, [current?.shownAt]);
-  useLayoutEffect(() => {
-    const st = stage.current;
-    const c = card.current;
-    if (!feedback || !st || !c || !sheet) return;
-    const over = c.getBoundingClientRect().bottom - (st.getBoundingClientRect().bottom - sheet - 16);
-    // On a very short pane the question wins: the sheet may cover the lowest answers, never the prompt.
-    const room = c.querySelector('.rv-prompt')!.getBoundingClientRect().top - st.getBoundingClientRect().top;
-    const by = Math.min(over, room);
-    if (by > 0) st.scrollTop += by;
-  }, [feedback, sheet, current?.shownAt]);
 
   if (!current) return null;
   const section = sectionShown(current.item, factOf(current.item, current.concept)?.key);
   const ask = current.phase === 'ask' || current.phase === 'grading';
-  // Quizlet's SHORTCUT tip: the first questions of the first sessions, then it keeps out of the way.
+  const feedback = current.phase === 'feedback';
+  const retrying = feedback && canRetryOf(current);
+  // The keys, for the first questions of the first sessions; then the hint keeps out of the way.
   const tip = pastSessions < 3 && session.index < 3 && (ask || current.phase === 'self');
+  const total = session.opts.length;
+  const done = Math.min(session.index, total);
+  const right = session.history.filter((h) => h.s >= 0.8).length;
+  const label = groups.join(' + ');
+  const where = `${meta?.groupName ? `${meta.groupName} · ` : ''}${sourceName}${section ? ` › ${section}` : ''}`;
 
   return (
-    <div className="screen review-view rv-session" style={{ ['--rv-sheet' as string]: `${feedback ? sheet : 0}px` }}>
-      <StudyBar title={groups.join(' + ')}>
-        <button className="btn is-secondary rv-options-btn" onClick={() => setOptions(true)}>
-          Options
-        </button>
-        <button className="icon-btn rv-close" onClick={() => useReview.getState().end()} title="End the session (Esc)" aria-label="End the session">
-          <X size={20} />
-        </button>
-      </StudyBar>
+    <div className="screen review-view rv-session">
+      <div className="rv-topbar">
+        <div className="rv-topbar-inner">
+          <div className="rv-topbar-label" title={label}>
+            {label}
+          </div>
+          <span className="rv-count" aria-hidden>
+            {questionNumber(session, current)} / {total}
+          </span>
+          <button className="icon-btn rv-close" onClick={() => useReview.getState().end()} title="End the session (Esc)" aria-label="End the session">
+            <X size={18} />
+          </button>
+        </div>
+        <div
+          className="rv-progress"
+          role="progressbar"
+          aria-label="Questions answered"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={done}
+          title={`${done} of ${total} answered · ${right} right`}
+        >
+          <span style={{ width: `${(done / Math.max(1, total)) * 100}%` }} />
+        </div>
+      </div>
 
       <div className="rv-stage" ref={stage}>
         <div className="rv-column">
-          <Progress />
           {/* A card per question, so its entrance plays each time. */}
           <div
-            ref={card}
             key={current.shownAt}
             className={cx('rv-card', `is-${current.phase}`)}
-            style={classStyle(meta?.color)}
             data-concept={current.concept.id}
             data-item-key={current.item.key}
             data-class={meta?.group}
@@ -139,13 +144,13 @@ export function ReviewSession() {
             data-format={current.item.format}
           >
             <div className="rv-card-head">
-              <span className="rv-dot" />
-              <span className="rv-where" title={current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}>
-                {meta?.groupName ? `${meta.groupName} · ` : ''}
-                {current.item.source.title}
-                {section ? ` › ${section}` : ''}
+              {meta?.color && <span className="class-square" style={{ background: meta.color }} aria-hidden />}
+              <span
+                className="rv-where"
+                title={`${where}\n${current.item.origin === 'model' ? 'Phrased by your local model, checked against your notes' : 'Built from your notes'}`}
+              >
+                {where}
               </span>
-              <span className="grow" />
               {ask && !current.hintUsed && current.item.format !== 'mcq' && (
                 <button
                   className="btn is-ghost is-small rv-hint-btn"
@@ -157,7 +162,7 @@ export function ReviewSession() {
                   }}
                   disabled={current.phase === 'grading'}
                 >
-                  <Lightbulb size={18} /> Get a hint
+                  <Lightbulb size={16} /> Hint
                 </button>
               )}
             </div>
@@ -165,72 +170,47 @@ export function ReviewSession() {
             {ask && current.hint && <Hint text={current.hint} />}
             {ask && <Ask current={current} askConfidence={session.opts.askConfidence} />}
             {current.phase === 'self' && <SelfGrade current={current} />}
-            {current.phase === 'feedback' && <Answered current={current} />}
+            {feedback && <Answered current={current} />}
+            {feedback && <Feedback current={current} />}
+            {retrying ? <RetryBox key={current.shownAt} current={current} /> : feedback && <FeedbackFoot current={current} />}
           </div>
           {tip && <Shortcut current={current} />}
         </div>
       </div>
-
-      {current.phase === 'feedback' && <FeedbackSheet key={current.shownAt} current={current} onHeight={setSheet} />}
-      <ReviewOptions open={options} onClose={() => setOptions(false)} classes={groups.length} />
     </div>
   );
 }
 
-/** Quizlet's progress row: answered so far in a pill, the track coloured by how each answer went, the length in a pill. */
-function Progress() {
-  const session = useReview((s) => s.session)!;
-  const total = session.opts.length;
-  const done = Math.min(session.index, total);
-  const right = session.history.filter((h) => h.s >= 0.8).length;
-  return (
-    <div className="rv-progress-row">
-      <span className="rv-pill" aria-hidden>
-        {done}
-      </span>
-      <div className="rv-progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} title={`${done} of ${total} answered · ${right} right`}>
-        {session.history.slice(0, total).map((h, i) => (
-          <span key={i} className={cx('rv-seg', h.s >= 0.8 ? 'is-right' : 'is-missed')} style={{ width: `${100 / total}%` }} />
-        ))}
-      </div>
-      <span className="rv-pill" aria-hidden>
-        {total}
-      </span>
-    </div>
-  );
-}
-
+/** The keys for this question, as one quiet line under the card. */
 function Shortcut({ current }: { current: Current }) {
   const item = current.item;
   const n = item.choices?.length ?? 4;
   return (
-    <div className="rv-shortcut">
-      <span className="rv-shortcut-icon">
-        <Keyboard size={18} />
-      </span>
-      <span className="rv-shortcut-label">Shortcut</span>
+    <div className="rv-tip">
       {current.phase === 'self' ? (
-        <span>
-          Press <Key>1</Key>, <Key>2</Key> or <Key>3</Key> to say how it went
-        </span>
+        <>
+          <Key>1</Key> <Key>2</Key> <Key>3</Key> say how it went
+        </>
       ) : item.format === 'mcq' ? (
-        <span>
-          Press <Key>1</Key>–<Key>{n}</Key> to answer
-        </span>
+        <>
+          <Key>1</Key>–<Key>{n}</Key> choose
+        </>
       ) : item.format === 'rate' ? (
-        <span>
-          Press <Key>Enter</Key> to see your notes
-        </span>
+        <>
+          <Key>Enter</Key> shows your notes
+        </>
       ) : (
-        <span>
-          Press <Key>Enter</Key> to answer
-        </span>
+        <>
+          <Key>Enter</Key> answers
+        </>
       )}
+      <span className="rv-tip-sep">·</span>
+      <Key>Esc</Key> ends the session
     </div>
   );
 }
 
-/** Multiple-choice tiles (Quizlet Learn's numbered answers). After the answer they show how it went. */
+/** Multiple-choice tiles, numbered for the keys. After the answer they show how it went. */
 function Choices({ current, onChoose, disabled }: { current: Current; onChoose?(i: number): void; disabled?: boolean }) {
   const item = current.item;
   const choices = item.choices ?? [];
@@ -245,7 +225,7 @@ function Choices({ current, onChoose, disabled }: { current: Current; onChoose?(
         const state = chosen ? (correct ? 'is-right' : 'is-wrong') : correct ? 'is-answer' : done ? 'is-dim' : undefined;
         return (
           <button key={i} className={cx('rv-choice', state)} onClick={() => onChoose?.(i)} disabled={disabled || done}>
-            <span className="rv-choice-n">{correct ? <Check size={18} strokeWidth={2.5} /> : chosen ? <X size={18} strokeWidth={2.5} /> : i + 1}</span>
+            <span className="rv-choice-n">{correct ? <Check size={14} strokeWidth={2.5} /> : chosen ? <X size={14} strokeWidth={2.5} /> : i + 1}</span>
             <span className="md" dangerouslySetInnerHTML={{ __html: md(c) }} />
           </button>
         );
@@ -278,14 +258,16 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   const long = item.format === 'explain' || item.format === 'apply' || item.format === 'connect';
   const idk = (
     <button className="btn is-ghost rv-idk" onClick={() => useReview.getState().dontKnow()} disabled={grading}>
-      Don’t know?
+      Don’t know
     </button>
   );
 
   return (
     <div className="rv-ask">
       <div className="rv-answer-head">
-        <span className="rv-answer-label">{item.format === 'mcq' ? 'Choose the answer' : item.format === 'rate' ? 'Answer in your head (or on paper), then check it against your notes' : 'Your answer'}</span>
+        <span className="rv-answer-label">
+          {item.format === 'mcq' ? 'Choose the answer' : item.format === 'rate' ? 'Answer in your head or on paper, then check your notes' : 'Your answer'}
+        </span>
         {/* Clicking a segment keeps the answer box focused, so Enter still checks and typing goes on. */}
         {askConfidence && (
           <div className="seg rv-conf" role="radiogroup" aria-label="How sure are you?">
@@ -298,7 +280,6 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => useReview.getState().setConf(conf === c.id ? null : c.id)}
               >
-                {conf === c.id && <Check size={16} />}
                 {c.label}
               </button>
             ))}
@@ -348,19 +329,15 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
               />
             ))}
           <div className="rv-ask-actions">
-            {grading && <span className="rv-grading">Just a sec! Checking your notes.</span>}
+            {grading && (
+              <span className="rv-grading">
+                <span className="rv-spinner" /> Checking against your notes…
+              </span>
+            )}
             <span className="grow" />
             {idk}
             <button className="btn is-primary rv-check-btn" onClick={submit} disabled={grading || (item.format !== 'rate' && !text.trim())}>
-              {grading ? (
-                <>
-                  <span className="rv-spinner" /> Checking…
-                </>
-              ) : item.format === 'rate' ? (
-                'Show my notes'
-              ) : (
-                'Answer'
-              )}
+              {item.format === 'rate' ? 'Show my notes' : 'Answer'}
             </button>
           </div>
         </>
@@ -369,7 +346,7 @@ function Ask({ current, askConfidence }: { current: Current; askConfidence: bool
   );
 }
 
-/** After the answer, the card keeps it in place — the tiles marked, or the written answer in the verdict's colour. */
+/** After the answer, the card keeps it in place: the tiles marked, or the written answer in the verdict's tone. */
 function Answered({ current }: { current: Current }) {
   const fb = current.feedback!;
   const item = current.item;
@@ -399,7 +376,6 @@ function Answered({ current }: { current: Current }) {
       </div>
     );
   }
-  if (canRetryOf(current)) return <RetryBox />;
   const retry = current.retry;
   const shown = retry ? retry.answer : current.answer;
   if (current.dontKnow || !shown?.trim()) return null;
@@ -417,34 +393,33 @@ function Answered({ current }: { current: Current }) {
 const canRetryOf = (cur: Current) =>
   cur.feedback!.verdict !== 'right' && !cur.dontKnow && !cur.revealed && !cur.retry && cur.item.format !== 'mcq' && cur.item.format !== 'rate';
 
-/** A miss on a written answer: the card's box opens again for one more try (Enter on an empty box moves on). */
-function RetryBox() {
+/** A miss on a written answer: the box opens again for one more try (Enter on an empty box moves on). */
+function RetryBox({ current }: { current: Current }) {
   const [again, setAgain] = useState('');
+  const send = () => void useReview.getState().retry(again);
   return (
-    <div className="rv-ask rv-retry">
-      <div className="rv-answer-head">
-        <span className="rv-answer-label">Your answer</span>
+    <>
+      <div className="rv-ask rv-retry">
+        <input
+          className="rv-input"
+          placeholder="Try once more"
+          value={again}
+          autoFocus
+          onChange={(e) => setAgain(e.target.value)}
+          onKeyDown={(e) => {
+            if (leaveOnEsc(e) || !isEnter(e)) return;
+            e.preventDefault();
+            if (again.trim()) send();
+            else useReview.getState().next();
+          }}
+        />
       </div>
-      <input
-        className="rv-input"
-        placeholder="Try once more"
-        value={again}
-        autoFocus
-        onChange={(e) => setAgain(e.target.value)}
-        onKeyDown={(e) => {
-          if (leaveOnEsc(e) || !isEnter(e)) return;
-          e.preventDefault();
-          if (again.trim()) void useReview.getState().retry(again);
-          else useReview.getState().next();
-        }}
-      />
-      <div className="rv-ask-actions">
-        <span className="grow" />
-        <button className="btn is-primary rv-check-btn" disabled={!again.trim()} onClick={() => void useReview.getState().retry(again)}>
+      <FeedbackFoot current={current}>
+        <button className="btn is-primary rv-check-btn" disabled={!again.trim()} onClick={send}>
           Answer
         </button>
-      </div>
-    </div>
+      </FeedbackFoot>
+    </>
   );
 }
 
@@ -452,7 +427,6 @@ function RetryBox() {
 function MasteryBar({ before, after }: { before: number; after: number }) {
   const [width, setWidth] = useState(before);
   useEffect(() => {
-    // Waits a moment after the sheet slides up, so the move is seen rather than skipped.
     const id = window.setTimeout(() => setWidth(after), 200);
     return () => window.clearTimeout(id);
   }, [after]);
@@ -467,15 +441,19 @@ function MasteryBar({ before, after }: { before: number; after: number }) {
 function Hint({ text }: { text: string }) {
   return (
     <div className="rv-hint">
-      <Lightbulb size={18} />
+      <Lightbulb size={16} />
       <span className="md is-inline" dangerouslySetInnerHTML={{ __html: md(text).trim() }} />
     </div>
   );
 }
 
-/** The notes' own words, with the part of the note they come from (it opens there). */
-function NotesSay({ current, label = 'Your notes say', points }: { current: Current; label?: string; points?: string[] }) {
+/**
+ * The notes' own words, with the part of the note they come from (it opens there): the line, or `points`
+ * in its place, and then any `extra` points the same part of the note makes.
+ */
+function NotesSay({ current, label = 'Your notes say', points, extra }: { current: Current; label?: string; points?: string[]; extra?: string[] }) {
   const src = current.item.source;
+  const name = useSourceName(src);
   return (
     <div className="rv-notes-say">
       <div className="rv-notes-say-head">
@@ -486,10 +464,10 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
           title="Open this part of your notes"
         >
           <span>
-            {src.title}
+            {name}
             {src.section ? ` › ${src.section}` : ''}
           </span>
-          <ExternalLink size={14} />
+          <ExternalLink size={12} />
         </button>
       </div>
       {points?.length ? (
@@ -501,6 +479,13 @@ function NotesSay({ current, label = 'Your notes say', points }: { current: Curr
       ) : (
         <div className="md rv-notes-say-text" dangerouslySetInnerHTML={{ __html: md(current.item.fact) }} />
       )}
+      {!points?.length && extra?.length ? (
+        <ul className="rv-points">
+          {extra.map((p, i) => (
+            <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -512,7 +497,7 @@ const plain = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** A self-check: the notes' answer, then Quizlet's numbered "how did you do" tiles (Anki's grade buttons). */
+/** A self-check: the notes' answer, then three grades (Anki's buttons), numbered for the keys. */
 function SelfGrade({ current }: { current: Current }) {
   // The points besides the line "Your notes say" already shows.
   const points = (current.item.points ?? []).filter((p) => plain(p) !== plain(current.item.fact));
@@ -526,14 +511,7 @@ function SelfGrade({ current }: { current: Current }) {
           <div className="rv-answered is-plain">{current.answer}</div>
         </div>
       )}
-      <NotesSay current={current} />
-      {points.length > 0 && (
-        <ul className="rv-points">
-          {points.map((p, i) => (
-            <li key={i} className="md" dangerouslySetInnerHTML={{ __html: md(p) }} />
-          ))}
-        </ul>
-      )}
+      <NotesSay current={current} extra={points} />
       <div className="rv-answer-head">
         <span className="rv-answer-label">How did you do?</span>
       </div>
@@ -549,54 +527,114 @@ function SelfGrade({ current }: { current: Current }) {
 }
 
 /**
- * Duolingo's feedback sheet: docked to the bottom of the pane in the verdict's colour, a white circle with the
- * mark, the title and small links in that colour, Continue at the right. The note's own words sit in it.
+ * How the answer went, inline on the card: the verdict in a soft tone (green when right, red when not,
+ * neutral for "partly" and "don't know"), then the notes' own words and the idea's mastery change.
  */
-function FeedbackSheet({ current, onHeight }: { current: Current; onHeight(h: number): void }) {
+function Feedback({ current }: { current: Current }) {
   const fb = current.feedback!;
-  const overrides = useReview((s) => s.overrides);
   const missedBefore = useReview((s) => (s.current ? (s.current.sessBefore?.misses[s.current.concept.id] ?? 0) : 0));
-  const ref = useRef<HTMLElement>(null);
-  const next = useRef<HTMLButtonElement>(null);
-  const wrong = fb.verdict !== 'right';
-  // "I don't know" is no mistake: it gets the answer, in "still learning" orange rather than red.
+  // The idea as the summary will name it (an untitled note's own text goes by the note's name).
+  const ideaName = useReview((s) => s.pool.find((p) => p.id === current.concept.id)?.name) ?? current.concept.name.replace(/\*\*/g, '');
+  // "I don't know" is no mistake: the answer, in a neutral tone rather than red.
   const idk = !!current.dontKnow;
   const canRetry = canRetryOf(current);
   const retry = current.retry;
-  const tone = idk || fb.verdict === 'partial' ? 'learning' : fb.verdict;
+  // A second try that landed turns the red down: the first answer still counts, but the news is good.
+  const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || (retry?.s !== undefined && retry.s >= 0.8) ? 'neutral' : fb.verdict;
   const title = idk
-    ? 'Give this one a try later!'
+    ? 'Here’s the answer'
     : current.overridden
       ? 'Counted as right'
       : fb.verdict === 'right'
         ? missedBefore > 0
-          ? 'Amazing, you got it this time!'
-          : pick(RIGHT, current.shownAt)
+          ? 'Right this time'
+          : 'Right'
         : fb.verdict === 'partial'
-          ? 'No sweat, you’re still learning!'
-          : pick(WRONG, current.shownAt);
+          ? 'Partly right'
+          : 'Not quite';
+  const adds = fb.verdict === 'partial' ? (fb.missed ?? []) : [];
 
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => onHeight(el.offsetHeight));
-    ro.observe(el);
-    onHeight(el.offsetHeight);
-    // Gone, it frees its room: a stale height would scroll the next answered card too far up.
-    return () => {
-      ro.disconnect();
-      onHeight(0);
-    };
-  }, [onHeight]);
-  // Continue takes the focus (Enter moves on) — unless the answer box is open for another try.
+  return (
+    <section className={cx('rv-feedback', `is-${tone}`)} aria-live="polite">
+      <div className="rv-feedback-head">
+        <span className="rv-feedback-icon" aria-hidden>
+          {idk || fb.verdict === 'partial' ? (
+            <BookOpen size={14} />
+          ) : fb.verdict === 'right' || current.overridden ? (
+            <Check size={14} strokeWidth={2.75} />
+          ) : (
+            <X size={14} strokeWidth={2.75} />
+          )}
+        </span>
+        <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
+        {fb.note && <div className="rv-grade-note">{fb.note}</div>}
+      </div>
+      {fb.hypercorrect && <div className="rv-hyper">You were sure about this one. Confident mix-ups are the easiest to fix now.</div>}
+      {fb.lucky && <div className="rv-hyper">Right, though you were guessing.</div>}
+
+      {canRetry && (
+        <div className="rv-retry-note">
+          {current.hint && <Hint text={current.hint} />}
+          <div>
+            Try once more, or{' '}
+            <button className="rv-link rv-show" onClick={() => useReview.getState().reveal()}>
+              show the answer
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Once counted as right, the second try's verdict is beside the point. */}
+      {current.overridden ? null : retry?.checking ? (
+        <div className="rv-grading">
+          <span className="rv-spinner" /> Checking against your notes…
+        </div>
+      ) : retry && retry.s === undefined ? (
+        <div className="rv-retry-result">Compare it with what your notes say.</div>
+      ) : retry && retry.s !== undefined ? (
+        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>
+          {retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet. Here’s what your notes say.'}
+        </div>
+      ) : null}
+
+      {(current.revealed || (!canRetry && !retry?.checking)) && (
+        <NotesSay current={current} label={adds.length ? 'What your notes add' : 'Your notes say'} points={adds} />
+      )}
+
+      <div className="rv-mastery-change" title="How well you know this idea">
+        <span className="rv-mastery-name" title={ideaName}>
+          {ideaName}
+        </span>
+        <MasteryBar before={fb.before} after={fb.after} />
+        <span className="rv-pct">
+          {fb.before}% → {fb.after}%
+        </span>
+        {fb.mastered && <span className="rv-badge">Mastered</span>}
+      </div>
+    </section>
+  );
+}
+
+/** Under the feedback: Explain, "I was right" and Report at the left, Continue (and a retry's Answer) at the right. */
+function FeedbackFoot({ current, children }: { current: Current; children?: ReactNode }) {
+  const fb = current.feedback!;
+  const overrides = useReview((s) => s.overrides);
+  const ref = useRef<HTMLDivElement>(null);
+  const next = useRef<HTMLButtonElement>(null);
+  const wrong = fb.verdict !== 'right';
+  const canRetry = canRetryOf(current);
+  const retry = current.retry;
+
+  // Continue takes the focus (Enter moves on), unless the answer box is open for another try; either way the
+  // end of the card comes into view.
   useEffect(() => {
     if (!canRetry) next.current?.focus({ preventScroll: true });
-  }, [canRetry]);
+    ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [canRetry, retry?.checking]);
 
   const report = () => {
     const key = current.item.key;
     useReview.getState().report();
-    toast.info('Question reported — you won’t see it again', undefined, { label: 'Undo', run: () => useReview.getState().unreport(key) });
+    toast.info('Question reported. You won’t see it again.', undefined, { label: 'Undo', run: () => useReview.getState().unreport(key) });
   };
   const explain = () => {
     const src = current.item.source;
@@ -605,86 +643,48 @@ function FeedbackSheet({ current, onHeight }: { current: Current; onHeight(h: nu
     void useAssistant.getState().askLibrary({
       prompt: `Why is this so: ${current.item.fact.replace(/\*\*|==/g, '')}`,
       scope: { kind: 'note', id: src.noteId },
-      scopeLabel: note?.meta.title,
+      scopeLabel: note ? displayTitle(note) : undefined,
     });
   };
-  const adds = fb.verdict === 'partial' ? (fb.missed ?? []) : [];
 
   return (
-    <section ref={ref} className={cx('rv-feedback', `is-${tone}`)} aria-live="polite">
-      <div className="rv-sheet">
-        <span className="rv-sheet-icon" aria-hidden>
-          {idk || fb.verdict === 'partial' ? <BookOpen size={28} strokeWidth={2.5} /> : fb.verdict === 'right' ? <Check size={32} strokeWidth={3} /> : <X size={32} strokeWidth={3} />}
-        </span>
-        <div className="rv-sheet-body">
-          <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
-          {fb.note && <div className="rv-grade-note">{fb.note}</div>}
-          {fb.hypercorrect && <div className="rv-hyper">You were sure about this one — confident mix-ups are the easiest to fix now.</div>}
-          {fb.lucky && <div className="rv-hyper">Right — but you were guessing.</div>}
-
-          {canRetry && (
-            <div className="rv-retry-note">
-              {current.hint && <Hint text={current.hint} />}
-              <div>
-                Try once more — or{' '}
-                <button className="rv-link rv-show" onClick={() => useReview.getState().reveal()}>
-                  Show the answer
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Once counted as right, the second try's verdict is beside the point. */}
-          {current.overridden ? null : retry?.checking ? (
-            <div className="rv-grading">
-              <span className="rv-spinner" /> Just a sec! Checking your notes.
-            </div>
-          ) : retry && retry.s === undefined ? (
-            <div className="rv-retry-result">Compare it with what your notes say.</div>
-          ) : retry && retry.s !== undefined ? (
-            <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>{retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet — here’s what your notes say.'}</div>
-          ) : null}
-
-          {(current.revealed || (!canRetry && !retry?.checking)) && <NotesSay current={current} label={adds.length ? 'What your notes add' : 'Your notes say'} points={adds} />}
-
-          <div className="rv-sheet-foot">
-            <div className="rv-links">
-              <button className="rv-link" onClick={explain} title="Ask your notes why — answered only from your notes">
-                <MessageCircleQuestion size={16} /> Explain this answer
-              </button>
-              {/* Counted, the link keeps its place, so Report doesn't slide under the pointer. */}
-              {current.overridden ? (
-                <button className="rv-link" disabled>
-                  <Check size={16} /> Counted
-                </button>
-              ) : (
-                wrong &&
-                canOverride(current) &&
-                overrides < 3 && (
-                  <button className="rv-link" onClick={() => useReview.getState().override()} title="Count it as right (at most 3 times a session)">
-                    <Check size={16} /> Override: I was correct
-                  </button>
-                )
-              )}
-              <button className="rv-link" onClick={report} title="This question is wrong or unclear — skip it and don’t ask it again">
-                <Flag size={16} /> Report
-              </button>
-            </div>
-            <div className="rv-mastery-change" title="How well you know this idea">
-              <span className="rv-mastery-name">{current.concept.name.replace(/\*\*/g, '')}</span>
-              <MasteryBar before={fb.before} after={fb.after} />
-              <span className="rv-pct">
-                {fb.before}% → {fb.after}%
-              </span>
-              {fb.mastered && <span className="rv-badge">Mastered</span>}
-            </div>
-          </div>
-        </div>
-        <div className="rv-sheet-action">
-          <button ref={next} className="btn rv-next" onClick={() => useReview.getState().next()} disabled={!!retry?.checking}>
-            Continue
+    <div className="rv-card-foot" ref={ref}>
+      <div className="rv-links">
+        <button className="btn is-ghost is-small rv-link-btn" onClick={explain} title="Ask your notes why, answered only from your notes">
+          Explain this answer
+        </button>
+        {/* Counted, the button keeps its place, so Report doesn't slide under the pointer. */}
+        {current.overridden ? (
+          <button className="btn is-ghost is-small rv-link-btn" disabled>
+            <Check size={14} /> Counted
           </button>
-        </div>
+        ) : (
+          wrong &&
+          canOverride(current) &&
+          overrides < 3 && (
+            <button
+              className="btn is-ghost is-small rv-link-btn"
+              onClick={() => useReview.getState().override()}
+              title="Count it as right (at most 3 times a session)"
+            >
+              I was right
+            </button>
+          )
+        )}
+        <button className="btn is-ghost is-small rv-link-btn" onClick={report} title="This question is wrong or unclear: skip it and don’t ask it again">
+          Report
+        </button>
       </div>
-    </section>
+      <span className="grow" />
+      <button
+        ref={next}
+        className={cx('btn rv-next', canRetry ? 'is-secondary' : 'is-primary')}
+        onClick={() => useReview.getState().next()}
+        disabled={!!retry?.checking}
+      >
+        Continue
+      </button>
+      {children}
+    </div>
   );
 }

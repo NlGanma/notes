@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { heuristicConcepts, notReviewable, type Concept } from '../../src/lib/review/concepts';
+import { conceptId, heuristicConcepts, notReviewable, type Concept } from '../../src/lib/review/concepts';
 import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type BuildCtx, type Item } from '../../src/lib/review/items';
 import { gradeShort, isDontKnow, normalizeTex, quickRubric, scoreRubric } from '../../src/lib/review/grade';
 import { chunkNote } from '../../src/lib/ai/rag';
-import { DAY, freshState, isMastered, recordAnswer } from '../../src/lib/review/mastery';
+import { DAY, freshState, isMastered, recordAnswer, type Level } from '../../src/lib/review/mastery';
 import { buildSeedNotes } from '../../src/lib/vault/seed';
+import { unreadLabels } from '../../src/lib/review/tree';
+import { note, p } from './fixtures';
 
 const seed = buildSeedNotes();
 const byTitle = (t: string) => seed.find((n) => n.meta.title.startsWith(t))!;
@@ -124,6 +126,44 @@ test('higher levels come from the notes too: explain, apply with the note’s ex
   // Vocabulary is capped at recall: asking for level 3 still gives a level-0 item.
   const v = vocab[0];
   assert.equal(buildItem(v, 3, ctxFor(v, vocab)).level, 0);
+});
+
+test('an untitled note’s opening keeps the id it always had and is asked about as “this note”, never by a stand-in name', () => {
+  const lines = [
+    'Federalism splits sovereignty between a central government and regional governments, each with its own powers.',
+    'A unitary state keeps sovereignty in the central government, which can create or abolish the regions.',
+    '**Confederation** is a loose union of sovereign states that keep their own armies, currencies, courts and most of their powers.',
+  ];
+  const untitled = note('', 'Politics', lines.map((t) => p(t)));
+  const cs = heuristicConcepts(untitled);
+  const whole = cs.find((c) => c.whole)!;
+  assert.ok(whole, 'the opening text is an idea');
+  assert.equal(whole.id, conceptId(untitled.meta.id, 'This note'), 'progress stays under its old id');
+  assert.ok(whole.partners.length, 'it sits beside the definition, so a “how do they connect” question is possible');
+  const chunk = chunkNote(untitled)[0].text;
+  for (const c of cs)
+    for (let level = 0; level <= 3; level++) {
+      const it = buildItem(c, level as Level, { title: '', siblings: cs, avoid: [], rng: mulberry32(1), chunkText: chunk });
+      assert.doesNotMatch(it.prompt, /This note/, `${c.name} at ${level}: ${it.prompt}`);
+      assert.ok(assertGroundedItem(it, chunk), `${c.name} at ${level}: ${it.format}`);
+      if (c.whole) assert.doesNotMatch(it.prompt, /Federalism|unitary/, 'the question doesn’t read out the answer');
+    }
+  // The two questions connecting the opening and the definition are asked from each side.
+  const connects = cs.map((c) => buildItem(c, 3, { title: '', siblings: cs, avoid: [], rng: mulberry32(1), chunkText: chunk })).filter((it) => it.format === 'connect');
+  assert.equal(connects.length, 2);
+  assert.notEqual(connects[0].prompt, connects[1].prompt);
+  // A titled note's opening is still asked about by its title.
+  const titled = heuristicConcepts(note('Lecture 12 — Federalism', 'Politics', [p(lines[0]), p(lines[1])]));
+  assert.equal(titled[0].name, 'Lecture 12');
+  assert.ok(!titled[0].whole);
+});
+
+test('unread handwriting is named the way the note is shown, with its section when it has one', () => {
+  const ink = { type: 'inkBlock', attrs: { id: 'i1', ink: [{ points: [] }], transcript: null } };
+  assert.deepEqual(unreadLabels(calcNote), ['Lecture 4 — Limits & Continuity › Worked example (in class)']);
+  const untitled = note('', 'Politics', [p('Federalism splits sovereignty between levels of government.'), ink]);
+  assert.deepEqual(notReviewable(untitled), ['Handwriting']);
+  assert.deepEqual(unreadLabels(untitled), ['Federalism splits sovereignty between levels of government.']);
 });
 
 test('a model-phrased question is used only if the passage answers it, it gives nothing away and adds nothing', () => {

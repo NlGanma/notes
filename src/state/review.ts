@@ -6,14 +6,15 @@ import { parseJSONLoose } from '../lib/ai/json';
 import { chunkNote, tokenize, type Chunk } from '../lib/ai/rag';
 import { expandProof } from '../lib/ai/quote';
 import { classForFolder, classInfo } from '../lib/classes';
-import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel } from '../lib/review/tree';
-import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, notReviewable, type Concept, type Fact } from '../lib/review/concepts';
+import { buildReviewTree, groupKeyOf, isReviewable, selectionLabel, unreadLabels } from '../lib/review/tree';
+import { conceptId, contentWords, capOf, heuristicConcepts, keyOf, type Concept, type Fact } from '../lib/review/concepts';
 import { assertGroundedItem, blankOut, buildItem, hintFor, masteryNeeds, mulberry32, validateNudge, validateQuestion, type Item, type ModelQuestion } from '../lib/review/items';
 import { covers, gradeShort, hasKey, isDontKnow, namesPoint, quickRubric, scoreRubric, verdictOf, type Grade, type GraderReply, type Verdict } from '../lib/review/grade';
 import { freshState, isDue, isMastered, recordAnswer, scoreOf, type Confidence, type ConceptState, type GradedBy, type Level } from '../lib/review/mastery';
 import { newSession, pickNext, requeue, skipConcept, summarize, type PoolEntry, type SessionOpts, type SessionState, type SessionSummary } from '../lib/review/session';
 import { conceptsTask, gradeTask, LEVEL_HINT, MASTERY_ENGINE_PROMPT, nudgeTask, questionTask, SCHEMAS } from '../lib/review/prompts';
 import { debounce, hashString, uid } from '../lib/util';
+import { displayTitle } from '../lib/displayTitle';
 import type { NoteDoc, VaultBackend } from '../lib/vault/types';
 
 /**
@@ -243,7 +244,7 @@ function groupOf(note: NoteDoc) {
   const chapter = info ? note.meta.folder.slice(info.path.length + 1) : note.meta.folder.slice(top.length + 1);
   return {
     key: groupKeyOf(note, folderMeta),
-    name: info?.name ?? (top || 'Unfiled'),
+    name: info?.name ?? (top || 'Notes'),
     color: info?.color,
     chapter,
     language: info?.icon === 'languages' || /spanish|french|german|italian|latin|chinese|japanese|korean|español|language/i.test(info?.name ?? ''),
@@ -453,9 +454,19 @@ export const useReview = create<ReviewState>((set, get) => {
   /** Questions being phrased right now (so a prefetch and a show don't ask twice). */
   const phrasing = new Set<string>();
 
+  /**
+   * An untitled note's opening has no name a model could ask by (it would ask about "This note"): questions
+   * about it, or connecting an idea to it, are always the built-in ones.
+   */
+  const aboutWhole = (item: Item, c: Concept) => !!c.whole || (item.format === 'connect' && !!conceptById(item.key.split(':')[1])?.whole);
+
   /** A model-phrased question for a level-1+ item, prefetched in the background and cached if it passes. */
   const phrase = async (item: Item, c: Concept) => {
-    if (!online() || item.level < 1 || item.format === 'rate' || get().file.bad.includes(item.key)) return;
+    if (!online() || item.level < 1 || item.format === 'rate' || aboutWhole(item, c) || get().file.bad.includes(item.key)) return;
+    const level = item.format === 'apply' ? 'apply' : item.format === 'connect' ? 'connect' : 'explain';
+    const partner = item.prompt.match(/\*\*([^*]+)\*\*[^*]*\*\*([^*]+)\*\*/)?.[2];
+    // A connecting question needs both names to ask about.
+    if (level === 'connect' && !partner) return;
     const ch = chunkOf(c);
     if (!ch) return;
     const cacheKey = `${item.key}#${c.chunkHash}`;
@@ -464,13 +475,7 @@ export const useReview = create<ReviewState>((set, get) => {
     phrasing.add(cacheKey);
     const gen = generation;
     const note = noteOf(c.noteId);
-    const level = item.format === 'apply' ? 'apply' : item.format === 'connect' ? 'connect' : 'explain';
-    const hint =
-      level === 'apply'
-        ? LEVEL_HINT.apply(item.source.text.replace(/\*\*|==/g, ''))
-        : level === 'connect'
-          ? LEVEL_HINT.connect(item.prompt.match(/\*\*([^*]+)\*\*[^*]*\*\*([^*]+)\*\*/)?.[2] ?? '')
-          : LEVEL_HINT.explain;
+    const hint = level === 'apply' ? LEVEL_HINT.apply(item.source.text.replace(/\*\*|==/g, '')) : level === 'connect' ? LEVEL_HINT.connect(partner!) : LEVEL_HINT.explain;
     try {
       const { value } = await chatJSON(
         {
@@ -632,7 +637,8 @@ export const useReview = create<ReviewState>((set, get) => {
           cap: c.cap,
           needs: c.needs,
           partners: c.partners,
-          name: c.name.replace(/\*\*/g, ''),
+          // Shown on screen only: an untitled note's opening text goes by the note's name.
+          name: c.whole ? displayTitle(note) : c.name.replace(/\*\*/g, ''),
           thin: c.thin,
         }),
       );
@@ -697,7 +703,7 @@ export const useReview = create<ReviewState>((set, get) => {
     if (bad.includes(item.key)) return null;
     // A cached question the model phrased (and the checks passed).
     const cached = get().file.questions[`${item.key}#${c.chunkHash}`];
-    if (cached?.length && item.level >= 1) {
+    if (cached?.length && item.level >= 1 && !aboutWhole(item, c)) {
       const q = cached[st.attempts % cached.length];
       item = { ...item, prompt: q.prompt, points: q.points.length ? q.points : item.points, fact: q.fact, origin: 'model' };
     }
@@ -821,7 +827,7 @@ export const useReview = create<ReviewState>((set, get) => {
       get().file.states,
       {
         label: selectionLabel(tree, new Set(sess.noteIds)),
-        notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? notReviewable(noteOf(id)!).map((s) => `${noteOf(id)!.meta.title} › ${s}`) : [])),
+        notReviewable: sess.noteIds.flatMap((id) => (noteOf(id) ? unreadLabels(noteOf(id)!) : [])),
         misconceptions: get().misconceptions,
         overrides: get().overrides,
         stopped,

@@ -156,7 +156,10 @@ function recallItems(c: Concept, f: Fact, ctx: BuildCtx): Item[] {
   }
   if (/^\$\$/.test(f.text.trim())) {
     // Formulas are written out, then compared by the student.
-    out.push({ ...base(c, f, 'rate', 0, ctx, 'self'), prompt: `Write down the formula your notes give for **${clean(c.name)}**, then check it.` });
+    out.push({
+      ...base(c, f, 'rate', 0, ctx, 'self'),
+      prompt: c.whole ? 'Write down the formula this note gives, then check it.' : `Write down the formula your notes give for **${clean(c.name)}**, then check it.`,
+    });
     return out;
   }
   const blanked = blankOut(f);
@@ -204,6 +207,13 @@ const EXPLAIN: Record<string, (n: string) => string> = {
   vocab: (n) => `What does **${n}** mean?`,
 };
 
+/** An untitled note's opening text has no name to ask by: its questions point at the note the card names. */
+const WHOLE_EXPLAIN: Record<string, string> = {
+  formula: 'In your own words: what does the formula in this note say?',
+  procedure: 'What steps does this note give?',
+  fact: 'What does this note say?',
+};
+
 /** Builds the item for a concept at a level, falling back down the ladder when the notes don't allow it. */
 export function buildItem(c: Concept, level: Level, ctx: BuildCtx): Item {
   const lvl = Math.min(level, c.cap) as Level;
@@ -214,35 +224,43 @@ export function buildItem(c: Concept, level: Level, ctx: BuildCtx): Item {
   if (lvl >= 3 && c.partners.length) {
     const partner = ctx.siblings.find((s) => c.partners.includes(s.id));
     if (partner) {
-      const both = [...facts, ...partner.facts].filter((f) => mentions(f.text, c.name) && mentions(f.text, partner.name));
+      const both = [...facts, ...partner.facts].filter((f) => !c.whole && !partner.whole && mentions(f.text, c.name) && mentions(f.text, partner.name));
       const points = (both.length ? both : [plain[0] ?? facts[0], partner.facts[0]]).filter(Boolean).slice(0, 3);
       const f = points[0];
+      const named = [c, partner].find((x) => !x.whole)!;
       return {
         ...base(c, f, 'connect', 3, ctx, 'rubric'),
         key: `${c.id}:${partner.id}:connect`,
-        prompt: `How are **${clean(c.name)}** and **${clean(partner.name)}** related, according to your notes?`,
+        // Asked from each side, so the two questions a pair allows don't read the same.
+        prompt: c.whole
+          ? `How does the rest of this note relate to **${clean(named.name)}**, according to your notes?`
+          : partner.whole
+            ? `How does **${clean(named.name)}** fit with the rest of this note, according to your notes?`
+            : `How are **${clean(c.name)}** and **${clean(partner.name)}** related, according to your notes?`,
         points: points.map((p) => clean(p.text)),
       };
     }
   }
   if (lvl >= 2) {
     const ex = facts.find((f) => f.example);
-    if (ex) {
-      const rules = plain.slice(0, 2);
+    const rules = plain.slice(0, 2);
+    // An untitled note's opening has no name to give as the idea: its lines are the answer, so it needs some.
+    if (ex && (!c.whole || rules.length)) {
+      const idea = c.whole ? [] : [clean(c.name)];
       return {
         ...base(c, ex, 'apply', 2, ctx, 'rubric'),
         // The answer shown afterwards is the idea, not the example the student was just shown.
         fact: rules[0]?.text ?? ex.text,
         prompt: `Your notes give this example:\n\n> ${clean(ex.text)}\n\nWhich idea from your notes does it show, and why?`,
-        points: [clean(c.name), ...rules.map((r) => clean(r.text))].slice(0, 3),
-        hide: [clean(c.name), ...rules.flatMap((r) => (r.key ? [clean(r.key), clean(r.text)] : [clean(r.text)]))],
+        points: [...idea, ...rules.map((r) => clean(r.text))].slice(0, 3),
+        hide: [...idea, ...rules.flatMap((r) => (r.key ? [clean(r.key), clean(r.text)] : [clean(r.text)]))],
       };
     }
     const steps = plain.filter((f) => f.item);
     if (steps.length >= 2) {
       return {
         ...base(c, steps[0], 'apply', 2, ctx, 'rubric'),
-        prompt: EXPLAIN[c.kind === 'rule' ? 'rule' : 'procedure'](clean(c.name)),
+        prompt: c.whole ? WHOLE_EXPLAIN.procedure : EXPLAIN[c.kind === 'rule' ? 'rule' : 'procedure'](clean(c.name)),
         points: steps.slice(0, 3).map((s) => clean(s.text)),
       };
     }
@@ -251,7 +269,7 @@ export function buildItem(c: Concept, level: Level, ctx: BuildCtx): Item {
     const f = plain[0];
     return {
       ...base(c, f, 'explain', 1, ctx, 'rubric'),
-      prompt: (EXPLAIN[c.kind] ?? EXPLAIN.fact)(clean(c.name)),
+      prompt: c.whole ? (WHOLE_EXPLAIN[c.kind] ?? WHOLE_EXPLAIN.fact) : (EXPLAIN[c.kind] ?? EXPLAIN.fact)(clean(c.name)),
       points: plain.slice(0, 3).map((p) => clean(p.text)),
     };
   }
@@ -261,10 +279,13 @@ export function buildItem(c: Concept, level: Level, ctx: BuildCtx): Item {
   if (item) return item;
   // Nothing to blank or recall: show the fact and let the student say how well they knew it
   // (a different line of the notes each time, when there are several).
-  const rates = facts.map((f, i) => ({
-    ...base(c, f, 'rate', 0, ctx, 'self'),
-    prompt: `What do your notes say about **${clean(c.name)}**${facts.length > 1 ? ` (point ${i + 1} of ${facts.length})` : ''}? Think of your answer, then check.`,
-  }));
+  const rates = facts.map((f, i) => {
+    const point = facts.length > 1 ? ` (point ${i + 1} of ${facts.length})` : '';
+    return {
+      ...base(c, f, 'rate', 0, ctx, 'self'),
+      prompt: c.whole ? `What does this note say${point}? Think of your answer, then check.` : `What do your notes say about **${clean(c.name)}**${point}? Think of your answer, then check.`,
+    };
+  });
   return pick(rates)!;
 }
 

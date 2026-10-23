@@ -1,17 +1,16 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { Target } from 'lucide-react';
-import { themeFor, themeVars } from '../../lib/classes';
+import type { ReactNode } from 'react';
+import { Folder } from 'lucide-react';
 import { isDue, isMastered } from '../../lib/review/mastery';
 import { conceptsOf, type ReviewFile } from '../../state/review';
 import type { NoteDoc } from '../../lib/vault/types';
 import { cx } from '../../lib/util';
 
-/** Quizlet's three buckets for a set of ideas, plus what's due now and when the next one is. */
+/** A set of ideas by how far along they are, plus what's due now and when the next one is. */
 export interface IdeaCounts {
   total: number;
-  /** Never answered ("Not studied"; Anki's "New"). */
+  /** Never answered (Anki's "New"). */
   fresh: number;
-  /** Answered, not mastered yet ("Still learning"). */
+  /** Answered, not mastered yet. */
   learning: number;
   mastered: number;
   due: number;
@@ -65,19 +64,16 @@ export function addCounts(list: IdeaCounts[]): IdeaCounts {
   return c;
 }
 
-/** A class's theme as CSS variables (--class-main, --class-light…), from its stored colour. */
-export const classStyle = (color?: string): CSSProperties | undefined => (color ? (themeVars(themeFor(color)) as CSSProperties) : undefined);
-
-/** The class letter avatar, as in the navigation drawer. */
-export function ClassLetter({ name, color, small }: { name: string; color?: string; small?: boolean }) {
-  return (
-    <span className={cx('class-letter', small && 'is-small', !color && 'rv-letter-plain')} style={classStyle(color)} aria-hidden>
-      {name.trim().charAt(0).toUpperCase() || '·'}
-    </span>
+/** A class's colour square, as in the sidebar; a folder icon for notes outside any class. */
+export function GroupMark({ color }: { color?: string }) {
+  return color ? (
+    <span className="class-square" style={{ background: color }} aria-hidden />
+  ) : (
+    <Folder size={16} strokeWidth={1.5} className="rv-folder" aria-hidden />
   );
 }
 
-/** M3 switch (the shared .switch), as a labelled control. */
+/** The shared switch, as a labelled control. */
 export function Switch({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange(v: boolean): void; label?: string }) {
   return (
     <span className={cx('switch', checked && 'is-on', disabled && 'is-disabled')}>
@@ -87,66 +83,4 @@ export function Switch({ checked, disabled, onChange, label }: { checked: boolea
   );
 }
 
-/** A small progress dial: the share of a total, in one colour, with the count inside (like the summary donut). */
-export function Ring({ value, total, tone, children }: { value: number; total: number; tone: 'fresh' | 'learning' | 'mastered'; children?: ReactNode }) {
-  const r = 14.5;
-  const len = 2 * Math.PI * r;
-  const part = total ? Math.min(1, value / total) : 0;
-  return (
-    <span className="rv-ring-wrap">
-      <svg className={cx('rv-ring', `is-${tone}`)} width="32" height="32" viewBox="0 0 32 32" aria-hidden>
-        <circle cx="16" cy="16" r={r} className="rv-ring-track" />
-        {part > 0 && <circle cx="16" cy="16" r={r} className="rv-ring-fill" strokeDasharray={`${part * len} ${len}`} transform="rotate(-90 16 16)" />}
-      </svg>
-      <span className="rv-ring-n">{children}</span>
-    </span>
-  );
-}
-
-/** Quizlet's "How you're doing" donut: mastered, then still learning, on a grey track. */
-export function Donut({ mastered, learning, total, children }: { mastered: number; learning: number; total: number; children?: ReactNode }) {
-  const r = 52;
-  const len = 2 * Math.PI * r;
-  const gap = 3;
-  const arc = (n: number) => (total ? (n / total) * len : 0);
-  const a = arc(mastered);
-  const b = arc(learning);
-  return (
-    <div className="rv-donut">
-      <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden>
-        <circle cx="60" cy="60" r={r} className="rv-donut-track" />
-        {a > 0 && <circle cx="60" cy="60" r={r} className="rv-donut-arc is-mastered" strokeDasharray={`${Math.max(0, a - (b > 0 ? gap : 0))} ${len}`} transform="rotate(-90 60 60)" />}
-        {b > 0 && (
-          <circle
-            cx="60"
-            cy="60"
-            r={r}
-            className="rv-donut-arc is-learning"
-            strokeDasharray={`${Math.max(0, b - (a > 0 ? gap : 0))} ${len}`}
-            transform={`rotate(${-90 + (a / len) * 360} 60 60)`}
-          />
-        )}
-      </svg>
-      <div className="rv-donut-centre">{children}</div>
-    </div>
-  );
-}
-
-/** The bar at the top of a study session (Quizlet's study-mode header): mode on the left, title centred, actions right. */
-export function StudyBar({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rv-topbar">
-      <div className="rv-mode">
-        <Target size={20} />
-        <span>Review</span>
-      </div>
-      <div className="rv-topbar-label" title={title}>
-        {title}
-      </div>
-      <div className="rv-topbar-actions">{children}</div>
-    </div>
-  );
-}
-
-/** A key, as Quizlet's SHORTCUT tip shows it. */
 export const Key = ({ children }: { children: ReactNode }) => <kbd className="rv-key">{children}</kbd>;

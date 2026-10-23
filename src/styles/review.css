@@ -1,193 +1,241 @@
 /*
- * Review (the Mastery Engine), in the app's Material 3 language:
- * - setup: Anki's deck list (tree with New / Due / Mastery columns) beside Quizlet's "Set up your test" card;
- * - session: Quizlet Learn (header bar, progress row with counts at both ends, tall card, numbered tiles);
- * - feedback: Duolingo's bottom sheet in the verdict's colour;
- * - summary: Quizlet's results.
- * Quizlet's indigo is the app's blue; Duolingo's green / red become the GM3 success / error containers;
- * "still learning" is the caution amber.
+ * Review: Anki's deck list to pick from, then one quiet card at a time. Same tokens as the rest of the
+ * app: flat canvas, white surfaces with a 1px ring, ink buttons, success and danger soft tones for how
+ * an answer went.
  */
 
+/* Sized by the room Review has (the assistant or a narrow window take some), not the window's. */
 .review-view {
   container: review / inline-size;
-  /* Inline-size containment otherwise lets the page grow past the pane (and the docked sheet with it). */
-  min-height: 0;
-  --rv-right: var(--success);
-  --rv-right-bg: var(--success-soft);
-  --rv-right-fill: var(--success);
-  --rv-wrong: var(--danger);
-  --rv-wrong-bg: var(--danger-soft);
-  --rv-learn: var(--warning);
-  --rv-learn-bg: var(--warning-soft);
-  --rv-learn-fill: var(--warning-line);
-  --rv-track: #e8e6dc;
 }
 
 /* ------------------------------------------------------------ setup */
 
 .rv-setup-column {
+  /* The start bar reaches the column's edges with the same number. */
+  --rv-gutter: 32px;
   max-width: 1040px;
-  margin: 0;
-  padding: 0 24px 64px;
+  margin: 0 auto;
+  padding: 28px var(--rv-gutter) 64px;
 }
-.rv-intro {
-  margin: 4px 0 16px;
-  font-size: 14px;
-  line-height: 20px;
+.rv-setup-column.is-empty {
+  max-width: 760px;
+}
+.rv-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  margin-bottom: 20px;
+}
+.rv-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 500;
+  color: var(--text);
+}
+.rv-due-none {
+  margin: -8px 0 16px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 24px;
   color: var(--text-2);
 }
+.rv-empty {
+  padding: 72px 0;
+  text-align: center;
+}
+.rv-empty-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 28px;
+  color: var(--text-2);
+}
+.rv-empty-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+
 .rv-setup {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  gap: 32px;
   align-items: start;
 }
 
-/* The deck list: one outlined table, fixed right-aligned number columns. */
+/* The deck list: a white table, a selection column at the left, counts at the right. */
 .rv-tree {
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-l);
-  overflow: hidden;
   background: var(--bg);
+  border-radius: var(--radius-l);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
 }
 .rv-tree-head,
 .rv-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px 56px 112px 44px;
+  grid-template-columns: minmax(0, 1fr) 52px 52px 108px 36px;
   align-items: center;
-  column-gap: 0;
+  column-gap: 4px;
+  padding: 0 4px 0 14px;
 }
 .rv-tree-head {
-  height: 48px;
-  font-size: 14px;
+  height: 36px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--text-3);
   border-bottom: 1px solid var(--border);
-}
-.rv-cell-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  height: 100%;
-}
-/* Indents line each level's checkbox up under the level above's avatar (Anki's nesting). */
-.rv-tree-head .rv-cell-main {
-  padding-left: 52px;
 }
 .rv-row {
   min-height: 40px;
+  font-size: 14px;
+  line-height: 20px;
   cursor: default;
-  user-select: none;
-  transition: background 0.12s var(--ease);
+  position: relative;
+}
+.rv-group + .rv-group > .rv-row.is-group,
+.rv-row + .rv-row,
+.rv-chapter + .rv-chapter > .rv-row:first-child,
+.rv-row.is-group + .rv-chapter > .rv-row:first-child {
+  box-shadow: inset 0 1px 0 rgba(20, 20, 19, 0.06);
 }
 .rv-row:hover {
   background: var(--bg-hover);
 }
-.rv-row.is-checked {
-  background: var(--accent-tint);
+.rv-cell-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-.rv-row.is-checked:hover {
-  background: rgba(42, 120, 214, 0.12);
-}
-.rv-row.is-group {
-  min-height: 48px;
-}
-.rv-row.is-group .rv-cell-main {
-  padding-left: 8px;
-}
-.rv-row.is-chapter .rv-cell-main,
-.rv-row.is-note.is-flat .rv-cell-main {
-  padding-left: 82px;
-}
-.rv-row.is-note .rv-cell-main {
-  padding-left: 112px;
-}
-.rv-group + .rv-group {
-  border-top: 1px solid var(--border);
-}
-.rv-chev {
-  flex: none;
-  margin: 0 6px;
-  color: var(--text-2);
-  transition: transform 0.15s var(--ease);
-}
-.rv-chev.is-open {
-  transform: rotate(90deg);
+.rv-row.is-group .rv-name {
+  font-weight: 500;
 }
 .rv-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  color: var(--text);
 }
-.rv-row.is-group .rv-name {
-  font-weight: 500;
-}
-.rv-code {
-  flex: none;
-  font-size: 12px;
-  color: var(--text-3);
+.rv-name.is-derived {
+  color: var(--text-2);
 }
 .rv-sub {
   flex: none;
   font-size: 12px;
   color: var(--text-3);
 }
-.rv-folder,
-.rv-file {
+.rv-chev-btn {
   flex: none;
-  color: var(--text-2);
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
 }
-.rv-row .class-letter {
+.rv-chev {
   flex: none;
+  color: var(--text-3);
+  transition: transform var(--dur) var(--ease);
 }
-.rv-letter-plain {
-  background: var(--bg-subtle);
-  color: var(--text-2);
+.rv-chev.is-open {
+  transform: rotate(90deg);
 }
+.rv-mark {
+  flex: none;
+  width: 16px;
+  display: inline-grid;
+  place-items: center;
+}
+.rv-folder {
+  flex: none;
+  color: var(--text-3);
+}
+/*
+ * Tree depth lives in the name cell, so the checkboxes stay in one column. A chapter's folder sits under
+ * its class's name; a note's name steps in one icon further than its parent's name.
+ */
+.rv-indent {
+  flex: none;
+  width: 40px;
+}
+.rv-row.is-note .rv-indent {
+  width: 64px;
+}
+.rv-row.is-note:not(.is-flat) .rv-indent {
+  width: 88px;
+}
+
+/* A checkbox drawn like the shared .check, with a half-checked state. */
+.rv-box {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.25);
+  background: var(--bg) no-repeat center / 12px;
+  position: relative;
+}
+.rv-box::before {
+  /* A bigger hit area than the 16px box. */
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.rv-box:hover {
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.4);
+}
+.rv-box.is-all,
+.rv-box.is-some {
+  background-color: var(--focus);
+  box-shadow: none;
+}
+.rv-box.is-all {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+.rv-box.is-some {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+}
+
 .rv-num {
   text-align: right;
-  font-size: 14px;
-  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  padding-right: 6px;
 }
-.rv-row .rv-num.is-new {
-  color: var(--accent);
-}
-.rv-row .rv-num.is-due {
-  color: var(--rv-learn);
+.rv-row .rv-num {
+  color: var(--text);
 }
 .rv-row .rv-num.is-zero {
   color: var(--text-4);
-  font-weight: 400;
 }
 .rv-mastery-cell {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  padding-right: 4px;
 }
 .rv-mastery {
-  width: 48px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--rv-track);
+  width: 52px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-strong);
   overflow: hidden;
 }
 .rv-mastery > span {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: var(--rv-right-fill);
+  border-radius: 2px;
+  background: var(--success);
 }
 .rv-mastery-pct {
   width: 32px;
   text-align: right;
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
 .rv-mastery-none {
@@ -195,170 +243,64 @@
   text-align: right;
   color: var(--text-4);
 }
-/* Anki's per-row gear: shown on hover. */
 .rv-open {
-  justify-self: center;
   opacity: 0;
+  color: var(--text-3);
 }
 .rv-row:hover .rv-open,
 .rv-open:focus-visible {
   opacity: 1;
 }
 .rv-tree-foot {
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-top: 1px solid var(--border);
-  font-size: 13px;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-.rv-tree.is-empty .screen-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.rv-empty-btn {
-  margin-top: 16px;
+  margin-top: 10px;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
-/* Material 3 checkbox, with a half-checked state for a partly picked class or chapter. */
-.rv-box {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 2px var(--text-2);
-  display: grid;
-  place-items: center;
-  position: relative;
-  transition:
-    background 0.12s var(--ease),
-    box-shadow 0.12s var(--ease);
-}
-.rv-box::before {
-  content: '';
-  position: absolute;
-  inset: -11px;
-  border-radius: 50%;
-}
-.rv-box:hover::before {
-  background: var(--bg-hover);
-}
-.rv-box.is-all,
-.rv-box.is-some {
-  background: var(--accent);
-  box-shadow: none;
-}
-.rv-box.is-all::after {
-  content: '';
-  width: 10px;
-  height: 5px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: translateY(-1px) rotate(-45deg);
-}
-.rv-box.is-some::after {
-  content: '';
-  width: 10px;
-  height: 2px;
-  background: #fff;
-}
-
-/* "Set up your review": Quizlet's setup card — progress, then described option rows, then Start. */
+/* The column beside the list: what's picked, the options as rows, Start. */
 .rv-panel {
   position: sticky;
-  top: 16px;
+  top: 0;
   display: flex;
   flex-direction: column;
-  padding: 20px 24px 24px;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-l);
-  background: var(--bg);
+  padding-top: 4px;
 }
 .rv-panel-label {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rv-panel-title {
-  margin: 4px 0 12px;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
-  color: var(--text);
-}
-.rv-buckets {
-  display: flex;
-  flex-direction: column;
-}
-.rv-bucket {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  height: 44px;
-  margin: 0 -8px;
-  padding: 0 8px;
-  border-radius: var(--radius-s);
-  text-align: left;
-  color: var(--text);
-}
-button.rv-bucket:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.rv-bucket-label {
-  font-size: 14px;
-}
-/* The count sits inside its ring, like the summary donut, so the row reads as a dial, not a radio button. */
-.rv-ring-wrap {
-  position: relative;
-  width: 32px;
-  height: 32px;
-}
-.rv-ring-wrap svg {
-  display: block;
-}
-.rv-ring-n {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
+  font-size: 15px;
+  line-height: 22px;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
   color: var(--text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
-.rv-ring {
-  fill: none;
-  stroke-width: 3;
-}
-.rv-ring-track {
-  stroke: var(--rv-track);
-}
-.rv-ring-fill {
-  stroke-linecap: round;
-}
-.rv-ring.is-fresh .rv-ring-fill {
-  stroke: var(--text-4);
-}
-.rv-ring.is-learning .rv-ring-fill {
-  stroke: var(--rv-learn-fill);
-}
-.rv-ring.is-mastered .rv-ring-fill {
-  stroke: var(--rv-right-fill);
+.rv-panel-label.is-none {
+  color: var(--text-3);
+  font-weight: 400;
 }
 .rv-panel-stats {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 13px;
   line-height: 18px;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.rv-stat,
+.rv-narrow {
+  white-space: nowrap;
+}
+.rv-narrow {
+  color: inherit;
+  border-radius: 3px;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+.rv-narrow:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 .rv-reading {
   white-space: nowrap;
@@ -366,106 +308,103 @@ button.rv-bucket:hover:not(:disabled) {
 .rv-options {
   margin-top: 16px;
   border-top: 1px solid var(--border);
-  padding-top: 4px;
 }
 .rv-option {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-height: 56px;
-  padding: 8px 0;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
 }
 .rv-option.is-stacked {
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
-}
-.rv-option-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0;
 }
 .rv-option-label {
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
   color: var(--text);
 }
-.rv-option-desc {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
+.rv-option.is-off .rv-option-label {
+  color: var(--text-4);
 }
-.rv-option.is-off .rv-option-label,
-.rv-opt-row.is-off .rv-option-label {
-  color: rgba(20, 20, 19, 0.38);
+.rv-option.is-off .switch {
+  opacity: 0.5;
 }
-.switch.is-disabled {
-  opacity: 0.38;
-}
-.rv-length {
+.seg.rv-length {
   display: flex;
-  width: 100%;
 }
-/* Equal thirds while they fit; in the narrow panel the checked segment takes the room its check needs. */
-.rv-length button {
+.seg.rv-length button {
   flex: 1 1 0;
-  min-width: auto;
-  padding: 0 12px;
+  min-width: 0;
+  padding: 0 6px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 .rv-warn {
+  overflow-wrap: anywhere;
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-top: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius-s);
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
   background: var(--warning-soft);
-  color: var(--text);
+  color: var(--text-2);
   font-size: 13px;
   line-height: 18px;
 }
-.rv-warn svg {
+.rv-warn > svg {
   flex: none;
+  margin-top: 1px;
   color: var(--warning);
 }
 .rv-warn-link {
-  padding: 0;
-  font: inherit;
-  font-weight: 500;
-  color: inherit;
+  color: var(--link);
+  font-size: inherit;
   text-align: left;
+}
+.rv-warn-link:hover {
   text-decoration: underline;
-  text-underline-offset: 2px;
 }
 .rv-helper {
   margin-top: 16px;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-3);
 }
 .rv-start {
   width: 100%;
-  height: 40px;
+  height: 36px;
   margin-top: 16px;
+}
+.rv-promise {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
+}
+.rv-promise-link {
+  color: var(--link);
+  font-size: inherit;
+  line-height: inherit;
+}
+.rv-promise-link:hover {
+  text-decoration: underline;
 }
 .rv-startbar {
   display: none;
 }
-.rv-promise {
-  margin-top: 12px;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
 .rv-spinner {
   display: inline-block;
   flex: none;
-  width: 14px;
-  height: 14px;
-  vertical-align: -2px;
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
   border-radius: 50%;
-  border: 2px solid currentColor;
+  border: 1.5px solid currentColor;
   border-right-color: transparent;
   animation: spin 0.8s linear infinite;
 }
@@ -475,136 +414,73 @@ button.rv-bucket:hover:not(:disabled) {
 .rv-session {
   overflow: hidden;
 }
-/* Quizlet's study-mode header: mode at the left, the title truly centred, Options and ✕ at the right. */
+/* The bar: what's being reviewed, "3 / 10", close; the progress runs along its bottom edge. */
 .rv-topbar {
   position: relative;
   flex: none;
-  height: 64px;
+  height: 52px;
+}
+/* Lined up with the card below. */
+.rv-topbar-inner {
   display: flex;
   align-items: center;
-  padding: 0 16px 0 24px;
-  border-bottom: 1px solid var(--border);
-}
-.rv-mode {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--text);
-}
-.rv-mode svg {
-  color: var(--accent);
+  gap: 12px;
+  height: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px 0 32px;
 }
 .rv-topbar-label {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 44%;
-  font-size: 16px;
-  line-height: 24px;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rv-topbar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.rv-count {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
-.rv-options-btn {
-  height: 40px;
-  padding: 0 20px;
+.rv-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--border);
 }
-.rv-close {
-  width: 40px;
-  height: 40px;
-  box-shadow: inset 0 0 0 1px var(--border-strong);
+.rv-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  transition: width 0.4s var(--ease);
 }
 
 .rv-stage {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 24px calc(40px + var(--rv-sheet, 0px));
 }
 .rv-column {
-  max-width: 800px;
+  max-width: 720px;
   margin: 0 auto;
+  padding: 40px 32px 64px;
 }
-
-/* Counts in pills at both ends of a chunky track that records how each answer went. */
-.rv-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.rv-pill {
-  flex: none;
-  min-width: 48px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.rv-progress {
-  flex: 1;
-  height: 16px;
-  border-radius: 8px;
-  background: var(--rv-track);
-  overflow: hidden;
-  display: flex;
-}
-.rv-seg {
-  flex: none;
-  height: 100%;
-  animation: rv-grow 0.3s var(--ease);
-}
-.rv-seg.is-right {
-  background: var(--rv-right-fill);
-}
-.rv-seg.is-missed {
-  background: var(--rv-learn-fill);
-}
-@keyframes rv-grow {
-  from {
-    max-width: 0;
-  }
-  to {
-    max-width: 100%;
-  }
-}
-
-/* The card: source line at the top, the prompt big, the answers pinned to the bottom. */
 .rv-card {
   display: flex;
   flex-direction: column;
-  min-height: 380px;
-  padding: 24px 32px 32px;
+  padding: 24px 28px 28px;
   border-radius: var(--radius-xl);
-  background: var(--bg-subtle);
+  background: var(--bg);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    var(--shadow-xs);
   animation: rv-rise 0.16s var(--ease);
-}
-/* Nothing left to show at the bottom (a written "Don't know?"), so no empty slot above the sheet. */
-.rv-card.is-feedback:not(:has(.rv-ask, .rv-self-result)) {
-  min-height: 0;
-}
-/* A graded written answer stays where it was typed: the ask state's 380px less the 56px action row it drops. */
-@media (min-height: 801px) {
-  .rv-card.is-feedback:has(.rv-answered) {
-    min-height: 324px;
-  }
 }
 @keyframes rv-rise {
   from {
@@ -616,21 +492,14 @@ button.rv-bucket:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 28px;
   min-width: 0;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.rv-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--class-main, var(--text-3));
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-3);
 }
 .rv-where {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -638,270 +507,32 @@ button.rv-bucket:hover:not(:disabled) {
 }
 .rv-hint-btn {
   flex: none;
-  margin-right: -12px;
-}
-.md.rv-prompt {
-  flex: 1;
-  margin: 20px 0 32px;
-  font-family: var(--font-ui);
-  font-weight: 400;
-  color: var(--text);
-  overflow-wrap: break-word;
-  text-wrap: pretty;
-}
-.md.rv-prompt.is-l {
-  font-size: 28px;
-  line-height: 36px;
-}
-.md.rv-prompt.is-m {
-  font-size: 24px;
-  line-height: 32px;
-}
-.md.rv-prompt.is-s {
-  font-size: 20px;
-  line-height: 28px;
-}
-.md.rv-prompt p {
-  margin: 0 0 12px;
-}
-/* "Fill in the blank:" over a quoted line: the lead-in reads as Quizlet's small side label, the line as the prompt. */
-.md.rv-prompt > p:first-child:has(+ blockquote) {
-  margin: 0 0 8px;
-  font-size: 16px;
-  line-height: 24px;
   color: var(--text-2);
-}
-.md.rv-prompt blockquote {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  color: var(--text);
-}
-.md.rv-prompt strong {
-  font-weight: 500;
-}
-
-.rv-ask {
-  display: flex;
-  flex-direction: column;
-}
-.rv-answer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 32px;
-  margin-bottom: 12px;
-}
-.rv-answer-label {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.seg.rv-conf {
-  background: var(--bg);
-}
-.seg.rv-conf button {
-  height: 32px;
-  min-width: 0;
-  padding: 0 14px;
-  font-size: 13px;
-}
-.rv-ask-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-/* Alone under the choices, the text button's label lines up with the tiles' right edge. */
-.rv-ask-actions > .rv-idk:only-child {
-  margin-right: -12px;
-}
-.rv-check-btn {
-  height: 40px;
-  padding: 0 24px;
-}
-.rv-grading {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--text-2);
-}
-
-/* Numbered answer tiles: a plain grey digit, then the answer; equal heights, two columns. */
-.rv-choices {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: 1fr;
-  gap: 12px 16px;
-}
-.rv-choices.is-single {
-  grid-template-columns: minmax(0, 1fr);
-}
-.rv-choice,
-.rv-grade {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  min-height: 64px;
-  padding: 12px 20px;
-  border-radius: var(--radius-l);
-  text-align: left;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  transition:
-    box-shadow 0.12s var(--ease),
-    background 0.12s var(--ease),
-    opacity 0.12s var(--ease);
-}
-.rv-choice:hover:not(:disabled),
-.rv-grade:hover:not(:disabled) {
-  background: var(--bg-shell);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.rv-choice:active:not(:disabled),
-.rv-grade:active:not(:disabled) {
-  background: #eef2f7;
-}
-.rv-choice .md {
-  font-size: 16px;
-  line-height: 24px;
-  min-width: 0;
-}
-.rv-choice .md p {
-  margin: 0;
-}
-.rv-choice-n {
-  flex: none;
-  min-width: 16px;
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-.rv-choice.is-right,
-.rv-grade.is-chosen.is-right {
-  background: var(--rv-right-bg);
-  box-shadow: inset 0 0 0 2px var(--rv-right);
-}
-.rv-choice.is-wrong,
-.rv-grade.is-chosen.is-wrong {
-  background: var(--rv-wrong-bg);
-  box-shadow: inset 0 0 0 2px var(--rv-wrong);
-}
-.rv-grade.is-chosen.is-partial {
-  background: var(--rv-learn-bg);
-  box-shadow: inset 0 0 0 2px var(--rv-learn);
-}
-.rv-choice.is-right .rv-choice-n,
-.rv-choice.is-answer .rv-choice-n {
-  color: var(--rv-right);
-}
-.rv-choice.is-wrong .rv-choice-n {
-  color: var(--rv-wrong);
-}
-/* The right answer, when another was picked: dashed, as Quizlet marks it. */
-.rv-choice.is-answer {
-  box-shadow: none;
-  outline: 2px dashed var(--rv-right);
-  outline-offset: -2px;
-}
-.rv-choice.is-dim,
-.rv-grade.is-dim {
-  opacity: 0.5;
-}
-.rv-choice:disabled,
-.rv-grade:disabled {
-  cursor: default;
-}
-.rv-grades {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.rv-grade {
-  min-height: 56px;
-}
-
-/* Written answers: an outlined field; once answered, its outline takes the verdict's colour. */
-.rv-input,
-.rv-answered {
-  width: 100%;
-  min-height: 56px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-  outline: none;
-  user-select: text;
-  transition: box-shadow 0.12s var(--ease);
-}
-.rv-input {
-  height: 56px;
-}
-.rv-input:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 1px var(--text);
-}
-.rv-input:focus {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.rv-input::placeholder {
-  color: var(--text-3);
-}
-.rv-input:disabled {
-  opacity: 0.6;
-}
-.rv-input.is-long {
-  height: auto;
-  min-height: 112px;
-  padding: 16px;
-  resize: vertical;
-}
-.rv-answered {
-  padding: 16px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.rv-answered.is-right {
-  box-shadow: inset 0 0 0 2px var(--rv-right);
-}
-.rv-answered.is-wrong {
-  box-shadow: inset 0 0 0 2px var(--rv-wrong);
-}
-.rv-answered.is-partial {
-  box-shadow: inset 0 0 0 2px var(--rv-learn);
-}
-
-/* Quizlet's "Get a hint" result: a caution-tinted line from the notes. */
-.rv-hint {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin: -12px 0 24px;
-  padding: 12px 16px;
-  border-radius: var(--radius-s);
-  background: var(--warning-soft);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 20px;
   animation: fade-in 0.2s var(--ease);
 }
-.rv-hint svg {
-  flex: none;
-  color: var(--warning);
+.md.rv-prompt {
+  margin: 16px 0 28px;
+  font-family: var(--font-display);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.md.rv-prompt.is-l {
+  font-size: 24px;
+  line-height: 34px;
+}
+.md.rv-prompt.is-m {
+  font-size: 20px;
+  line-height: 30px;
+}
+.md.rv-prompt.is-s {
+  font-size: 17px;
+  line-height: 26px;
+}
+.md.rv-prompt p {
+  margin: 0 0 8px;
+}
+.md.rv-prompt strong {
+  font-weight: 600;
 }
 .md.is-inline {
   display: inline;
@@ -912,8 +543,200 @@ button.rv-bucket:hover:not(:disabled) {
   display: inline;
   margin: 0;
 }
+.rv-hint {
+  display: flex;
+  gap: 8px;
+  margin: -12px 0 20px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-2);
+}
+.rv-hint > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
+}
 
-/* A self-check: the notes' answer, then how it went. */
+.rv-ask {
+  display: flex;
+  flex-direction: column;
+}
+.rv-answer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  margin-bottom: 8px;
+}
+.rv-answer-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.seg.rv-conf {
+  height: 28px;
+}
+.seg.rv-conf button {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.rv-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  outline: none;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text);
+  user-select: text;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+.rv-input::placeholder {
+  color: var(--text-4);
+}
+.rv-input:hover {
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.3);
+}
+.rv-input:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--focus),
+    0 0 0 3px var(--focus-glow);
+}
+.rv-input:disabled {
+  color: var(--text-3);
+  background: var(--bg-canvas);
+}
+.rv-input.is-long {
+  resize: vertical;
+  min-height: 88px;
+}
+.rv-ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.rv-ask-actions .rv-idk {
+  color: var(--text-2);
+}
+.rv-grading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* Choices: numbered tiles, two to a row. After the answer: the pick and the right one in their tones. */
+.rv-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.rv-choices.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rv-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  text-align: left;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text);
+  transition:
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.rv-choice:hover:not(:disabled) {
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.rv-choice .md {
+  font-size: inherit;
+  line-height: inherit;
+  min-width: 0;
+}
+.rv-choice-n {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.rv-choice.is-right,
+.rv-choice.is-answer {
+  background: var(--success-soft);
+  box-shadow: inset 0 0 0 1px rgba(47, 118, 19, 0.35);
+}
+.rv-choice.is-wrong {
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px rgba(181, 51, 51, 0.35);
+}
+.rv-choice.is-right .rv-choice-n,
+.rv-choice.is-answer .rv-choice-n {
+  background: var(--success);
+  box-shadow: none;
+  color: #fff;
+}
+.rv-choice.is-wrong .rv-choice-n {
+  background: var(--danger);
+  box-shadow: none;
+  color: #fff;
+}
+.rv-choice.is-dim {
+  opacity: 0.5;
+}
+.rv-choice:disabled {
+  cursor: default;
+}
+
+/* A written answer, kept where it was typed, in the verdict's tone. */
+.rv-answered {
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  font-size: 15px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.rv-answered.is-right {
+  background: var(--success-soft);
+}
+.rv-answered.is-wrong {
+  background: var(--danger-soft);
+}
+.rv-answered.is-partial {
+  background: var(--bg-subtle);
+}
+.rv-retry {
+  margin-top: 16px;
+}
+
+/* A self-check: the notes' answer, then three grades. */
 .rv-self,
 .rv-self-result {
   display: flex;
@@ -922,750 +745,487 @@ button.rv-bucket:hover:not(:disabled) {
 .rv-self > .rv-ask {
   margin-bottom: 16px;
 }
-.rv-self > .rv-points {
-  margin: 12px 0 0;
+.rv-self > .rv-notes-say {
+  padding: 14px 16px;
+  border-radius: var(--radius-l);
+  background: var(--bg-subtle);
 }
 .rv-self > .rv-answer-head {
-  margin-top: 24px;
+  margin-top: 20px;
 }
-
-/* The notes' own words. In the card it's a white panel; in the sheet it takes the sheet's colours. */
-.rv-notes-say {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+.rv-grades {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
-.rv-self .rv-notes-say {
-  padding: 16px 20px;
-  border-radius: var(--radius-l);
-  background: var(--bg);
-}
-.rv-notes-say-head {
-  align-self: stretch;
+.rv-grade {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.md.rv-notes-say-text {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-}
-.md.rv-notes-say-text p {
-  margin: 0 0 4px;
-}
-.rv-points {
-  margin: 0;
-  padding-left: 20px;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--border);
   font-size: 14px;
-  line-height: 20px;
   color: var(--text);
+  text-align: left;
 }
-.rv-points li {
-  margin: 2px 0;
+.rv-grade:hover:not(:disabled) {
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
-.rv-points .md {
-  font-size: inherit;
-  line-height: inherit;
+.rv-grade.is-dim {
+  opacity: 0.45;
 }
-.rv-points .md p,
-.rv-points li.md > p {
-  margin: 0;
+.rv-grade.is-chosen.is-right {
+  background: var(--success-soft);
 }
-/* Where the line is in the notes (it opens there). */
+.rv-grade.is-chosen.is-wrong {
+  background: var(--danger-soft);
+}
+.rv-grade.is-chosen.is-partial {
+  background: var(--bg-subtle);
+}
+
+/* The notes' own words, with where they come from. */
+.rv-notes-say {
+  font-size: 15px;
+  line-height: 23px;
+}
+.rv-notes-say-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
 .rv-source-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
   max-width: 100%;
-  padding: 0;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--accent);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--link);
 }
 .rv-source-chip > span {
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rv-source-chip:hover > span {
+.rv-source-chip:hover {
   text-decoration: underline;
-  text-underline-offset: 2px;
 }
-.rv-source-chip svg {
+.rv-source-chip > svg {
   flex: none;
 }
-
-/* Quizlet's SHORTCUT tip under the card. */
-.rv-shortcut {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 24px;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
+.md.rv-notes-say-text,
+.rv-points .md {
+  font-size: 15px;
+  line-height: 23px;
 }
-.rv-shortcut-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--warning-soft);
-  color: var(--warning);
+.rv-points {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 23px;
 }
-.rv-shortcut-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
+.rv-points li {
+  margin: 2px 0;
 }
-kbd.rv-key {
-  display: inline-grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  margin: 0 2px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--bg);
-  box-shadow: inset 0 0 0 1px var(--outline-variant);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
-  letter-spacing: 0;
+.rv-points li::marker {
+  color: var(--text-3);
 }
 
-/* ------------------------------------------------------------ feedback sheet (Duolingo) */
-
+/* How it went: one soft-toned block under the answer. */
 .rv-feedback {
-  --tone: var(--text-2);
-  --tone-bg: var(--bg-subtle);
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  max-height: 55%;
-  overflow-y: auto;
-  background: var(--tone-bg);
-  animation: rv-sheet-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.rv-feedback.is-right {
-  --tone: var(--rv-right);
-  --tone-bg: var(--rv-right-bg);
-}
-.rv-feedback.is-wrong {
-  --tone: var(--rv-wrong);
-  --tone-bg: var(--rv-wrong-bg);
-}
-.rv-feedback.is-learning {
-  --tone: var(--rv-learn);
-  --tone-bg: var(--rv-learn-bg);
-}
-@keyframes rv-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-}
-.rv-sheet {
-  max-width: 848px;
-  margin: 0 auto;
-  padding: 24px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  column-gap: 20px;
-  align-items: start;
-}
-.rv-sheet-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--bg);
-  color: var(--tone);
-}
-.rv-sheet-body {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: var(--radius-l);
+  background: var(--bg-subtle);
+  animation: rv-rise 0.16s var(--ease);
 }
-.rv-verdict {
-  min-height: 56px;
+.rv-feedback.is-right {
+  background: var(--success-soft);
+}
+.rv-feedback.is-wrong {
+  background: var(--danger-soft);
+}
+.rv-feedback-head {
   display: flex;
   align-items: center;
-  margin-bottom: -8px;
-  font-size: 20px;
-  line-height: 28px;
-  font-weight: 500;
-  color: var(--tone);
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
-.rv-grade-note,
-.rv-hyper,
-.rv-retry-note,
-.rv-retry-result {
-  font-size: 14px;
-  line-height: 20px;
+.rv-feedback-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--text-3);
+  color: #fff;
+}
+.rv-feedback.is-right .rv-feedback-icon {
+  background: var(--success);
+}
+.rv-feedback.is-wrong .rv-feedback-icon {
+  background: var(--danger);
+}
+.rv-verdict {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
   color: var(--text);
 }
-.rv-retry-result.is-right {
-  color: var(--rv-right);
-  font-weight: 500;
+.rv-feedback.is-right .rv-verdict {
+  color: var(--success);
+}
+.rv-feedback.is-wrong .rv-verdict {
+  color: var(--danger);
+}
+.rv-grade-note {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.rv-grade-note::before {
+  content: '· ';
+  color: var(--text-3);
+}
+.rv-hyper {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-2);
 }
 .rv-retry-note {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  align-self: stretch;
-}
-.rv-feedback .rv-hint {
-  margin: 0;
-  background: rgba(255, 255, 255, 0.72);
-}
-.rv-feedback .rv-notes-say {
-  margin-top: 4px;
-}
-.rv-feedback .rv-notes-say-head {
-  color: var(--tone);
-}
-.rv-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
+  gap: 10px;
   font-size: 14px;
   line-height: 20px;
-  font-weight: 500;
-  color: var(--tone, var(--accent));
+  color: var(--text-2);
 }
-.rv-link:hover:not(:disabled) {
+.rv-retry-note .rv-hint {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.6);
+}
+.rv-link {
+  color: var(--link);
+  font-size: inherit;
+}
+.rv-link:hover {
   text-decoration: underline;
-  text-underline-offset: 3px;
 }
-.rv-link:disabled {
-  opacity: 0.7;
+.rv-retry-result {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-2);
 }
-.rv-sheet-foot {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 8px;
+.rv-retry-result.is-right {
+  color: var(--success);
 }
-.rv-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
+.rv-retry-result.is-wrong {
+  color: var(--danger);
+}
+.rv-feedback .rv-notes-say {
+  padding-top: 12px;
+  border-top: 1px solid rgba(20, 20, 19, 0.08);
 }
 .rv-mastery-change {
-  order: -1;
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text-2);
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-3);
 }
 .rv-mastery-name {
   min-width: 0;
-  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
 }
 .rv-bar {
   flex: none;
-  width: 120px;
-  height: 6px;
-  border-radius: 3px;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
   background: rgba(20, 20, 19, 0.1);
   overflow: hidden;
 }
 .rv-bar > span {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: var(--rv-right-fill);
-  transition: width 0.5s var(--ease);
-}
-.rv-feedback .rv-bar > span {
-  background: var(--tone);
+  border-radius: 2px;
+  background: var(--success);
+  transition: width 0.6s var(--ease);
 }
 .rv-pct {
-  color: var(--text-2);
+  flex: none;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 .rv-badge {
-  height: 24px;
-  padding: 0 10px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4.5px;
   background: var(--bg);
-  box-shadow: inset 0 0 0 1px #a8dab5;
-  font-size: 12px;
+  color: var(--success);
+  font-size: 11px;
   font-weight: 500;
-  color: var(--rv-right);
+  line-height: 18px;
 }
-.rv-sheet-action {
-  align-self: center;
-  padding-top: 0;
+
+.rv-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  scroll-margin-bottom: 24px;
+}
+.rv-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-left: -10px;
+}
+.rv-link-btn {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.rv-link-btn:hover:not(:disabled) {
+  color: var(--text);
 }
 .btn.rv-next {
-  height: 48px;
-  min-width: 152px;
-  padding: 0 32px;
-  font-size: 16px;
-  color: #fff;
-  background: var(--tone);
-}
-.btn.rv-next:hover:not(:disabled) {
-  box-shadow: var(--shadow-s);
-  background: color-mix(in srgb, var(--tone) 88%, #000);
-}
-.btn.rv-next:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.btn.rv-next:disabled {
-  background: rgba(20, 20, 19, 0.12);
-}
-.btn.rv-next:focus-visible {
-  outline-color: var(--tone);
+  min-width: 96px;
 }
 
-/* ------------------------------------------------------------ Options dialog */
-
-.modal.rv-options-dialog {
-  border-radius: var(--radius-2xl);
+.rv-tip {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
 }
-
-.rv-opt-list {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 0 12px;
+.rv-tip-sep {
+  margin: 0 8px;
 }
-.rv-opt-row {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  min-height: 72px;
-  padding: 12px 24px;
-}
-.rv-opt-row + .rv-opt-row {
-  border-top: 1px solid var(--border);
-}
-.rv-opt-row.is-info {
-  gap: 16px;
-  min-height: 64px;
-  font-size: 14px;
-  line-height: 20px;
+.rv-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-2);
 }
-.rv-opt-row.is-info svg {
-  flex: none;
-  color: var(--text-2);
-}
-.rv-opt-row.is-end {
-  min-height: 64px;
-}
-.rv-end {
-  margin-left: -12px;
-  font-size: 14px;
-}
-.rv-view-keys {
-  margin-right: -12px;
-}
-.rv-chev-down {
-  transition: transform 0.15s var(--ease);
-}
-.rv-chev-down.is-open {
-  transform: rotate(180deg);
-}
-.rv-keys {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 24px 16px;
-}
-.rv-keys-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 14px;
-  color: var(--text-2);
-}
-.rv-keys-keys {
-  min-width: 132px;
-  display: flex;
-}
-.rv-keys-keys .rv-key:first-child {
-  margin-left: 0;
-}
 
-/* ------------------------------------------------------------ summary (Quizlet results) */
+/* ------------------------------------------------------------ summary */
 
 .rv-summary-column {
-  max-width: 960px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 40px 24px 64px;
+  padding: 28px 32px 64px;
+}
+.rv-summary-label {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rv-summary-head h1 {
-  margin: 0;
-  font-size: 32px;
-  line-height: 40px;
-  font-weight: 400;
-  color: var(--text);
-  text-wrap: balance;
-}
-.rv-summary-sub {
-  margin-top: 8px;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text-2);
-}
-.rv-summary-actions .btn {
-  height: 40px;
-  padding: 0 24px;
-}
-.rv-summary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 24px;
-  margin-top: 32px;
-  align-items: stretch;
-}
-.rv-scard {
-  padding: 20px 24px 24px;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-l);
-  overflow: hidden;
-}
-.rv-scard.is-steps {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 0;
-}
-.rv-scard-title,
-.rv-section-title {
-  margin: 0 0 16px;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
-  color: var(--text);
-}
-/* Quizlet Practice Tests' results line: grey labels over big values. */
-.rv-score {
-  display: flex;
-  gap: 32px;
-  padding-bottom: 20px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-.rv-score > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rv-score span {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--text-2);
-}
-.rv-score b {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
   font-size: 28px;
   line-height: 36px;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
-.rv-howdoing {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-.rv-donut {
-  position: relative;
-  flex: none;
-  width: 120px;
-  height: 120px;
-}
-.rv-donut svg {
-  fill: none;
-  stroke-width: 12;
-}
-.rv-donut-track {
-  stroke: var(--rv-track);
-}
-.rv-donut-arc.is-mastered {
-  stroke: var(--rv-right-fill);
-}
-.rv-donut-arc.is-learning {
-  stroke: var(--rv-learn-fill);
-}
-.rv-donut-centre {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.rv-donut-centre b {
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-.rv-donut-centre span {
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.rv-legend {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-.rv-legend-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: var(--radius-s);
-  font-size: 14px;
-  font-weight: 500;
-}
-.rv-legend-pill b {
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.rv-legend-pill.is-mastered {
-  background: var(--rv-right-bg);
-  color: var(--rv-right);
-}
-.rv-legend-pill.is-learning {
-  background: var(--rv-learn-bg);
-  color: var(--rv-learn);
-}
-.rv-legend-pill.is-fresh {
-  background: var(--bg-subtle);
-  color: var(--text-2);
-}
-.rv-calib {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-  line-height: 20px;
-}
-.rv-calib-head {
-  font-weight: 500;
-}
-.rv-calib-nums {
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-.rv-calib-msg {
+.rv-summary-sub {
   margin-top: 4px;
-}
-
-/* "Next steps": big described rows, the whole row clickable. */
-.rv-steps {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  margin: 0 -24px;
-}
-.rv-step {
-  flex-grow: 1;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  min-height: 72px;
-  padding: 12px 16px 12px 24px;
-  text-align: left;
-  border-top: 1px solid var(--border);
-  transition: background 0.12s var(--ease);
-}
-.rv-step:hover {
-  background: var(--bg-hover);
-}
-.rv-step-icon {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--bg-subtle);
-  color: var(--text-2);
-}
-.rv-step:first-child .rv-step-icon {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.rv-step-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.rv-step-title {
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-}
-.rv-step-desc {
   font-size: 14px;
-  line-height: 20px;
   color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
-.rv-step-chev {
-  flex: none;
-  color: var(--text-2);
+.rv-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
 }
-
 .rv-section {
-  margin-top: 40px;
+  margin-top: 36px;
 }
 .rv-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
 }
 .rv-section-head .rv-section-title {
   margin: 0;
 }
+.rv-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.rv-chev-down {
+  transition: transform var(--dur) var(--ease);
+}
+.rv-chev-down.is-open {
+  transform: rotate(180deg);
+}
+.rv-calib-nums {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.rv-calib-msg {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-3);
+}
+
 .rv-classes,
 .rv-ideas {
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-l);
-  overflow: hidden;
+  border-top: 1px solid var(--border);
 }
 .rv-class-row {
   display: grid;
-  grid-template-columns: 24px minmax(100px, 180px) minmax(80px, 1fr) 44px minmax(248px, max-content);
+  grid-template-columns: 16px minmax(0, 1fr) 120px 40px;
+  grid-template-areas: 'mark name bar pct' '. meta bar pct';
   align-items: center;
-  column-gap: 16px;
-  min-height: 56px;
-  padding: 8px 20px;
+  column-gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 20px;
 }
-.rv-class-row + .rv-class-row,
-.rv-idea + .rv-idea {
-  border-top: 1px solid var(--border);
+.rv-class-row > .rv-mark {
+  grid-area: mark;
+}
+.rv-class-row > .rv-class-name {
+  grid-area: name;
+}
+.rv-class-row > .rv-bar {
+  grid-area: bar;
+}
+.rv-class-row > .rv-pct {
+  grid-area: pct;
+}
+.rv-class-row > .rv-class-meta {
+  grid-area: meta;
 }
 .rv-class-name {
-  min-width: 0;
-  font-size: 14px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rv-bar.is-wide {
-  width: auto;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--rv-track);
+  width: 120px;
 }
-.rv-class-row > .rv-pct {
+.rv-class-row .rv-pct {
   text-align: right;
-  font-size: 14px;
+  font-size: 13px;
+  color: var(--text-2);
 }
 .rv-class-meta {
   font-size: 13px;
   line-height: 18px;
-  color: var(--text-2);
-  text-align: right;
+  color: var(--text-3);
 }
-/* Quizlet's term | definition rows. */
+
 .rv-idea {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1.6fr) 36px;
-  column-gap: 20px;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 28px;
   align-items: start;
-  padding: 16px 12px 16px 20px;
+  column-gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rv-idea-term,
+.md.rv-idea-def {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .rv-idea-name {
   font-size: 14px;
-  line-height: 20px;
+  line-height: 22px;
   font-weight: 500;
   color: var(--text);
 }
 .rv-idea-said {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 13px;
   line-height: 18px;
-  color: var(--text);
-}
-.rv-idea-said span {
-  font-weight: 500;
   color: var(--danger);
-  margin-right: 4px;
 }
-.rv-idea-rule {
-  align-self: stretch;
-  background: var(--border);
+.rv-idea-said > span {
+  color: var(--text-3);
 }
 .md.rv-idea-def {
   font-size: 14px;
-  line-height: 20px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.md.rv-idea-def p {
-  margin: 0;
-}
-.rv-idea-open {
-  margin-top: -8px;
-}
-.rv-none {
-  font-size: 14px;
-  line-height: 20px;
+  line-height: 22px;
   color: var(--text-2);
 }
+.rv-idea-open {
+  color: var(--text-3);
+  margin-top: -3px;
+}
 .rv-summary-notes {
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   margin-top: 32px;
   font-size: 13px;
   line-height: 18px;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
 /* ------------------------------------------------------------ narrow */
-/* By the room Review has, not the window's: the assistant panel and drawer take some. */
-@container review (max-width: 880px) {
+
+/* The list and the options stack; a bottom bar stands in for Start while it's out of view. */
+@container review (max-width: 820px) {
   .rv-setup {
     grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
   }
   .rv-panel {
     position: static;
+  }
+  .rv-option.is-stacked {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0;
+    min-height: 52px;
+  }
+  .seg.rv-length {
+    flex: 0 1 340px;
+  }
+  .rv-start {
+    align-self: flex-end;
+    width: auto;
+    min-width: 140px;
   }
   .rv-startbar {
     position: sticky;
@@ -1674,11 +1234,11 @@ kbd.rv-key {
     display: flex;
     align-items: center;
     gap: 16px;
-    height: 64px;
-    margin: 0 -24px -64px;
-    padding: 0 24px;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
+    height: 56px;
+    margin: 24px calc(-1 * var(--rv-gutter)) -64px;
+    padding: 0 var(--rv-gutter);
+    background: var(--bg-canvas);
+    box-shadow: 0 -1px 0 var(--border);
   }
   .rv-startbar-label {
     flex: 1;
@@ -1689,44 +1249,40 @@ kbd.rv-key {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The setup card is full width here, so the three buckets sit side by side instead of a sparse list. */
-  .rv-buckets {
-    flex-direction: row;
-    column-gap: 16px;
-  }
-  .rv-bucket {
-    flex: 1 1 0;
-    min-width: 0;
-  }
 }
-@container review (max-width: 720px) {
-  .rv-summary-grid {
-    grid-template-columns: minmax(0, 1fr);
+@container review (max-width: 640px) {
+  .rv-setup-column {
+    --rv-gutter: 20px;
+  }
+  .rv-summary-column {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .rv-tree-head,
+  .rv-row {
+    grid-template-columns: minmax(0, 1fr) 40px 40px 60px 32px;
+  }
+  .rv-mastery {
+    display: none;
+  }
+  .rv-column {
+    padding: 24px 16px 48px;
   }
   .rv-card {
-    padding: 20px 24px 24px;
+    padding: 20px;
   }
-  .rv-choices {
+  .rv-choices,
+  .rv-grades {
     grid-template-columns: minmax(0, 1fr);
   }
-  .rv-sheet {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .rv-sheet-icon {
-    display: none;
-  }
   .rv-class-row {
-    grid-template-columns: 24px minmax(0, 1fr) 120px 44px;
+    grid-template-columns: 16px minmax(0, 1fr) 80px 40px;
   }
-  .rv-class-meta {
-    grid-column: 2 / -1;
-    text-align: left;
+  .rv-bar.is-wide {
+    width: 80px;
   }
   .rv-idea {
-    grid-template-columns: minmax(0, 1fr) 36px;
-  }
-  .rv-idea-rule {
-    display: none;
+    grid-template-columns: minmax(0, 1fr) 28px;
   }
   .md.rv-idea-def {
     grid-column: 1;
@@ -1737,81 +1293,9 @@ kbd.rv-key {
     grid-column: 2;
   }
 }
-@container review (max-width: 560px) {
-  .rv-tree-head,
-  .rv-row {
-    grid-template-columns: minmax(0, 1fr) 40px 40px 64px 36px;
-  }
-  .rv-mastery {
-    display: none;
-  }
-  .rv-code {
-    display: none;
-  }
-  .rv-buckets {
-    flex-direction: column;
-  }
-  .rv-bucket {
-    flex: none;
-  }
-  .rv-row.is-chapter .rv-cell-main,
-  .rv-row.is-note.is-flat .rv-cell-main,
-  .rv-row.is-note .rv-cell-main {
-    padding-left: 52px;
-  }
-  .rv-topbar-label {
-    display: none;
-  }
-  .rv-sheet {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 16px;
-  }
-  .btn.rv-next {
-    width: 100%;
-  }
-  .rv-grades {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-/* A short window: the answered card gives up its spare height, so more of it shows above the sheet. */
-@media (max-height: 800px) {
-  .rv-card.is-feedback {
-    min-height: 0;
-    padding-top: 16px;
-    padding-bottom: 20px;
-  }
-  .rv-card.is-feedback .md.rv-prompt {
-    margin: 12px 0 16px;
-  }
-  .rv-card.is-feedback .rv-answer-head {
-    min-height: 20px;
-    margin-bottom: 8px;
-  }
-  .rv-card.is-feedback .rv-choice {
-    min-height: 48px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-  .rv-sheet {
-    padding-top: 16px;
-    padding-bottom: 16px;
-  }
-  .rv-sheet-icon {
-    width: 40px;
-    height: 40px;
-  }
-  .rv-sheet-icon svg {
-    width: 24px;
-    height: 24px;
-  }
-  .rv-verdict {
-    min-height: 40px;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .rv-feedback,
-  .rv-card,
-  .rv-seg {
+  .rv-card {
     animation: fade-in 0.15s linear;
   }
 }

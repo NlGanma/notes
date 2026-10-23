@@ -1,16 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
 import { useAI } from '../../state/ai';
 import { dueNotes, useReview } from '../../state/review';
-import { buildReviewTree, isReviewable, selectionLabel } from '../../lib/review/tree';
-import { notReviewable } from '../../lib/review/concepts';
+import { buildReviewTree, isReviewable, selectionLabel, unreadLabels } from '../../lib/review/tree';
 import { dayLabel } from '../../lib/review/session';
 import { ReviewPicker } from './ReviewPicker';
 import { ReviewSession } from './ReviewSession';
 import { ReviewSummary } from './ReviewSummary';
-import { countIdeas, Ring, Switch } from './parts';
+import { countIdeas, Switch } from './parts';
 import { cx, plural } from '../../lib/util';
 
 const LENGTHS: { n: number; label: string }[] = [
@@ -44,8 +43,8 @@ export function ReviewView({ preset }: { preset?: string[] }) {
 }
 
 /**
- * The setup page: Anki's deck list on the left (pick notes, with New / Due / Mastery per row), and on the
- * right Quizlet's "Set up your test" card — the selection's progress, the options as described rows, Start.
+ * The setup page: Anki's deck list (pick notes, with New / Due / Mastery per row) and, beside it, a calm
+ * column with what's picked, the length, two switches and Start.
  */
 function ReviewSetup({ loaded }: { loaded: boolean }) {
   const notes = useVault((s) => s.notes);
@@ -55,19 +54,20 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const opts = useReview((s) => s.opts);
   const reading = useReview((s) => s.reading);
   const file = useReview((s) => s.file);
-  const online = useAI((s) => s.status === 'online');
+  // As the sidebar's Settings row reads it: online, offline, or still starting.
+  const ai = useAI((s) => (s.status === 'online' ? 'online' : s.status === 'offline' ? 'offline' : 'loading'));
   const tree = useMemo(() => buildReviewTree(notes, folders, folderMeta), [notes, folders, folderMeta]);
   // Picked notes that can still be reviewed (not trashed since).
   const selected = useMemo(() => new Set(selection.filter((id) => notes[id] && isReviewable(notes[id]))), [selection, notes]);
 
-  // What the selection holds: its ideas in Quizlet's three buckets, what's due, and what can't be reviewed.
+  // What the selection holds: its ideas by how far along they are, what's due, and what can't be reviewed.
   const stats = useMemo(() => {
     const picked = [...selected].map((id) => notes[id]).filter(Boolean);
     const counts = countIdeas(picked, file);
     const blocked: { id: string; label: string }[] = [];
     const groups = new Set<string>();
     for (const n of picked) {
-      for (const s of notReviewable(n)) blocked.push({ id: n.meta.id, label: s === n.meta.title ? s : `${n.meta.title} › ${s}` });
+      for (const label of unreadLabels(n)) blocked.push({ id: n.meta.id, label });
       groups.add(tree.find((g) => g.chapters.some((ch) => ch.notes.some((x) => x.meta.id === n.meta.id)))?.key ?? '');
     }
     return { ...counts, blocked, groups: groups.size };
@@ -81,22 +81,43 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
   const dueIds = useMemo(() => (loaded ? dueNotes().ids : []), [notes, file, loaded]);
 
   const set = (ids: Set<string>) => useReview.getState().setSelection([...ids]);
-  // Stacked under the list (a narrow pane), the card's Start can be out of view: a bottom bar stands in for it.
+  // Stacked under the list (a narrow pane), Start can be out of view: a bottom bar stands in for it.
   const startRef = useRef<HTMLButtonElement>(null);
   const [startInView, setStartInView] = useState(true);
   useEffect(() => {
     const el = startRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setStartInView(e.isIntersecting));
+    // Half hidden counts as hidden: the bar stands in until all of Start shows.
+    const io = new IntersectionObserver(([e]) => setStartInView(e.intersectionRatio > 0.99), { threshold: [0, 1] });
     io.observe(el);
     return () => io.disconnect();
-  }, []);
-  // A progress row narrows the selection to the notes with ideas in that bucket (Quizlet: "Select Not studied
-  // or Still learning to start studying that group").
+  }, [tree.length]);
+  // "12 new" in the stats line narrows the selection to the notes with new ideas (and so on), when that
+  // would leave some notes out.
   const narrow = (bucket: 'fresh' | 'learning') => {
     const keep = [...selected].filter((id) => countIdeas([notes[id]], file)[bucket] > 0);
     if (keep.length) set(new Set(keep));
   };
+  const narrowable = (bucket: 'fresh' | 'learning') => {
+    const keep = [...selected].filter((id) => countIdeas([notes[id]], file)[bucket] > 0).length;
+    return keep > 0 && keep < selected.size;
+  };
+  // Each part keeps its words together when the line wraps.
+  const part = (n: number, label: string, bucket?: 'fresh' | 'learning', title?: string) =>
+    n > 0 && (
+      <Fragment key={label}>
+        {' · '}
+        {bucket && narrowable(bucket) ? (
+          <button className="rv-narrow" onClick={() => narrow(bucket)} title={title}>
+            {n} {label}
+          </button>
+        ) : (
+          <span className="rv-stat">
+            {n} {label}
+          </span>
+        )}
+      </Fragment>
+    );
 
   const helper = !selected.size
     ? 'Pick notes to start.'
@@ -105,121 +126,132 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
       : !askable
         ? `You’ve finished these notes for now. Next review ${dayLabel(stats.next)}.`
         : null;
+  const label = selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet';
+  // The column names the classes; the note count starts the stats line under them.
+  const cut = label.lastIndexOf(' · ');
+  const who = selected.size && cut > 0 ? label.slice(0, cut) : label;
+  const start = () => useReview.getState().start([...selected]);
 
   return (
     <div className="screen review-view rv-setup-page">
-      <div className="screen-head">
-        <h1 className="screen-title">Review</h1>
-        <span className="grow" />
-        {dueIds.length > 0 && (
-          <button className="btn is-secondary" onClick={() => set(new Set(dueIds))}>
-            What’s due · {plural(dueIds.length, 'note')}
-          </button>
-        )}
-      </div>
       <div className="screen-scroll">
-        <div className="rv-setup-column">
-          <div className="rv-intro">Quiz yourself on any notes. Questions and answers come only from them.</div>
-          <div className="rv-setup">
-            <ReviewPicker selected={selected} onChange={set} />
-
-            <aside className="rv-panel" aria-label="Set up your review">
-              <div className="rv-panel-label">{selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet'}</div>
-              <h2 className="rv-panel-title">Set up your review</h2>
-
-              <div className="rv-buckets">
-                <button className="rv-bucket" disabled={!stats.fresh || selected.size < 2} onClick={() => narrow('fresh')} title="Review only the notes with ideas not studied yet">
-                  <Ring value={stats.fresh} total={stats.total} tone="fresh">
-                    {selected.size ? stats.fresh : '–'}
-                  </Ring>
-                  <span className="rv-bucket-label">Not studied</span>
-                </button>
-                <button className="rv-bucket" disabled={!stats.learning || selected.size < 2} onClick={() => narrow('learning')} title="Review only the notes with ideas you’re still learning">
-                  <Ring value={stats.learning} total={stats.total} tone="learning">
-                    {selected.size ? stats.learning : '–'}
-                  </Ring>
-                  <span className="rv-bucket-label">Still learning</span>
-                </button>
-                <div className="rv-bucket">
-                  <Ring value={stats.mastered} total={stats.total} tone="mastered">
-                    {selected.size ? stats.mastered : '–'}
-                  </Ring>
-                  <span className="rv-bucket-label">Mastered</span>
-                </div>
-              </div>
-              {selected.size > 0 && (
-                <div className="rv-panel-stats">
-                  {plural(stats.total, 'idea')}
-                  {stats.due > 0 ? ` · ${stats.due} due now` : !askable && stats.total ? ` · next review ${dayLabel(stats.next)}` : ''}
-                  {reading && (
-                    <span className="rv-reading">
-                      {' '}
-                      · <span className="rv-spinner" /> finding more
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="rv-options">
-                <div className="rv-option is-stacked">
-                  <span className="rv-option-text">
-                    <span className="rv-option-label">Length</span>
-                    <span className="rv-option-desc">{opts.length} questions</span>
-                  </span>
-                  <div className="seg rv-length" role="radiogroup" aria-label="Length">
-                    {LENGTHS.map((l) => (
-                      <button key={l.n} role="radio" aria-checked={opts.length === l.n} className={cx(opts.length === l.n && 'is-active')} onClick={() => useReview.getState().setOpts({ length: l.n })}>
-                        {opts.length === l.n && <Check size={18} />}
-                        {l.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <label className={cx('rv-option rv-check', stats.groups < 2 && 'is-off')}>
-                  <span className="rv-option-text">
-                    <span className="rv-option-label">Mix classes</span>
-                    <span className="rv-option-desc">{stats.groups < 2 ? 'Pick notes from two or more classes' : 'Questions from different classes take turns'}</span>
-                  </span>
-                  <Switch checked={opts.mix && stats.groups >= 2} disabled={stats.groups < 2} onChange={(v) => useReview.getState().setOpts({ mix: v })} />
-                </label>
-                <label className="rv-option rv-check">
-                  <span className="rv-option-text">
-                    <span className="rv-option-label">Ask how sure I am</span>
-                    <span className="rv-option-desc">Spot confident mix-ups</span>
-                  </span>
-                  <Switch checked={opts.askConfidence} onChange={(v) => useReview.getState().setOpts({ askConfidence: v })} />
-                </label>
-              </div>
-
-              {stats.blocked.length > 0 && (
-                <div className="rv-warn">
-                  <AlertTriangle size={18} />
-                  <span>
-                    Handwriting in{' '}
-                    {stats.blocked.map((b, i) => (
-                      <Fragment key={i}>
-                        {i === 0 ? '' : i === stats.blocked.length - 1 ? ' and ' : ', '}
-                        <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id)} title="Open this note">
-                          {b.label}
-                        </button>
-                      </Fragment>
-                    ))}{' '}
-                    isn’t transcribed yet, so it can’t be reviewed. Open the note and use “Read handwriting”.
-                  </span>
-                </div>
-              )}
-
-              {helper && <div className="rv-helper">{helper}</div>}
-              <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={() => useReview.getState().start([...selected])}>
-                Start review
+        <div className={cx('rv-setup-column', !tree.length && 'is-empty')}>
+          <header className="rv-head">
+            <h1 className="rv-title">Review</h1>
+            <span className="grow" />
+            {tree.length > 0 && dueIds.length > 0 && (
+              <button className="btn is-secondary rv-due-btn" onClick={() => set(new Set(dueIds))}>
+                What’s due · {plural(dueIds.length, 'note')}
               </button>
-              {!online && <div className="rv-promise">Your local model is offline — questions are built straight from your notes.</div>}
-            </aside>
-          </div>
-          {!startInView && (
+            )}
+          </header>
+          {tree.length > 0 && loaded && !dueIds.length && <p className="rv-due-none">Nothing due today</p>}
+
+          {!tree.length ? (
+            <div className="rv-empty">
+              <div className="rv-empty-title">Nothing to review yet</div>
+              <div className="rv-empty-sub">Write a few notes first.</div>
+            </div>
+          ) : (
+            <div className="rv-setup">
+              <ReviewPicker selected={selected} onChange={set} />
+
+              <aside className="rv-panel" aria-label="Review options">
+                <div className={cx('rv-panel-label', !selected.size && 'is-none')} title={who}>
+                  {who}
+                </div>
+                {selected.size > 0 && (
+                  <div className="rv-panel-stats">
+                    <span className="rv-stat">{plural(selected.size, 'note')}</span>
+                    {' · '}
+                    <span className="rv-stat">{plural(stats.total, 'idea')}</span>
+                    {part(stats.fresh, 'new', 'fresh', 'Pick only the notes with new ideas')}
+                    {part(stats.learning, 'learning', 'learning', 'Pick only the notes with ideas you’re still learning')}
+                    {part(stats.mastered, 'mastered')}
+                    {part(stats.due, 'due')}
+                    {reading && (
+                      <span className="rv-reading">
+                        {' · '}
+                        <span className="rv-spinner" /> finding more
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="rv-options">
+                  <div className="rv-option is-stacked">
+                    <span className="rv-option-label">Length</span>
+                    <div className="seg rv-length" role="radiogroup" aria-label="Length">
+                      {LENGTHS.map((l) => (
+                        <button
+                          key={l.n}
+                          role="radio"
+                          aria-checked={opts.length === l.n}
+                          className={cx(opts.length === l.n && 'is-active')}
+                          onClick={() => useReview.getState().setOpts({ length: l.n })}
+                        >
+                          <span>
+                            {l.n} · {l.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label
+                    className={cx('rv-option rv-check', stats.groups < 2 && 'is-off')}
+                    title={stats.groups < 2 ? 'Pick notes from two or more classes' : 'Questions from different classes take turns'}
+                  >
+                    <span className="rv-option-label">Mix classes</span>
+                    <Switch checked={opts.mix && stats.groups >= 2} disabled={stats.groups < 2} onChange={(v) => useReview.getState().setOpts({ mix: v })} />
+                  </label>
+                  <label className="rv-option rv-check" title="Say how sure you are before you answer, to catch confident mix-ups">
+                    <span className="rv-option-label">Ask how sure I am</span>
+                    <Switch checked={opts.askConfidence} onChange={(v) => useReview.getState().setOpts({ askConfidence: v })} />
+                  </label>
+                </div>
+
+                {stats.blocked.length > 0 && (
+                  <div className="rv-warn">
+                    <AlertTriangle size={16} />
+                    <span>
+                      Handwriting in{' '}
+                      {stats.blocked.map((b, i) => (
+                        <Fragment key={i}>
+                          {i === 0 ? '' : i === stats.blocked.length - 1 ? ' and ' : ', '}
+                          <button className="rv-warn-link" onClick={() => useUI.getState().openNote(b.id)} title="Open this note">
+                            {b.label}
+                          </button>
+                        </Fragment>
+                      ))}{' '}
+                      isn’t read yet. Open the note and use “Read handwriting” to review it.
+                    </span>
+                  </div>
+                )}
+
+                {helper && <div className="rv-helper">{helper}</div>}
+                <button ref={startRef} className="btn is-primary rv-start" disabled={!canStart} onClick={start}>
+                  Start review
+                </button>
+                {/* Review works offline: questions are built from the notes and short answers are checked by code. */}
+                {ai !== 'online' && (
+                  <div className="rv-promise">
+                    {ai === 'offline'
+                      ? 'The local AI is offline. Questions come straight from your notes, and you check some answers yourself.'
+                      : 'Starting the local model…'}{' '}
+                    <button className="rv-promise-link" onClick={() => useUI.getState().openSettings('ai')}>
+                      Open settings
+                    </button>
+                  </div>
+                )}
+              </aside>
+            </div>
+          )}
+          {tree.length > 0 && selected.size > 0 && !startInView && (
             <div className="rv-startbar">
-              <span className="rv-startbar-label">{selected.size ? selectionLabel(tree, selected) : 'Nothing picked yet'}</span>
-              <button className="btn is-primary" disabled={!canStart} onClick={() => useReview.getState().start([...selected])}>
+              <span className="rv-startbar-label" title={label}>
+                {label}
+              </span>
+              <button className="btn is-primary" disabled={!canStart} onClick={start}>
                 Start review
               </button>
             </div>
