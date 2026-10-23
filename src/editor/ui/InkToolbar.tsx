@@ -18,6 +18,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { useInkHint, useTools } from '../../state/tools';
+import { useSettings } from '../../state/settings';
 import { BRUSHES, ERASER_SIZES, HIGHLIGHT_COLORS, HIGHLIGHTER_RANGE, INK_COLORS, MARKER_RANGE } from '../../lib/ink/brushes';
 import type { Tool } from '../../lib/ink/types';
 import type { NoteDoc } from '../../lib/vault/types';
@@ -72,6 +73,7 @@ const lineFor = (kind: InkKind, size: number) => (kind === 'highlighter' ? Math.
  */
 export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) {
   const t = useTools();
+  const font = useSettings((s) => s.font);
   const dropHint = useInkHint((s) => s.hint);
   const [pop, setPop] = useState<Pop>(null);
   const [slot, setSlot] = useState<{ kind: InkKind; index: number } | null>(null);
@@ -170,7 +172,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
     const list = kind === 'highlighter' ? t.highlighterColors : t.penColors;
     const now = current(kind).color;
     return (
-      <div className="tb-group tb-swatches" role="group" aria-label="Colour">
+      <div className="tb-group tb-swatches" role="group" aria-label="Color">
         {list.map((c, i) => {
           const on = now === c;
           return (
@@ -184,19 +186,19 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
                   open('slot', e.currentTarget);
                 } else setCurrent(kind, { color: c });
               }}
-              aria-label={`Colour ${i + 1}`}
+              aria-label={`Color ${i + 1}`}
               aria-pressed={on}
             >
               <span style={{ background: c }} />
-              <Tip label={on ? 'Click to change this colour' : 'Colour'} />
+              <Tip label={on ? 'Click to change this color' : 'Color'} />
             </button>
           );
         })}
-        <button className="tb-swatch is-more" onClick={(e) => open('custom', e.currentTarget)} aria-label="More colours">
+        <button className="tb-swatch is-more" onClick={(e) => open('custom', e.currentTarget)} aria-label="More colors">
           <span>
             <Plus size={11} strokeWidth={2.25} />
           </span>
-          <Tip label="More colours" />
+          <Tip label="More colors" />
         </button>
       </div>
     );
@@ -435,7 +437,7 @@ export function InkToolbar({ editor, note }: { editor: Editor; note: NoteDoc }) 
         />
       </Popover>
 
-      <Popover anchor={anchorRef.current} open={pop === 'format'} onClose={close} align="start" className="tool-pop is-format">
+      <Popover anchor={anchorRef.current} open={pop === 'format'} onClose={close} align="start" className={`tool-pop is-format font-${font}`}>
         <FormatPanel editor={editor} onDone={close} more={fold && t.tool === 'text' ? <div className="fmt-more">{textTools}</div> : undefined} />
       </Popover>
 
@@ -469,7 +471,7 @@ export function ColorSection({
             {value === c && <Check size={12} strokeWidth={3} />}
           </button>
         ))}
-        <label className="swatch is-custom" title="Custom colour">
+        <label className="swatch is-custom" title="Custom color">
           <Plus size={14} />
           <input type="color" value={value.startsWith('#') ? value : '#000000'} onChange={(e) => onPick(e.target.value)} />
         </label>

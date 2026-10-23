@@ -171,7 +171,7 @@ export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClo
       <div ref={boxRef} className="inkpad" style={{ left: anchor?.left ?? -9999, top: anchor?.top ?? -9999 }} data-ui>
         <div className="inkpad-head">
           <span className="inkpad-title">Sketch inline</span>
-          <span className="inkpad-sub">Write between the guides — it will sit on the line like text</span>
+          <span className="inkpad-sub">Write between the guides. It sits on the line like text.</span>
         </div>
         <svg
           ref={svgRef}
@@ -200,8 +200,8 @@ export function InkPad({ state, onClose, onPopOut }: { state: InkPadState; onClo
           <button className="icon-btn" onClick={() => setStrokes([])} disabled={!strokes.length} title="Clear">
             <Eraser size={15} />
           </button>
-          <button className={cx('chip', matchText && 'is-on')} onClick={() => setMatchText((v) => !v)} title="Use the colour of the surrounding text">
-            <Palette size={13} /> {matchText ? 'Matches text colour' : 'Marker colour'}
+          <button className={cx('chip', matchText && 'is-on')} onClick={() => setMatchText((v) => !v)} title="Use the color of the surrounding text">
+            <Palette size={13} /> {matchText ? 'Matches text color' : 'Marker color'}
           </button>
           <span className="grow" />
           {typeof pos === 'number' && onPopOut && (

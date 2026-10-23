@@ -24,7 +24,7 @@ import { useAssistant, type Attachment } from '../state/assistant';
 import { TEXT_ACTIONS } from '../lib/ai/prompts';
 import { blockToText, inkTranscriptText } from '../lib/ai/context';
 import { transcribeImage, transcribeStrokes } from '../lib/ai/actions';
-import { PreemptedError } from '../lib/ai/engine';
+import { isTransient, PreemptedError } from '../lib/ai/engine';
 import { captureRegion } from '../lib/ai/vision';
 import { rasterizeStrokes } from '../lib/ink/raster';
 import type { InkTranscript, Stroke, Tool } from '../lib/ink/types';
@@ -46,7 +46,16 @@ const TOOL_KEYS: Record<string, Tool> = {
 const scrollMemory = new Map<string, number>();
 
 /** What a Select box or a block's "Ask about this…" puts in the assistant's composer (see inkAttachments). */
-const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What Nib read', 'Equation']);
+const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What was read', 'Equation']);
+
+/** Why reading handwriting failed, in one plain sentence. The model server's own words stay in Settings → Local AI → Activity. */
+function readFailure(e: unknown): string {
+  const msg = String((e as Error)?.message ?? e);
+  if (isTransient(e)) return 'The local AI didn’t answer. Check that it’s running, then try again.';
+  if (/not found|no such model|pull/i.test(msg)) return 'The model chosen in Settings → Local AI isn’t installed.';
+  if (/time(d)? ?out/i.test(msg)) return 'The local AI took too long. Try again.';
+  return 'Try again, or choose another model in Settings → Local AI.';
+}
 
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -335,7 +344,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         const t = f.node.type.name === 'inkBlock' ? inkTranscriptText(f.node.attrs.transcript as InkTranscript) : blockToText(json);
         if (t?.trim()) texts.push(t);
       }
-      const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What Nib read';
+      const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What was read';
       if (texts.length) attachments.push({ kind: 'text', label: textLabel, text: texts.join('\n\n') });
       // (carried by the chips, so a question sent later from the panel is still about this part of the page)
       const anchor = req.blockIds[req.blockIds.length - 1] ?? req.place;
@@ -388,10 +397,10 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     ) => {
       if (!editor) return;
       if (!visionModel()) {
-        toast.error('No vision model', 'Converting handwriting needs a model that can read images (e.g. qwen2.5vl, gemma3). Set one in Settings → Local AI.');
+        toast.error('No model that can see images', 'Turning handwriting into text needs one. Choose it in Settings → Local AI.');
         return;
       }
-      const id = toast.info(to === 'math' ? 'Reading your math…' : 'Reading your handwriting…', `Using ${visionModel()}`);
+      const id = toast.info(to === 'math' ? 'Reading your math…' : 'Reading your handwriting…');
       try {
         const t = await transcribeStrokes(strokes);
         if (!t) return;
@@ -417,7 +426,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
             .forEach((n) => nodes.push(n));
         }
         if (!nodes.length) {
-          toast.info('Nothing recognised', 'The model could not read that handwriting.');
+          toast.info('Nothing recognized', 'The AI couldn’t read that handwriting.');
           return;
         }
         if (place.removeBlockId) {
@@ -432,7 +441,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         }
         toast.success(to === 'math' ? 'Typeset your math' : 'Converted to text', 'Undo with ⌘Z if it isn’t right.');
       } catch (e) {
-        toast.error('Couldn’t read the handwriting', String((e as Error).message ?? e));
+        toast.error('Couldn’t read the handwriting', readFailure(e));
       } finally {
         void id;
       }
@@ -450,7 +459,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       editorBus.on('ink:transcribe', async ({ editor: ed, blockId }) => {
         if (ed !== editor) return;
         if (!visionModel()) {
-          toast.error('No vision model', 'Reading handwriting needs a model that can see images. Set one in Settings → Local AI.');
+          toast.error('No model that can see images', 'Reading handwriting needs one. Choose it in Settings → Local AI.');
           return;
         }
         try {
@@ -459,7 +468,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
           if (t) setTranscript(editor, blockId, t);
           toast.success('Handwriting read', t?.text?.slice(0, 80));
         } catch (e) {
-          toast.error('Couldn’t read the handwriting', String((e as Error).message ?? e));
+          toast.error('Couldn’t read the handwriting', readFailure(e));
         }
       }),
       editorBus.on('ink:convert', ({ editor: ed, blockId, to }) => {
@@ -527,6 +536,8 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     width: pageWidth,
     transform: `scale(${scale})`,
     ['--line' as string]: `${line}px`,
+    // How far the page is shrunk to fit the window (not the student's zoom): the header's controls undo it.
+    ['--page-fit' as string]: settings.fitWidth ? fit : 1,
   } as React.CSSProperties;
 
   return (

@@ -214,7 +214,7 @@ export function SlashMenu() {
                     }}
                   >
                     <span className="slash-icon">
-                      <Icon size={18} />
+                      <Icon size={16} strokeWidth={1.5} />
                     </span>
                     <span className="slash-title">{item.title}</span>
                     {item.shortcut && <span className="slash-kbd">{item.shortcut}</span>}
