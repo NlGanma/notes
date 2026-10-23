@@ -8,7 +8,7 @@ import { PaperPicker } from '../../components/PaperPicker';
 import { PolishPanel } from '../../components/PolishPanel';
 import { MOD } from '../../lib/platform';
 import { exportNote } from '../../lib/export';
-import { moveNoteTo } from '../../components/FileTree';
+import { moveNoteTo, trashNote } from '../../components/FileTree';
 
 export { PAPERS };
 
@@ -117,7 +117,7 @@ export function MoreMenu({ note, onDone }: { note: NoteDoc; onDone(): void }) {
         className="menu-item is-danger"
         onClick={() => {
           onDone();
-          useVault.getState().trashNote(id);
+          trashNote(id);
         }}
       >
         <Trash2 size={16} />
