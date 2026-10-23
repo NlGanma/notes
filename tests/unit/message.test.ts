@@ -131,7 +131,9 @@ test('the banners point at the boxes and the switch as they really are', () => {
   assert.match(LABELS.partial, /amber box/);
   assert.match(LABELS.partial, /proceed with caution/);
   const off = (grounding: Msg['grounding']) => text(render(msg({ grounding, ownOnly: true, banner: 'noneOff', coverage: 'none' })));
-  assert.match(off('library'), /answer only from your notes.*Only my notes.*Configure chat/);
+  // One switch for both: Ask your notes has no chat settings of its own.
+  assert.match(off('library'), /answer only from your notes.*Settings → Local AI/);
+  assert.ok(!/Configure chat|Only my notes/.test(off('library')));
   assert.match(off('note'), /answer only from your notes.*Settings → Local AI/);
 });
 

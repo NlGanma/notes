@@ -3,7 +3,7 @@
 // and boxed as the AI's own knowledge ("proceed with caution").
 //   node scripts/mock-llm.mjs &   (port 11434)
 //   node tests/e2e/grounding.mjs
-import { launch, shot, BASE, openClassNote } from './lib.mjs';
+import { launch, shot, BASE, openClassNote, showSidebar } from './lib.mjs';
 
 const MOCK = process.env.MOCK_URL || 'http://127.0.0.1:11434';
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
@@ -116,19 +116,28 @@ check(/Not in your notes: who discovered it/i.test(await libBot().locator('.cove
 check((await libBot().locator('.outside-notes').count()) >= 2, '…and answered separately in its own labelled box');
 await shot(page, 'grounding-03-library');
 
-// "Only my notes": say so, make no model call.
-await page.click('.library button[title="Configure chat"]');
-await page.click('.chat-config .strict-toggle');
-await page.click('.chat-config .btn:has-text("Save")');
+// Own knowledge off (its one switch is in Settings → Local AI): say so, make no model call.
+const ownKnowledge = async (on) => {
+  await showSidebar(page);
+  await page.click('.side-settings');
+  await page.click('.settings-nav-item:has-text("Local AI")');
+  const row = page.locator('.set-row.is-switch:has-text("AI’s own knowledge")');
+  if ((await row.locator('input').isChecked()) !== on) await row.click();
+  check((await row.locator('input').isChecked()) === on, `Settings → Local AI turns the AI’s own knowledge ${on ? 'on' : 'off'}`);
+  await page.click('.settings-close');
+  await page.waitForSelector('.settings', { state: 'detached' });
+};
+check(!(await page.locator('.library :is(button[title="Configure chat"], .lib-strict)').count()), 'Ask your notes has no chat settings of its own');
+await ownKnowledge(false);
 before = await stats();
 await libAsk('Who painted the Mona Lisa?');
 after = await stats();
-check(/answer only from your notes/i.test(await libBot().locator('.coverage-banner').textContent().catch(() => '')), 'with own knowledge off, it only says the notes don’t cover it');
+const offBanner = (await libBot().locator('.coverage-banner').textContent().catch(() => '')) ?? '';
+check(/answer only from your notes/i.test(offBanner), 'with own knowledge off, it only says the notes don’t cover it');
+check(/Settings → Local AI/.test(offBanner), '…and says where the switch is');
 check(!(await libBot().locator('.outside-notes').count()), '…shows no own-knowledge answer');
 check(after.chat === before.chat, '…and makes no model call at all');
-await page.click('.library button[title="Configure chat"]');
-await page.click('.chat-config .config-option:not(.strict-toggle)');
-await page.click('.chat-config .btn:has-text("Save")');
+await ownKnowledge(true);
 
 // ---------------------------------------------------------------- partly covered
 await openClassNote(page, 'Spanish II', 'Pretérito');
