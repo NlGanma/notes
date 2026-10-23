@@ -288,6 +288,19 @@ check(await page.locator('.library .art-card').count(), '…and Undo brings it b
     inert: document.querySelector('.lib-main')?.hasAttribute('inert'),
   }));
   check(!back.open && back.composer && !back.inert, `…and Escape closes them, back to the composer (${JSON.stringify(back)})`);
+  // The output floats over the right of the conversation; a click on the part left showing closes it too.
+  await page.click('.library .art-card');
+  await page.waitForSelector('.lib-artifact.is-overlay');
+  await page.waitForTimeout(400); // it slides in
+  const geo = await page.evaluate(() => {
+    const lib = document.querySelector('.library').getBoundingClientRect();
+    const art = document.querySelector('.lib-artifact').getBoundingClientRect();
+    return { lib: Math.round(lib.left), shown: Math.round(art.left - lib.left), right: Math.round(lib.right - art.right) };
+  });
+  await page.mouse.click(geo.lib + 40, 300);
+  await page.waitForTimeout(200);
+  const outside = await page.locator('.lib-artifact').count();
+  check(geo.shown >= 200 && geo.right === 0 && !outside, `…the conversation stays in view beside it, and a click there closes it (${JSON.stringify({ ...geo, open: outside })})`);
   await page.setViewportSize({ width: 1440, height: 940 });
   await page.waitForTimeout(300);
   await page.click('.library .scope-chip');
@@ -346,7 +359,8 @@ await page.click('.polish-all');
 await page.waitForTimeout(1200);
 const after = await page.evaluate((id) => window.__nib.vault.getState().notes[id].meta.folder, loose);
 check(after === '' && !(await page.locator(`${V} .crumb.is-class`).count()), `Apply all leaves the note where it was (folder ${JSON.stringify(after)})`);
-check(await classGroup.locator('.polish-row:has-text("Move to Calculus I")').count(), '…and Polish stays open on the choices it left alone');
+// (With the quick fixes done, the captions go: what's left is one short list.)
+check(await page.locator('.polish .polish-row:has-text("Move to Calculus I")').count(), '…and Polish stays open on the choices it left alone');
 await page.keyboard.press('Escape');
 
 // 9. Settings shows the detected models.
