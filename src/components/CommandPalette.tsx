@@ -23,7 +23,7 @@ import {
   TextSearch,
   Trash2,
 } from 'lucide-react';
-import { listClasses } from '../lib/classes';
+import { HOMEWORK_SUBFOLDER, listClasses } from '../lib/classes';
 import { useUI, goBack, goForward, type View } from '../state/ui';
 import { useVault } from '../state/vault';
 import { keywordSearch } from '../state/library';
@@ -152,7 +152,9 @@ function Palette() {
           run: () => openClass(c.path),
         });
       }
-      for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && fuzzyScore(f.split('/').pop()!, term) > 20).slice(0, 3)) {
+      // A class's Homework folder is reached through Homework and the class page, not as a folder of its own.
+      const isHomeworkDir = (f: string) => f.endsWith(`/${HOMEWORK_SUBFOLDER}`) && folderMeta[f.slice(0, -HOMEWORK_SUBFOLDER.length - 1)]?.kind === 'class';
+      for (const f of folders.filter((f) => folderMeta[f]?.kind !== 'class' && !isHomeworkDir(f) && fuzzyScore(f.split('/').pop()!, term) > 20).slice(0, 3)) {
         out.push({
           id: `folder:${f}`,
           group: 'Folders',
