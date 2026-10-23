@@ -94,7 +94,7 @@ export const Callout = Node.create({
         dom.setAttribute('data-variant', v);
         if (current.attrs.id) dom.setAttribute('data-id', current.attrs.id);
         icon.innerHTML = ICONS[v] ?? ICONS.note;
-        icon.title = FIXED.includes(v) ? LABEL[v] : `${LABEL[v]} — click to change`;
+        icon.title = FIXED.includes(v) ? LABEL[v] : `${LABEL[v]} · click to change`;
       };
       paint();
 

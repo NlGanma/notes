@@ -6,7 +6,7 @@ import { renderMarkdown } from '../../lib/ai/markdown';
 import type { SourceRef } from '../../state/assistant';
 import { useVault } from '../../state/vault';
 import { useUI } from '../../state/ui';
-import { cx } from '../../lib/util';
+import { cx, plural } from '../../lib/util';
 import { sourceTitle } from '../ai/Citations';
 import { toast } from '../common/toast';
 
@@ -147,7 +147,7 @@ export function Flashcards({
           </button>
           {missed.length > 0 && (
             <button className="btn is-primary" onClick={() => restart(missed)}>
-              Practice the {missed.length} you missed
+              Practice the {plural(missed.length, 'tough idea')}
             </button>
           )}
         </div>
