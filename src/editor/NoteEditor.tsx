@@ -18,9 +18,9 @@ import { useVault } from '../state/vault';
 import { LINE_PX, PAGE_WIDTH, useSettings } from '../state/settings';
 import { normalizePaper } from '../lib/paper';
 import { useTools } from '../state/tools';
-import { useUI } from '../state/ui';
+import { forgetNoteHistory, useUI } from '../state/ui';
 import { useAI, visionModel } from '../state/ai';
-import { useAssistant, type Attachment } from '../state/assistant';
+import { friendlyError, useAssistant, type Attachment } from '../state/assistant';
 import { TEXT_ACTIONS } from '../lib/ai/prompts';
 import { blockToText, inkTranscriptText } from '../lib/ai/context';
 import { transcribeImage, transcribeStrokes } from '../lib/ai/actions';
@@ -30,7 +30,8 @@ import { rasterizeStrokes } from '../lib/ink/raster';
 import type { InkTranscript, Stroke, Tool } from '../lib/ink/types';
 import { strokeBounds, translateStroke, unionBounds } from '../lib/ink/geometry';
 import { bytesToBase64, cx, debounce } from '../lib/util';
-import { toast } from '../components/common/toast';
+import { toast, useToasts } from '../components/common/toast';
+import { readLine } from '../lib/displayTitle';
 
 // ⌥S is Select (as the welcome note and Settings → Shortcuts say); ⌥A, once Ask about an area, selects too.
 const TOOL_KEYS: Record<string, Tool> = {
@@ -46,7 +47,22 @@ const TOOL_KEYS: Record<string, Tool> = {
 const scrollMemory = new Map<string, number>();
 
 /** What a Select box or a block's "Ask about this…" puts in the assistant's composer (see inkAttachments). */
-const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What Nib read', 'Equation']);
+const PAGE_PARTS = new Set(['Area of the page', 'Handwriting in that area', 'Text in that area', 'Handwriting', 'What was read', 'Equation']);
+
+/**
+ * Why reading handwriting failed, in the Assistant's words (friendlyError). Where those would be the server's
+ * own message, a plain hint instead; the message stays in Settings → Local AI → Activity.
+ */
+function readFailure(e: unknown): string {
+  const said = friendlyError(e);
+  return said === String((e as Error)?.message ?? e) || /[{}<>]/.test(said) ? 'Try again, or choose another model in Settings → Local AI.' : said;
+}
+
+/** Nothing written at all: one empty line, without even a stroke on it. */
+function isBlank(doc: PMNode): boolean {
+  const first = doc.firstChild;
+  return doc.childCount === 1 && first?.type.name === 'paragraph' && first.content.size === 0 && !inkOf(first).length;
+}
 
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -204,6 +220,39 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     return () => ro.disconnect();
   }, []);
 
+  // A note ⌘N made (or the palette, or a menu's New note) and left with nothing in it goes away, as in Apple Notes:
+  // stray presses don't leave a pile of empty "Note · Oct 23"s behind. Nothing to undo, so no toast.
+  const instant = useRef(false);
+  const offersPaper = useUI((s) => s.paperStrip === noteId);
+  if (offersPaper) instant.current = true;
+  useEffect(() => {
+    if (!active || !editor) return;
+    const titleEl = pageRef.current?.querySelector<HTMLTextAreaElement>('textarea.page-title') ?? null;
+    return () => {
+      if (!instant.current) return;
+      try {
+        if (!isBlank(editor.state.doc) || titleEl?.value.trim()) return;
+      } catch {
+        return;
+      }
+      // After the commit: a view that comes straight back to the note (React's rehearsal remount in development) keeps it.
+      setTimeout(() => {
+        const ui = useUI.getState();
+        const n = useVault.getState().notes[noteId];
+        if ((ui.view.kind === 'note' && ui.view.id === noteId) || !n || n.meta.trashed || n.meta.homework || n.meta.title.trim()) return;
+        instant.current = false;
+        ui.closeTab(noteId);
+        forgetNoteHistory(noteId);
+        void useVault.getState().deleteForever(noteId);
+      }, 0);
+    };
+  }, [active, editor, noteId]);
+
+  // A note put away lets go of the keyboard, so the browser's own undo can never reach it from another page.
+  useEffect(() => {
+    if (!active && editor?.isFocused) (editor.view.dom as HTMLElement).blur();
+  }, [active, editor]);
+
   // Remember scroll position per note.
   useEffect(() => {
     const el = scrollRef.current;
@@ -263,18 +312,27 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       const target = e.target as HTMLElement;
       const inField = !!target.closest?.('input, textarea, select, [contenteditable="true"]');
       if (e.altKey && !e.metaKey && !e.ctrlKey && TOOL_KEYS[e.code]) {
-        if (inField && !target.closest('.ProseMirror')) return;
+        // The title is part of the note: a new note's caret starts there, and ⌥P must still pick up the marker
+        // (and never type a π into the title). ⌥E there stays the accent key, for titles like "Lección 3".
+        const inTitle = !!target.closest?.('.page-title');
+        if (inField && !inTitle && !target.closest('.ProseMirror')) return;
+        if (inTitle && e.key === 'Dead') return;
         e.preventDefault();
         const next = TOOL_KEYS[e.code];
         useTools.getState().setTool(next);
-        if (next === 'text') editor.commands.focus();
-        else (editor.view.dom as HTMLElement).blur();
+        if (next !== 'text') (document.activeElement as HTMLElement | null)?.blur();
+        else if (!inTitle) editor.commands.focus();
         return;
       }
       if (inField || e.metaKey || e.ctrlKey || e.altKey) return;
       if (document.querySelector('.modal-backdrop, .inkpad-backdrop, .popover, .context-menu')) return;
       const t = useTools.getState();
-      if (t.tool === 'text') return;
+      // "Just type" follows the marker and the highlighter only. Under Select, Space is for moving its box, even
+      // when held before the drag starts, so it never types or scrolls.
+      if (t.tool !== 'pen' && t.tool !== 'highlighter') {
+        if (t.tool === 'lasso' && e.key === ' ') e.preventDefault();
+        return;
+      }
       if (inkRef.current?.hasSelection()) return;
       const printable = e.key.length === 1;
       if (!printable && e.key !== 'Enter') return;
@@ -322,7 +380,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         const t = f.node.type.name === 'inkBlock' ? inkTranscriptText(f.node.attrs.transcript as InkTranscript) : blockToText(json);
         if (t?.trim()) texts.push(t);
       }
-      const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What Nib read';
+      const textLabel = isArea ? 'Text in that area' : req.label === 'Equation' ? 'Equation' : 'What was read';
       if (texts.length) attachments.push({ kind: 'text', label: textLabel, text: texts.join('\n\n') });
       // (carried by the chips, so a question sent later from the panel is still about this part of the page)
       const anchor = req.blockIds[req.blockIds.length - 1] ?? req.place;
@@ -375,10 +433,10 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     ) => {
       if (!editor) return;
       if (!visionModel()) {
-        toast.error('No vision model', 'Converting handwriting needs a model that can read images (e.g. qwen2.5vl, gemma3). Set one in Settings → Local AI.');
+        toast.error('No model that can see images', 'Turning handwriting into text needs one. Choose it in Settings → Local AI.');
         return;
       }
-      const id = toast.info(to === 'math' ? 'Reading your math…' : 'Reading your handwriting…', `Using ${visionModel()}`);
+      const id = toast.info(to === 'math' ? 'Reading your math…' : 'Reading your handwriting…');
       try {
         const t = await transcribeStrokes(strokes);
         if (!t) return;
@@ -404,7 +462,7 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
             .forEach((n) => nodes.push(n));
         }
         if (!nodes.length) {
-          toast.info('Nothing recognised', 'The model could not read that handwriting.');
+          toast.info('Nothing recognized', 'The AI couldn’t read that handwriting.');
           return;
         }
         if (place.removeBlockId) {
@@ -419,9 +477,9 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
         }
         toast.success(to === 'math' ? 'Typeset your math' : 'Converted to text', 'Undo with ⌘Z if it isn’t right.');
       } catch (e) {
-        toast.error('Couldn’t read the handwriting', String((e as Error).message ?? e));
+        toast.error('Couldn’t read the handwriting', readFailure(e));
       } finally {
-        void id;
+        useToasts.getState().dismiss(id);
       }
     },
     [editor],
@@ -437,16 +495,19 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
       editorBus.on('ink:transcribe', async ({ editor: ed, blockId }) => {
         if (ed !== editor) return;
         if (!visionModel()) {
-          toast.error('No vision model', 'Reading handwriting needs a model that can see images. Set one in Settings → Local AI.');
+          toast.error('No model that can see images', 'Reading handwriting needs one. Choose it in Settings → Local AI.');
           return;
         }
+        // (The "Reading…" toast goes when the answer comes, so the two never show at once.)
+        const id = toast.info('Reading handwriting…');
         try {
-          toast.info('Reading handwriting…');
           const t = await transcribeStrokes(blockStrokesAbs(blockId));
           if (t) setTranscript(editor, blockId, t);
-          toast.success('Handwriting read', t?.text?.slice(0, 80));
+          toast.success('Handwriting read', t ? readLine(t.text || t.description || '') || undefined : undefined);
         } catch (e) {
-          toast.error('Couldn’t read the handwriting', String((e as Error).message ?? e));
+          toast.error('Couldn’t read the handwriting', readFailure(e));
+        } finally {
+          useToasts.getState().dismiss(id);
         }
       }),
       editorBus.on('ink:convert', ({ editor: ed, blockId, to }) => {
@@ -514,6 +575,8 @@ export function NoteEditor({ noteId, active }: { noteId: string; active: boolean
     width: pageWidth,
     transform: `scale(${scale})`,
     ['--line' as string]: `${line}px`,
+    // How far the page is shrunk to fit the window (not the student's zoom): the header's controls undo it.
+    ['--page-fit' as string]: settings.fitWidth ? fit : 1,
   } as React.CSSProperties;
 
   return (

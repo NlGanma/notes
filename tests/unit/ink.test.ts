@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { eraseFromStroke, pathLength, pointInPolygon, strokeBounds } from '../../src/lib/ink/geometry';
 import { recognizeShape } from '../../src/lib/ink/shapes';
 import type { Stroke } from '../../src/lib/ink/types';
+import seedInk from '../../src/lib/vault/seedInk.json';
+import { displayTitle, readLine } from '../../src/lib/displayTitle';
 import {
   autoscrollSpeed,
   blobGroups,
@@ -333,4 +335,35 @@ test('a sketch dropped into text lands between words with tidy spaces, small eno
   assert.equal(fitInline(14, 4, 21, 9), 1);
   assert.ok(Math.abs(fitInline(40, 4, 21, 9) - 0.5) < 1e-9);
   assert.ok(fitInline(19.5, 6, 21, 9) < 1);
+});
+
+test('the demo notes are written with the felt marker, the only pen', () => {
+  const strokes = Object.values(seedInk as unknown as Record<string, Stroke[]>).flat();
+  const brushes = new Set(strokes.map((s) => s.brush));
+  assert.ok(brushes.has('marker'));
+  assert.deepEqual([...brushes].filter((b) => b !== 'marker' && b !== 'highlighter' && b !== 'mono'), []);
+});
+
+test('a note named by its handwriting shows the math written out, never LaTeX', () => {
+  const named = (text: string) =>
+    displayTitle({
+      version: 1,
+      meta: { id: 'n', title: '', folder: '', tags: [], created: 0, updated: 0, paper: 'ruled' },
+      content: { type: 'doc', content: [{ type: 'inkBlock', attrs: { transcript: { text } } }] },
+    });
+  assert.equal(named('Ex. Find $\\lim_{x \\to 3} \\frac{x^2 - 9}{x - 3}$'), 'Ex. Find lim x→3 (x^2 - 9)/(x - 3)');
+  assert.equal(named('$$v_0^2 = 2 g h$$'), 'v0^2 = 2 g h');
+  assert.equal(named('\\theta = \\pi / 4'), 'θ = π / 4');
+  assert.match(named('$$\n$$'), /^Note · /, 'nothing left: the date name');
+  assert.equal(named('$\\int_0^1 x\\,dx = \\frac{1}{2}$'), '∫₀¹ x dx = 1/2');
+  assert.equal(named('$$\n\\int_a^b f(x)\\,dx\n$$'), '∫_a^b f(x) dx');
+  assert.equal(named('$\\sum_{i=1}^{n} \\frac{1}{i^2}$ converges'), 'Σᵢ₌₁ⁿ 1/i^2 converges');
+  assert.equal(named('Let $x$ be $\\frac{\\pi}{4}$'), 'Let x be π/4');
+});
+
+test('a dollar sign that is money stays as written (pandoc: "$" opens before a non-space, closes after one, not before a digit)', () => {
+  assert.equal(readLine('Tickets cost $5 and $10 each'), 'Tickets cost $5 and $10 each');
+  assert.equal(readLine('Price: $5-$10'), 'Price: $5-$10');
+  assert.equal(readLine('I paid $20, you paid $ 30'), 'I paid $20, you paid $ 30');
+  assert.equal(readLine('\n\nFirst line read\nsecond'), 'First line read');
 });

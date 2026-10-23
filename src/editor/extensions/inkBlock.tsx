@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
-import { useRef, useState } from 'react';
-import { Eye, EyeOff, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Eye, MoreHorizontal, MessageCircleQuestion, Type, Sigma, ScanText, Trash2, FoldVertical } from 'lucide-react';
 import { useTools } from '../../state/tools';
 import type { InkTranscript, Stroke } from '../../lib/ink/types';
 import { deleteBlock, fittedHeight, inkOf, insertParagraphInInk, setInkBlockHeight, trimInkBlock } from '../ink/ops';
@@ -84,6 +84,16 @@ export const InkBlock = Node.create({
   },
 });
 
+/** What was read, with its $…$ math typeset rather than shown as LaTeX. */
+function ReadText({ text }: { text: string }) {
+  const parts = text.split(/(\$\$[^$]+\$\$|\$[^$\n]+\$)/g);
+  return (
+    <div className="ink-transcript-text">
+      {parts.map((p, i) => (p.startsWith('$') ? <span key={i} dangerouslySetInnerHTML={{ __html: renderMath(p.replace(/^\$+|\$+$/g, '')) }} /> : p))}
+    </div>
+  );
+}
+
 function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
   const tool = useTools((s) => s.tool);
   const id = node.attrs.id as string;
@@ -96,6 +106,18 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const moreRef = useRef<HTMLButtonElement>(null);
+  // The ⋯ it hangs from goes away under the marker, highlighter and eraser, and moves when the page scrolls: so does
+  // what was read.
+  useEffect(() => {
+    if (tool !== 'text' && tool !== 'lasso') setShowTranscript(false);
+  }, [tool]);
+  useEffect(() => {
+    const scroller = showTranscript ? rootRef.current?.closest('.note-scroll') : null;
+    if (!scroller) return;
+    const close = () => setShowTranscript(false);
+    scroller.addEventListener('scroll', close, { passive: true, once: true });
+    return () => scroller.removeEventListener('scroll', close);
+  }, [showTranscript]);
 
   const line = () => lineHeightOf(editor.view.dom);
   const item = (icon: React.ReactNode, label: string, run: () => void, hint?: string, danger?: boolean) => (
@@ -163,18 +185,21 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
       data-id={id}
       onPointerDown={onPointerDown}
     >
-      {!ink.length && <div className="ink-block-hint">Handwriting area — pick the marker and write, or click to type</div>}
+      {!ink.length && <div className="ink-block-hint">Handwriting area. Pick the marker and write, or click to type.</div>}
 
       {/* One hover-only handle in the left gutter (Notion's block handle) instead of a column of icons. */}
       <div className="ink-actions" data-ui contentEditable={false}>
         <button
           ref={moreRef}
-          className={cx('ink-action ink-more', menu && 'is-on')}
+          className={cx('ink-action ink-more', (menu || showTranscript) && 'is-on')}
           title="Handwriting actions"
           aria-label="Handwriting actions"
           aria-haspopup="menu"
           aria-expanded={menu}
-          onClick={() => setMenu((v) => !v)}
+          onClick={() => {
+            setShowTranscript(false);
+            setMenu((v) => !v);
+          }}
         >
           <MoreHorizontal size={18} />
         </button>
@@ -185,9 +210,7 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
           {ink.length > 0 && <div className="menu-sep" />}
           {transcript &&
             !transcript.stale &&
-            item(showTranscript ? <EyeOff size={20} /> : <Eye size={20} />, showTranscript ? 'Hide what Nib read' : 'Show what Nib read', () =>
-              setShowTranscript((v) => !v),
-            )}
+            item(<Eye size={20} />, 'Show what was read', () => setShowTranscript(true))}
           {item(<ScanText size={20} />, 'Read handwriting', () => editorBus.emit('ink:transcribe', { editor, blockId: id }))}
           {item(<Type size={20} />, 'Convert to typed text', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'text' }))}
           {item(<Sigma size={20} />, 'Convert to typeset math', () => editorBus.emit('ink:convert', { editor, blockId: id, to: 'math' }))}
@@ -210,14 +233,23 @@ function InkBlockView({ node, editor, selected }: ReactNodeViewProps) {
         </div>
       </Popover>
 
-      {showTranscript && transcript && (
-        <div className="ink-transcript" data-ui contentEditable={false}>
-          <div className="ink-transcript-label">Nib read{transcript.model ? ` · ${transcript.model}` : ''}</div>
-          {transcript.latex ? <div className="ink-transcript-math" dangerouslySetInnerHTML={{ __html: renderMath(transcript.latex, true) }} /> : null}
-          {transcript.text && <div className="ink-transcript-text">{transcript.text}</div>}
-          {transcript.description && <div className="ink-transcript-desc">{transcript.description}</div>}
-        </div>
-      )}
+      {/* Hangs from the ⋯ like its menu, over the handwriting it describes; Esc or a click elsewhere puts it away. */}
+      <Popover
+        anchor={moreRef.current}
+        open={showTranscript && !!transcript}
+        onClose={() => setShowTranscript(false)}
+        align="start"
+        className="ink-transcript"
+      >
+        {transcript && (
+          <>
+            <div className="ink-transcript-label">What was read</div>
+            {transcript.latex ? <div className="ink-transcript-math" dangerouslySetInnerHTML={{ __html: renderMath(transcript.latex, true) }} /> : null}
+            {transcript.text && <ReadText text={transcript.text} />}
+            {transcript.description && <div className="ink-transcript-desc">{transcript.description}</div>}
+          </>
+        )}
+      </Popover>
 
       <div className="ink-resize" data-ui contentEditable={false} onPointerDown={startResize} title="Drag to add or remove lines">
         <span />

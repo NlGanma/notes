@@ -71,6 +71,7 @@
   user-select: none;
 }
 .page-meta {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -80,13 +81,22 @@
   color: var(--text-3);
   white-space: nowrap;
   min-width: 0;
+  /* (Its width follows the page's fit: the paper choice below asks it how much room there is.) */
+  container-type: inline-size;
 }
+/* A folder shortens to a few letters at most, never to a bare "›": the width is only the floor it can shrink to
+   (a short name keeps its own size), the basis is the whole name. */
 .page-meta .crumb-part {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-  flex: 0 1 auto;
+  width: calc(4ch + 12px);
+  flex: 0 1 content;
+}
+/* Short of room (a new note's paper choice beside a long folder name), the folders shorten first; the class only
+   once they are down to their few letters. (Beside a factor this large, the class's share rounds to nothing.) */
+.page-meta .crumb-part:not(:has(.is-class)) {
+  flex-shrink: 1000000;
 }
 /* A long class or folder name shortens; the date never does. */
 .page-meta .crumb {
@@ -150,20 +160,31 @@
   opacity: 0.7;
 }
 
-/* A new note's paper, still open to change: one quiet line under the title. */
+/* The page shrinks to fit a narrow window, but the controls in its header are the app's, not the note's: they
+   keep their size on screen (the homework bar's "answers only from these notes" line above all). */
+.page-header :is(.page-meta, .hw-bar) {
+  zoom: calc(1 / var(--page-fit, 1));
+}
+
+/* A new note's paper, still open to change: at the right end of the date line. */
 .paper-strip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 32px;
-  margin-top: 8px;
+  gap: 8px;
+  height: 24px;
+  margin-left: auto;
+  padding-left: 16px;
+  flex: none;
   font-size: 12px;
   color: var(--text-3);
   transition:
     opacity var(--dur) var(--ease),
     visibility 0s linear var(--dur);
 }
+/* Spent, it fades where it was, out of the line, so a long place gets its room back. */
 .paper-strip.is-spent {
+  position: absolute;
+  right: 0;
   opacity: 0;
   visibility: hidden;
 }
@@ -173,7 +194,7 @@
 .paper-picker.is-strip .paper-opt {
   flex-direction: row;
   gap: 6px;
-  height: 28px;
+  height: 24px;
   padding: 0 8px 0 6px;
   border-radius: var(--radius-s);
   font-size: 12px;
@@ -194,6 +215,23 @@
 }
 .paper-picker.is-strip .paper-opt.is-active .paper-thumb {
   outline: none;
+}
+/* On a narrow page the choice keeps its thumbnails: each still says its name on hover and to a screen reader. */
+@container (max-width: 519px) {
+  .paper-strip-label {
+    display: none;
+  }
+  .paper-picker.is-strip .paper-opt {
+    position: relative;
+    padding: 0 5px;
+  }
+  .paper-picker.is-strip .paper-opt-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 /* --------------------------------------------------------------- surface & editor */
@@ -450,6 +488,8 @@
   transition: opacity 0.12s;
   z-index: 5;
   user-select: none;
+  /* Only the button takes the pointer: a Select box can start in the margin right beside it. */
+  pointer-events: none;
 }
 .math-actions {
   top: 50%;
@@ -471,6 +511,7 @@
   display: none;
 }
 .ink-action {
+  pointer-events: auto;
   width: 24px;
   height: 24px;
   display: grid;
@@ -486,22 +527,13 @@
 .ink-menu {
   width: 264px;
 }
-.ink-transcript {
-  position: absolute;
-  right: 0;
-  top: -6px;
-  transform: translateY(-100%);
+.popover.ink-transcript {
   max-width: 360px;
   min-width: 220px;
-  background: var(--bg);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
   padding: 12px 16px;
-  z-index: 6;
   font-size: 13px;
   line-height: 1.5;
   user-select: text;
-  animation: pop-in 0.15s var(--ease);
 }
 .ink-transcript-label {
   font-size: 12px;
@@ -1122,14 +1154,19 @@
   line-height: 1;
 }
 .fmt-style.is-h1 {
-  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
 }
 .fmt-style.is-h2 {
-  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 500;
+}
+/* …in the note's typeface (the panel carries the page's font class). */
+.font-serif .fmt-style {
+  font-family: var(--font-serif);
+}
+.font-mono .fmt-style:is(.is-h0, .is-h3) {
+  font-family: var(--font-mono);
 }
 .fmt-style.is-h3 {
   font-size: 13px;
@@ -1273,6 +1310,14 @@
 .sel-btn svg {
   color: var(--text-2);
   flex: none;
+}
+/* Ask opens its composer with choices: the same "Ask ▾" as the bubble over selected text. */
+.sel-btn.is-ask {
+  gap: 4px;
+  padding-right: 7px;
+}
+.sel-btn .sel-chev {
+  color: var(--text-3);
 }
 .sel-btn.icon {
   width: 32px;
@@ -1528,13 +1573,14 @@
   line-height: 12px;
   color: var(--text-3);
 }
+/* Rows and glyphs as in every other menu: 32px, 16px icons at a 1.5 stroke. */
 .slash-item {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   column-gap: 8px;
   align-items: center;
   width: calc(100% - 8px);
-  height: 28px;
+  height: 32px;
   margin: 0 4px;
   padding: 0 10px;
   border-radius: 4px;
@@ -1546,8 +1592,8 @@
   background: var(--bg-hover);
 }
 .slash-icon {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   display: grid;
   place-items: center;
   color: var(--text-2);

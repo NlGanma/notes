@@ -2,8 +2,8 @@ import { getStroke } from 'perfect-freehand';
 import { BRUSHES } from './brushes';
 import type { Brush, Stroke } from './types';
 
-/** Unknown brushes (from newer or hand-edited files) draw with the ballpoint. */
-const brushDef = (b: Brush) => BRUSHES[b] ?? BRUSHES.ballpoint;
+/** Unknown brushes (from newer or hand-edited files) draw with the marker. */
+const brushDef = (b: Brush) => BRUSHES[b] ?? BRUSHES.marker;
 
 const pathCache = new WeakMap<Stroke, string>();
 

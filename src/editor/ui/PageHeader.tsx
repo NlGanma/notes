@@ -34,9 +34,10 @@ function blankBody(editor: Editor) {
 }
 
 /**
- * A note made without picking a paper (⌘N, the palette, a menu's New note) offers the choice under its
- * title until something goes in the body: typing, a stroke, a paste or a drop. Then it fades but keeps its
- * room until the note is left, so a pen already writing never sees the page jump.
+ * A note made without picking a paper (⌘N, the palette, a menu's New note) offers the choice at the end of its
+ * date line until something goes in the body: typing, a stroke, a paste or a drop. Then it fades. It sits in a
+ * line that is there anyway, so coming or going it never moves the page, and every new note starts its first
+ * line the same distance under the title.
  */
 function PaperStrip({ note, editor }: { note: NoteDoc; editor: Editor }) {
   const [spent, setSpent] = useState(() => !blankBody(editor));
@@ -54,7 +55,7 @@ function PaperStrip({ note, editor }: { note: NoteDoc; editor: Editor }) {
     useSettings.getState().set({ paper });
   };
   return (
-    // Spent, it is visibility: hidden — out of the tab order and out of reach, but still holding its room.
+    // Spent, it is visibility: hidden: out of the tab order and out of reach.
     <div className={cx('paper-strip', spent && 'is-spent')}>
       <span className="paper-strip-label">Paper</span>
       <PaperPicker value={normalizePaper(note.meta.paper)} onChange={pick} size="s" className="is-strip" />
@@ -166,6 +167,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
           </span>
         )}
         <span className="crumb-date">{editedAt(note.meta.updated)}</span>
+        {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       </div>
       <textarea
         ref={titleRef}
@@ -185,7 +187,6 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
           }
         }}
       />
-      {strip && !note.meta.homework && <PaperStrip note={note} editor={editor} />}
       {note.meta.homework && <HomeworkBar note={note} />}
     </header>
   );

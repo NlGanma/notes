@@ -199,7 +199,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
             .run();
         })}
         <span className="bub-sep" />
-        <button className={cx('bub-btn bub-color', panel === 'color' && 'is-open')} onClick={(e) => toggle('color', e)} title="Colour" aria-haspopup="menu">
+        <button className={cx('bub-btn bub-color', panel === 'color' && 'is-open')} onClick={(e) => toggle('color', e)} title="Color" aria-haspopup="menu">
           <span className="bub-a" style={{ color: st.color || undefined, background: st.bg || undefined }}>
             A
           </span>
@@ -240,7 +240,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
 
       {panel === 'color' && (
         <div className="bubble-panel is-colors" style={{ left: panelLeft }}>
-          <div className="bubble-label">Text colour</div>
+          <div className="bubble-label">Text color</div>
           {TEXT_COLORS.map((c) => (
             <button
               key={c.name}
@@ -254,7 +254,7 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
               {st.color === c.value && <Check size={18} className="bubble-check" />}
             </button>
           ))}
-          <div className="bubble-label">Background colour</div>
+          <div className="bubble-label">Background color</div>
           {BG_COLORS.map((c) => {
             const on = c.value ? st.bg === c.value : !st.highlight;
             return (

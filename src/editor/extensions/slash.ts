@@ -105,7 +105,7 @@ export const SLASH_ITEMS: SlashItem[] = [
     // Tip and Important are colours of one callout now: click its icon to change it (Notion).
     id: 'callout',
     title: 'Callout',
-    hint: 'Make a key idea stand out. Click its icon to change the colour.',
+    hint: 'Make a key idea stand out. Click its icon to change the color.',
     icon: 'Info',
     keywords: 'note box info callout tip important warning exam',
     group: 'Basic blocks',

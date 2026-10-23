@@ -82,7 +82,7 @@ function InkInlineView({ node, editor, selected, getPos }: ReactNodeViewProps) {
     <NodeViewWrapper
       as="span"
       className={cx('ink-inline', selected && 'is-selected')}
-      title={attrs.transcript ? `Sketch · reads as “${attrs.transcript}” — click to edit` : 'Sketch — click to edit'}
+      title={attrs.transcript ? `Sketch · reads as “${attrs.transcript}” · Click to edit` : 'Sketch · Click to edit'}
       onClick={(e: React.MouseEvent) => {
         if (useTools.getState().tool !== 'text') return;
         e.preventDefault();

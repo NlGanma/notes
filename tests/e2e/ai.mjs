@@ -124,6 +124,26 @@ check((await lastUser.locator('.msg-att-img').count()) > 0, 'the selected area (
 check(!(await page.locator(`${V} .snip-ask`).count()), 'and the composer on the page closed');
 await shot(page, 'ai-04-snip-answer');
 
+// 4c. Read handwriting: what was read then opens from the handwriting's ⋯, over it, and Esc puts it away.
+await page.locator(`${V} .tb-tool[data-tool="text"]`).click();
+const readBlock = page.locator(`${V} .ink-block-node`).first();
+const inkMenu = async (item) => {
+  await readBlock.scrollIntoViewIfNeeded();
+  await readBlock.hover();
+  await readBlock.locator('.ink-more').first().click();
+  await page.click(`.ink-menu .menu-item:has-text("${item}")`);
+};
+await inkMenu('Read handwriting');
+await page.waitForSelector('.toast:has-text("Handwriting read")', { timeout: 20000 });
+const readToast = (await page.textContent('.toast:has-text("Handwriting read")')).replace(/\s+/g, ' ').trim();
+check(/^Handwriting read\s*\S/.test(readToast) && !/[$\\]/.test(readToast), `the toast says what was read, its math written out (${readToast})`);
+await inkMenu('Show what was read');
+await page.waitForSelector('.popover.ink-transcript');
+check(/^What was read/.test(await page.textContent('.popover.ink-transcript')), 'what was read opens from the handwriting’s ⋯');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+check(!(await page.locator('.popover.ink-transcript').count()), '…and Esc puts it away');
+
 // 5. Text selection → Ask AI.
 await page.locator(`${V} .tb-tool[data-tool="text"]`).click();
 const para = page.locator(`${V} .ProseMirror p:has-text("The professor said")`);

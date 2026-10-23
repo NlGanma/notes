@@ -1,6 +1,6 @@
 // End-to-end test of the type ↔ handwriting flow, driven with real pointer
 // events. Run against the dev server:  node tests/e2e/ink.mjs
-import { launch, shot, BASE } from './lib.mjs';
+import { launch, shot, BASE, showSidebar } from './lib.mjs';
 import { handPaths, writeText } from './hand.mjs';
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -1238,6 +1238,161 @@ await setAI({ baseUrl: aiUrl });
 await page.waitForTimeout(800);
 check(!(await selAsk.isDisabled()), 'when the model is back, Ask is on again');
 await page.keyboard.press('Escape');
+
+// 18. Keys: ⌥P from a new note's title, Space under Select, ⌘Z away from the text, highlights, a note left empty.
+const noteIds = () => page.evaluate(() => Object.keys(window.__nib.vault.getState().notes));
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForFunction(() => document.activeElement?.classList.contains('page-title'));
+await page.keyboard.press('Alt+p');
+await page.waitForTimeout(150);
+check(
+  (await page.locator(`${V} .tb-tool[data-tool="pen"].is-active`).count()) === 1 &&
+    (await page.locator(`${V} .page-title`).inputValue()) === '' &&
+    !(await page.evaluate(() => document.activeElement?.classList.contains('page-title'))),
+  '⌥P in a new note’s title picks up the marker and types nothing there',
+);
+wrap = await wrapBox();
+const keyIds = await newIds(() => writeText(page, 'ab', wrap.x + 40, wrap.y + R(2), 18));
+await page.keyboard.press('Alt+s');
+await page.waitForTimeout(150);
+const beforeKeys = JSON.stringify(await docJSON());
+await page.keyboard.press('Space');
+await page.keyboard.press('x');
+await page.waitForTimeout(200);
+check(
+  JSON.stringify(await docJSON()) === beforeKeys && (await page.locator(`${V} .tb-tool[data-tool="lasso"].is-active`).count()) === 1,
+  'under Select with nothing selected, Space and letters type nothing and Select stays',
+);
+// The handwriting's ⋯ takes the pointer on its button only: a Select box can start in the margin beside it.
+const marginHits = await page.evaluate(() => {
+  const block = document.querySelector('.note-view:not(.is-hidden) .ink-block-node')?.getBoundingClientRect();
+  const btn = document.querySelector('.note-view:not(.is-hidden) .ink-block-node .ink-more')?.getBoundingClientRect();
+  if (!block || !btn) return null;
+  const at = (x, y) => !!document.elementFromPoint(x, y)?.closest('.ink-actions');
+  return { beside: at(block.left - 4, block.top + 16), above: at(btn.left + 12, block.top + 1), button: at(btn.left + 12, btn.top + 12) };
+});
+check(
+  marginHits && !marginHits.beside && !marginHits.above && marginHits.button,
+  `around the handwriting's ⋯, only the button itself takes the pointer (${JSON.stringify(marginHits)})`,
+);
+const keyBox = await boxAround(keyIds);
+await page.mouse.move(keyBox.x0, keyBox.y0);
+await page.mouse.down();
+await page.mouse.move(keyBox.x1, keyBox.y1, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+const keyWas = byId(await inkNow()).get(keyIds[0]);
+await drag([(keyBox.x0 + keyBox.x1) / 2, (keyBox.y0 + keyBox.y1) / 2], 160, 0);
+const keyMoved = byId(await inkNow()).get(keyIds[0]);
+await page.evaluate(() => document.activeElement?.blur?.());
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+check(
+  keyMoved.pts[0][0] > keyWas.pts[0][0] + 100 && Math.abs(byId(await inkNow()).get(keyIds[0]).pts[0][0] - keyWas.pts[0][0]) < 0.01,
+  `${MOD}+Z with no field focused undoes moving the ink`,
+);
+await page.keyboard.press('Escape');
+
+// 18b. Highlights alone are no writing: selected, they offer Ask but not Text or Math.
+await page.keyboard.press('Alt+h');
+await page.mouse.move(wrap.x + 40, wrap.y + R(5));
+await page.mouse.down();
+await page.mouse.move(wrap.x + 220, wrap.y + R(5), { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+await page.keyboard.press('Alt+s');
+await page.mouse.click(wrap.x + 130, wrap.y + R(5));
+await page.waitForTimeout(250);
+const hlMenu = await page.locator(`${V} .ink-sel-menu .sel-btn`).allTextContents();
+check(
+  (await selCount()) === 1 && hlMenu.some((t) => /Ask/.test(t)) && !hlMenu.some((t) => /^(Text|Math)$/.test(t.trim())),
+  `a selected highlight offers no Text or Math (${hlMenu.map((t) => t.trim()).filter(Boolean).join(', ')})`,
+);
+await page.keyboard.press('Escape');
+
+// 18c. ⌘Z on another page never reaches a note's text behind it.
+const keyNote = await page.evaluate(() => window.__nib.ui.getState().view.id);
+await page.keyboard.press('Alt+t');
+await page.waitForFunction(() => document.activeElement?.classList.contains('ProseMirror'));
+await page.keyboard.type('Extra words');
+await page.waitForTimeout(600);
+await showSidebar(page);
+await page.click('.sidebar .nav-classes-label');
+await page.waitForSelector('.classes-view');
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(700);
+check(
+  await page.evaluate((id) => JSON.stringify(window.__nib.vault.getState().notes[id]?.content).includes('Extra words'), keyNote),
+  `${MOD}+Z on the Classes page leaves the note typed in before untouched`,
+);
+// …nor under a dialog, whether the note's text kept the focus or nothing has it.
+await page.evaluate((id) => window.__nib.ui.getState().openNote(id), keyNote);
+await page.waitForFunction((id) => window.__nib.ui.getState().view.id === id, keyNote);
+await page.waitForTimeout(300);
+await page.evaluate((V) => document.querySelector(`${V} .ProseMirror`).editor.chain().focus('end').run(), V);
+await page.keyboard.type(' Keep these words');
+await page.waitForTimeout(700);
+const bodyText = () => page.evaluate((V) => document.querySelector(`${V} .ProseMirror`).textContent, V);
+for (const blur of [false, true]) {
+  if (blur) await page.evaluate(() => document.activeElement?.blur?.());
+  await page.keyboard.press(`${MOD}+,`);
+  await page.waitForSelector('.modal-backdrop');
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(250);
+  check((await bodyText()).includes('Keep these words'), `${MOD}+Z under Settings leaves the note behind it alone (${blur ? 'nothing focused' : 'its text focused'})`);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached' });
+}
+await page.keyboard.press(`${MOD}+z`);
+await page.waitForTimeout(250);
+check(
+  !(await bodyText()).includes('Keep these words') && (await bodyText()).includes('Extra words'),
+  `…and with the dialog closed, ${MOD}+Z undoes that typing`,
+);
+
+// 18d. A ⌘N note left with nothing in it goes away, tab and all; one with something in it stays.
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForSelector(`${V} .paper-strip`);
+const emptyId = await page.evaluate(() => window.__nib.ui.getState().view.id);
+await showSidebar(page);
+await page.click('.sidebar .nav-classes-label');
+await page.waitForSelector('.classes-view');
+await page.waitForTimeout(300);
+check(
+  !(await noteIds()).includes(emptyId) &&
+    !(await page.evaluate((id) => window.__nib.ui.getState().tabs.includes(id), emptyId)) &&
+    (await noteIds()).includes(keyNote),
+  'a ⌘N note left empty is gone, tab and all, and the one written in stays',
+);
+
+// 18e. On the narrowest page (the Assistant open in a small window) a new note's paper choice still fits its date line
+// beside a class and folder: thumbnails only, and the folder keeps a few letters.
+const dateLine = () =>
+  page.evaluate((V) => {
+    const meta = document.querySelector(`${V} .page-meta`);
+    const parts = [...meta.querySelectorAll('.crumb-part')].map((p) => Math.round(p.querySelector('.crumb').getBoundingClientRect().width));
+    const label = meta.querySelector('.paper-opt-label').getBoundingClientRect().width;
+    const right = meta.querySelector('.paper-strip').getBoundingClientRect().right;
+    return { sw: meta.scrollWidth, cw: meta.clientWidth, parts, label, inColumn: right <= document.querySelector(`${V} .page-title`).getBoundingClientRect().right + 0.5 };
+  }, V);
+await page.evaluate(() => window.__nib.ui.getState().setView({ kind: 'folder', path: 'Spanish II/Unidad 3 — El pasado' }));
+await page.waitForTimeout(300);
+await page.keyboard.press(`${MOD}+n`);
+await page.waitForSelector(`${V} .paper-strip`);
+const wideLine = await dateLine();
+await page.setViewportSize({ width: 860, height: 760 });
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForSelector('.assistant');
+await page.waitForTimeout(500);
+const narrowLine = await dateLine();
+check(wideLine.label > 10 && wideLine.parts.length === 2 && wideLine.sw <= wideLine.cw, `with room, the paper choice is labeled (${JSON.stringify(wideLine)})`);
+check(
+  narrowLine.sw <= narrowLine.cw && narrowLine.inColumn && narrowLine.label <= 1 && narrowLine.parts.length === 2 && narrowLine.parts.every((w) => w >= 20),
+  `on the narrowest page it fits the date line as thumbnails, class and folder still readable (${JSON.stringify(narrowLine)})`,
+);
+await page.keyboard.press(`${MOD}+j`);
+await page.waitForFunction(() => !document.querySelector('.assistant'));
+await page.setViewportSize({ width: 1440, height: 1000 });
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.filter((e) => !e.includes('ERR_CONNECTION_REFUSED')).join('\n') || 'no page errors');
