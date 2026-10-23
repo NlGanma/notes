@@ -4,7 +4,7 @@ import { eraseFromStroke, pathLength, pointInPolygon, strokeBounds } from '../..
 import { recognizeShape } from '../../src/lib/ink/shapes';
 import type { Stroke } from '../../src/lib/ink/types';
 import seedInk from '../../src/lib/vault/seedInk.json';
-import { displayTitle } from '../../src/lib/displayTitle';
+import { displayTitle, readLine } from '../../src/lib/displayTitle';
 import {
   autoscrollSpeed,
   blobGroups,
@@ -355,4 +355,15 @@ test('a note named by its handwriting shows the math written out, never LaTeX', 
   assert.equal(named('$$v_0^2 = 2 g h$$'), 'v0^2 = 2 g h');
   assert.equal(named('\\theta = \\pi / 4'), 'θ = π / 4');
   assert.match(named('$$\n$$'), /^Note · /, 'nothing left: the date name');
+  assert.equal(named('$\\int_0^1 x\\,dx = \\frac{1}{2}$'), '∫₀¹ x dx = 1/2');
+  assert.equal(named('$$\n\\int_a^b f(x)\\,dx\n$$'), '∫_a^b f(x) dx');
+  assert.equal(named('$\\sum_{i=1}^{n} \\frac{1}{i^2}$ converges'), 'Σᵢ₌₁ⁿ 1/i^2 converges');
+  assert.equal(named('Let $x$ be $\\frac{\\pi}{4}$'), 'Let x be π/4');
+});
+
+test('a dollar sign that is money stays as written (pandoc: "$" opens before a non-space, closes after one, not before a digit)', () => {
+  assert.equal(readLine('Tickets cost $5 and $10 each'), 'Tickets cost $5 and $10 each');
+  assert.equal(readLine('Price: $5-$10'), 'Price: $5-$10');
+  assert.equal(readLine('I paid $20, you paid $ 30'), 'I paid $20, you paid $ 30');
+  assert.equal(readLine('\n\nFirst line read\nsecond'), 'First line read');
 });

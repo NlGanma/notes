@@ -32,33 +32,73 @@ function clip(line: string): string {
 
 // LaTeX commands a name shows as their symbol (each entry: the command's name, then the symbol).
 const SYMBOLS: Record<string, string> = Object.fromEntries(
-  'to→ implies⇒ infty∞ cdot· times× pm± le≤ leq≤ ge≥ geq≥ ne≠ approx≈ alphaα betaβ gammaγ deltaδ DeltaΔ thetaθ lambdaλ muμ piπ sigmaσ omegaω'
+  'to→ implies⇒ infty∞ in∈ partial∂ cdot· div÷ times× pm± le≤ leq≤ ge≥ geq≥ ne≠ neq≠ approx≈ alphaα betaβ gammaγ deltaδ DeltaΔ thetaθ lambdaλ muμ piπ sigmaσ omegaω'
     .split(' ')
     .map((e) => [e.slice(0, -1), e.slice(-1)]),
 );
+
+// An operator's limits as small figures, when every character has one: "\int_0^1" reads "∫₀¹".
+const pairs = (from: string, to: string) => Object.fromEntries([...from].map((c, i) => [c, [...to][i]]));
+const SUB = pairs('0123456789+-=()ijknx', '₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ᵢⱼₖₙₓ');
+const SUP = pairs('0123456789+-=()ijknx', '⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁱʲᵏⁿˣ');
+const small = (s: string, map: Record<string, string>) => {
+  const t = s.replace(/\s+/g, '');
+  return [...t].every((c) => c in map) ? [...t].map((c) => map[c]).join('') : null;
+};
+const OPS: Record<string, string> = { sum: 'Σ', int: '∫', prod: 'Π' };
+// What follows _ or ^: a {group}, a command, or one character.
+const ARG = String.raw`\{[^{}]*\}|\\[a-zA-Z]+|[^\s\\{}]`;
+const OPERATOR = new RegExp(String.raw`\\(sum|int|prod|lim|max|min)(?![a-zA-Z])(?:_(${ARG}))?(?:\^(${ARG}))?`, 'g');
+
+/** "x - 3" goes in parentheses before a slash; "1", "2x" or "\pi" don't need them. */
+const group = (s: string) => (/^[^\s+\-−*/=,±·×]+$/.test(s.trim()) ? s.trim() : `(${s.trim()})`);
 
 /** A formula as a name can show it: "\lim_{x \to 3} \frac{x^2 - 9}{x - 3}" reads "lim x→3 (x^2 - 9)/(x - 3)". */
 function plainMath(latex: string): string {
   let t = latex.replace(/\\(?:left|right)(?![a-zA-Z])|\\[,;:! ]/g, ' ').replace(/\\(?:text|mathrm|operatorname|mathbf)\{([^{}]*)\}/g, '$1');
   for (let prev = ''; prev !== t; ) {
     prev = t;
-    t = t.replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)').replace(/\\sqrt\{([^{}]*)\}/g, '√($1)');
+    t = t
+      .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, (_, a: string, b: string) => `${group(a)}/${group(b)}`)
+      .replace(/\\sqrt\{([^{}]*)\}/g, (_, a: string) => `√${group(a)}`);
   }
   return t
-    .replace(/\\(lim|sum|int|prod|max|min)_\{([^{}]*)\}/g, '$1 $2 ')
+    .replace(OPERATOR, (_, op: string, lo?: string, hi?: string) => {
+      const [a, b] = [lo, hi].map((x) => (x ? plainMath(x.replace(/^\{|\}$/g, '')) : ''));
+      if (!OPS[op]) return ` ${op} ${a}${b ? `^${b}` : ''} `;
+      const [sa, sb] = [small(a, SUB), small(b, SUP)];
+      if (sa !== null && sb !== null) return ` ${OPS[op]}${sa}${sb} `;
+      const lim = (x: string) => (x.length > 1 ? `(${x.replace(/\s+/g, '')})` : x);
+      // ("_" is set aside here as \uE000: the ones in "v_0" are dropped below, this one stays.)
+      return ` ${OPS[op]}${a ? `\uE000${lim(a)}` : ''}${b ? `^${lim(b)}` : ''} `;
+    })
     .replace(/_\{([^{}]*)\}/g, '$1')
     .replace(/\^\{([^{}]*)\}/g, (_, e: string) => (e.length > 1 ? `^(${e})` : `^${e}`))
     .replace(/\\([a-zA-Z]+)/g, (_, name: string) => SYMBOLS[name] ?? name)
     .replace(/[{}_]/g, '')
+    .replace(/\uE000/g, '_')
     .replace(/\s*([→⇒])\s*/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** A line of what was read with its LaTeX written out: "$...$", "$$...$$", "\(...\)" or bare commands. */
-function plainLine(line: string): string {
-  const t = line.replace(/\$\$([^$]*)\$\$|\$([^$]+)\$|\\\(([\s\S]*?)\\\)/g, (_, a?: string, b?: string, c?: string) => plainMath(a ?? b ?? c ?? ''));
-  return (/\\[a-zA-Z]/.test(t) ? plainMath(t) : t).replace(/\$/g, '').trim();
+/**
+ * What was read with its LaTeX written out: "$$…$$", "\[…\]", "\(…\)", bare commands, and "$…$" by pandoc's
+ * rule (it opens before a non-space and closes after one, never right before a digit), so "$5 and $10" stays money.
+ */
+function plainLines(text: string): string[] {
+  const t = text.replace(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/g, (_, a?: string, b?: string, c?: string) =>
+    plainMath(a ?? b ?? c ?? ''),
+  );
+  return t.split('\n').map((line) => {
+    const l = line.replace(/\$\$/g, '').replace(/\$(?=[^\s$])([^$]*?[^\s$])\$(?!\d)/g, (_, m: string) => plainMath(m));
+    return (/\\[a-zA-Z]/.test(l) ? plainMath(l) : l).trim();
+  });
+}
+
+/** The first line of what was read, as a name or a toast shows it. */
+export function readLine(text: string): string {
+  return clip(plainLines(text).find(Boolean) ?? '');
 }
 
 function inlineText(nodes: JSONContent[] | undefined): string {
@@ -94,7 +134,7 @@ function firstInkLine(blocks: JSONContent[] | undefined): string | null {
     if (b.type === 'inkBlock') {
       const t = b.attrs?.transcript as { text?: string; description?: string } | null | undefined;
       // (its math written out, so "$\\lim_{x \\to 3}$" never shows up in a tab)
-      const line = (t?.text || t?.description || '').split('\n').map(plainLine).find(Boolean);
+      const line = readLine(t?.text || t?.description || '');
       if (line) return line;
     } else if (b.content) {
       const inner = firstInkLine(b.content);
@@ -120,7 +160,7 @@ export function displayTitle(note: NoteDoc): string {
   const title = note.meta.title.trim();
   // New homework starts with a "My work" heading; that is the page's scaffolding, not its name.
   const skip = note.meta.homework ? (l: string) => l === 'My work' : () => false;
-  const name = title ? title : clip(firstTypedLine(note.content.content, skip) ?? firstInkLine(note.content.content) ?? '') || dateTitle(note);
+  const name = title || clip(firstTypedLine(note.content.content, skip) ?? '') || firstInkLine(note.content.content) || dateTitle(note);
   memo.set(note, name);
   return name;
 }
