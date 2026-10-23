@@ -11,28 +11,20 @@ import {
   Check,
   ChevronDown,
   Code,
-  Heading1,
-  Heading2,
-  Heading3,
   Italic,
   Languages,
   Lightbulb,
   Link2,
-  List,
-  ListChecks,
-  ListOrdered,
   MessageCircleQuestion,
   PenLine,
-  Pilcrow,
-  Quote,
   Radical,
-  SquareCode,
+  Sprout,
   Strikethrough,
   Underline,
 } from 'lucide-react';
 import { cx } from '../../lib/util';
 import { MOD } from '../../lib/platform';
-import { BG_COLORS, BLOCK_LABEL, TEXT_COLORS, currentBlockKind, turnInto, type BlockKind } from './palette';
+import { BG_COLORS, TEXT_COLORS } from './palette';
 
 export interface AskTextRequest {
   text: string;
@@ -44,30 +36,18 @@ export interface AskTextRequest {
 
 const AI_ACTIONS: { id: AskTextRequest['action']; label: string; icon: typeof MessageCircleQuestion }[] = [
   { id: 'explain', label: 'Explain this', icon: Lightbulb },
-  { id: 'simplify', label: 'Explain like I’m new to it', icon: MessageCircleQuestion },
+  { id: 'simplify', label: 'Explain like I’m new to it', icon: Sprout },
   { id: 'example', label: 'Give an example', icon: BookOpenText },
   { id: 'define', label: 'Define key terms', icon: Baseline },
   { id: 'rewrite', label: 'Tidy up the wording', icon: PenLine },
   { id: 'translate', label: 'Translate', icon: Languages },
 ];
 
-const BLOCK_ICONS: Record<BlockKind, ReactNode> = {
-  paragraph: <Pilcrow size={20} />,
-  h1: <Heading1 size={20} />,
-  h2: <Heading2 size={20} />,
-  h3: <Heading3 size={20} />,
-  bulletList: <List size={20} />,
-  orderedList: <ListOrdered size={20} />,
-  taskList: <ListChecks size={20} />,
-  blockquote: <Quote size={20} />,
-  codeBlock: <SquareCode size={20} />,
-};
-
-type Panel = null | 'ai' | 'turn' | 'color' | 'link';
+type Panel = null | 'ai' | 'color' | 'link';
 
 /**
- * Floating bar for a text selection, in Notion's order: Ask | Text ▾ | Link | B I U S code math | A ▾.
- * Ask looks like every other button.
+ * Floating bar for a text selection: Ask | Link | B I U S code math | A ▾. Ask looks like every other button.
+ * The paragraph style isn't here: it is the tool bar's Aa (and the slash menu).
  */
 export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTextRequest): void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -99,7 +79,6 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
         highlight: e.isActive('highlight'),
         color: (e.getAttributes('textStyle').color as string | undefined) ?? '',
         bg: (e.getAttributes('highlight').color as string | undefined) ?? '',
-        kind: currentBlockKind(e),
       };
     },
   });
@@ -194,11 +173,6 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
           <ChevronDown size={12} />
         </button>
         <span className="bub-sep" />
-        <button className={cx('bub-btn', panel === 'turn' && 'is-open')} onClick={(e) => toggle('turn', e)} aria-haspopup="menu" title="Turn into">
-          {BLOCK_LABEL[st.kind]}
-          <ChevronDown size={12} />
-        </button>
-        <span className="bub-sep" />
         <button
           className={cx('bub-btn', (st.link || panel === 'link') && 'is-open', st.link && 'is-on')}
           onClick={(e) => {
@@ -261,26 +235,6 @@ export function BubbleMenu({ editor, onAsk }: { editor: Editor; onAsk(req: AskTe
           >
             <input name="q" placeholder="Ask anything about the selection…" autoFocus onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()} />
           </form>
-        </div>
-      )}
-
-      {panel === 'turn' && (
-        <div className="bubble-panel is-turn" style={{ left: panelLeft }}>
-          <div className="bubble-label">Turn into</div>
-          {(Object.keys(BLOCK_LABEL) as BlockKind[]).map((k) => (
-            <button
-              key={k}
-              className="menu-item"
-              onClick={() => {
-                setPanel(null);
-                turnInto(editor, k);
-              }}
-            >
-              {BLOCK_ICONS[k]}
-              <span className="menu-label">{BLOCK_LABEL[k]}</span>
-              {st.kind === k && <Check size={18} className="bubble-check" />}
-            </button>
-          ))}
         </div>
       )}
 

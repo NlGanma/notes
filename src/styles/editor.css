@@ -1846,9 +1846,6 @@
 .bubble-panel.is-ask {
   width: 300px;
 }
-.bubble-panel.is-turn {
-  width: 240px;
-}
 .bubble-panel.is-colors {
   width: 240px;
   max-height: 360px;
