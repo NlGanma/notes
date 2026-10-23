@@ -56,14 +56,28 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
   const filing = suggestions.filter((s) => s.id === 'class');
   const quick = suggestions.filter((s) => !s.ai && s.id !== 'class');
   const smart = suggestions.filter((s) => s.ai);
-  // An applied fix usually drops out of the list on its own; count what's still on offer.
-  const left = suggestions.filter((s) => !done.includes(s.id)).length;
+  const row = (s: Suggestion) => <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />;
+  const applyAll = quick.length > 1 && (
+    <button
+      className="btn is-ghost is-small polish-all"
+      disabled={!!busy || quick.every((s) => done.includes(s.id))}
+      onClick={async () => {
+        for (const s of quick) if (!done.includes(s.id)) await apply(s);
+        // Filing and the AI's suggestions are left for the student to choose: the sheet stays while any are.
+        if ([...filing, ...smart].every((s) => done.includes(s.id))) onDone();
+      }}
+    >
+      Apply all
+    </button>
+  );
+  // Captions only when Apply all has to say which rows it covers; otherwise one short list.
+  const grouped = !!applyAll && filing.length + smart.length > 0;
 
   return (
     <div className="polish">
       <div className="polish-head">
         <span className="polish-title">Polish</span>
-        {left > 0 && <span className="badge-count">{left}</span>}
+        {!grouped && applyAll}
       </div>
       {!suggestions.length && (
         <div className="polish-empty">
@@ -71,57 +85,39 @@ export function PolishPanel({ noteId, onDone }: { noteId: string; onDone(): void
           Nothing to tidy up.
         </div>
       )}
-      {filing.length > 0 && (
-        <div className="polish-group">
-          <div className="polish-group-label">Class</div>
-          {filing.map((s) => (
-            <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
-          ))}
-        </div>
-      )}
-      {quick.length > 0 && (
-        <div className="polish-group">
-          <div className="polish-group-label">
-            Quick fixes
-            {quick.length > 1 && (
-              <button
-                className="btn is-ghost is-small polish-all"
-                disabled={!!busy || quick.every((s) => done.includes(s.id))}
-                onClick={async () => {
-                  for (const s of quick) if (!done.includes(s.id)) await apply(s);
-                  // Filing and the AI's suggestions are left for the student to choose: the sheet stays while any are.
-                  if ([...filing, ...smart].every((s) => done.includes(s.id))) onDone();
-                }}
-              >
-                Apply all
-              </button>
-            )}
+      {grouped ? (
+        <>
+          {filing.length > 0 && (
+            <div className="polish-group">
+              <div className="polish-group-label">Class</div>
+              {filing.map(row)}
+            </div>
+          )}
+          <div className="polish-group">
+            <div className="polish-group-label">
+              Quick fixes
+              {applyAll}
+            </div>
+            {quick.map(row)}
           </div>
-          {quick.map((s) => (
-            <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
-          ))}
+          {smart.length > 0 && (
+            <div className="polish-group">
+              <div className="polish-group-label">With the local AI</div>
+              {smart.map(row)}
+            </div>
+          )}
+        </>
+      ) : (
+        suggestions.length > 0 && <div className="polish-group">{[...filing, ...quick, ...smart].map(row)}</div>
+      )}
+      {!online && (
+        <div className="polish-foot">
+          More suggestions, like reading handwriting, need the local AI.
+          <button className="polish-foot-link" onClick={() => (onDone(), useUI.getState().openSettings('ai'))}>
+            Open settings
+          </button>
         </div>
       )}
-      {smart.length > 0 && (
-        <div className="polish-group">
-          <div className="polish-group-label">With the local AI</div>
-          {smart.map((s) => (
-            <Row key={s.id} s={s} busy={busy === s.id} done={done.includes(s.id)} onApply={() => apply(s)} />
-          ))}
-        </div>
-      )}
-      <div className="polish-foot">
-        {online ? (
-          'Undo any edit with ⌘Z.'
-        ) : (
-          <>
-            More suggestions, like reading handwriting, need the local AI.
-            <button className="polish-foot-link" onClick={() => (onDone(), useUI.getState().openSettings('ai'))}>
-              Open settings
-            </button>
-          </>
-        )}
-      </div>
     </div>
   );
 }
@@ -132,7 +128,7 @@ function Row({ s, busy, done, onApply }: { s: Suggestion; busy: boolean; done: b
       <span className="polish-icon">{ICONS[s.icon]}</span>
       <div className="polish-text">
         <div className="polish-row-title">{s.title}</div>
-        <div className="polish-row-detail">{s.detail}</div>
+        {s.detail && <div className="polish-row-detail">{s.detail}</div>}
       </div>
       <button className="btn is-secondary is-small" disabled={busy || done} onClick={onApply}>
         {busy ? <Loader2 size={16} className="spin" /> : done ? <Check size={16} /> : s.action}

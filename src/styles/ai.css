@@ -1170,6 +1170,9 @@
 .polish-all {
   margin-right: -2px;
 }
+.polish-head .polish-all {
+  margin: -4px -8px -4px auto;
+}
 .polish-row {
   display: flex;
   align-items: center;
