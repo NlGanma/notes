@@ -102,7 +102,7 @@ export function ReviewPicker({ selected, onChange }: { selected: Set<string>; on
         <div className="rv-tree-head">
           <span className="rv-cell-main">
             <Box state={checkOf(allIds, selected)} label="Review all notes" onToggle={() => toggle(allIds)} />
-            <span>Notes</span>
+            <span>All notes</span>
           </span>
           <span className="rv-num">New</span>
           <span className="rv-num">Due</span>
