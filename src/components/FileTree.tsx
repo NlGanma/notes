@@ -23,7 +23,6 @@ import { classForFolder, HOMEWORK_SUBFOLDER } from '../lib/classes';
 import { displayTitle } from '../lib/displayTitle';
 import type { NoteDoc } from '../lib/vault/types';
 import { bridge } from '../lib/platform';
-import { plural } from '../lib/util';
 
 /*
  * The menus for a note, a folder and a class: the same items wherever they open (a row's ⋯, a
@@ -107,7 +106,7 @@ export function folderMenu(path: string): MenuItem[] {
       run: async () => {
         const ok = await confirmDialog({
           title: `Delete ${short(name)}?`,
-          message: count ? `Its ${plural(count, 'note')} move to Trash.` : 'The folder is empty.',
+          message: count === 1 ? 'Its note moves to Trash.' : count ? `Its ${count} notes move to Trash.` : 'There are no notes in it.',
           confirm: 'Delete folder',
           danger: true,
         });

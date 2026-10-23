@@ -8,6 +8,7 @@ import { useUI } from '../../state/ui';
 import { cx } from '../../lib/util';
 import { classForFolder, classInfo, HOMEWORK_SUBFOLDER, themeVars } from '../../lib/classes';
 import { HomeworkBar } from './HomeworkBar';
+import { displayTitle, isDateTitle } from '../../lib/displayTitle';
 
 
 /**
@@ -93,7 +94,7 @@ export function PageHeader({ note, editor }: { note: NoteDoc; editor: Editor }) 
       className="page-title"
       value={title}
       rows={1}
-      placeholder="Untitled"
+      placeholder={isDateTitle(note) ? displayTitle(note) : 'Untitled'}
       spellCheck={false}
       onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
       onBlur={commitTitle}
