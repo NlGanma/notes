@@ -103,7 +103,7 @@ export function ReviewSummary() {
               </button>
               {missedNotes.length > 0 && (
                 <button className="btn is-secondary" onClick={() => useReview.getState().start(missedNotes)}>
-                  Practise the {plural(learning.length, 'tough idea')}
+                  Practice the {plural(learning.length, 'tough idea')}
                 </button>
               )}
             </div>

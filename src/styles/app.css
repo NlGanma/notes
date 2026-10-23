@@ -649,6 +649,10 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   gap: 8px;
   min-height: 36px;
 }
+/* An icon button at the end of a header lines its glyph up with the column's edge. */
+.list-head-row > .icon-btn:last-child {
+  margin-right: -6px;
+}
 .list-title {
   margin: 0;
   min-width: 0;
@@ -670,33 +674,66 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 }
 .list-caption {
   margin: 0 0 4px;
-  padding: 0 10px;
+  padding: 0;
   font-size: 12px;
   line-height: 24px;
   font-weight: 500;
   color: var(--text-3);
 }
-.list-empty {
-  padding: 56px 0;
+/* An empty page, alike on every page (All notes, Trash, Classes, Homework, Review): one serif line, at most one
+   muted line and one button, the same distance under the page's header. */
+.list-empty,
+.page-empty,
+.rv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 96px;
+  padding: 0 16px;
   text-align: center;
+}
+.list-empty,
+.page-empty-title,
+.rv-empty-title {
+  max-width: 100%;
   font-family: var(--font-display);
   font-size: 22px;
   line-height: 28px;
+  font-weight: 400;
   color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.page-empty-sub,
+.rv-empty-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-3);
+}
+:is(.page-empty, .rv-empty) .btn {
+  margin-top: 16px;
 }
 
-/* A note: its paper, its name over "date  first words", and ⋯ on hover. */
+/*
+ * A note: its paper, its name over "date  first words", and ⋯ on hover. A row's content sits on the column's
+ * edges, with the hover fill bleeding 10px outside them; the ⋯ takes the place of the row's end on hover.
+ */
 .note-row,
 .folder-row {
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 52px;
-  padding: 6px 6px 6px 10px;
+  margin: 0 -10px;
+  padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--text);
   cursor: default;
   position: relative;
+}
+/* Room for the ⋯ (nothing else ends a note row). */
+.note-row {
+  padding-right: 40px;
 }
 .note-row + .note-row::before,
 .folder-row + .folder-row::before {
@@ -781,6 +818,15 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 }
 .row-more {
   opacity: 0;
+}
+:is(.note-row, .folder-row, .hw-row-item) > .row-more {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.folder-row:is(:hover, :focus-within) .folder-row-count {
+  visibility: hidden;
 }
 .note-row:hover .row-more,
 .folder-row:hover .row-more,

@@ -11,15 +11,13 @@
 
 /* ------------------------------------------------------------ setup */
 
+/* Every Review state on the Classes page's column, so its title never jumps between them. */
 .rv-setup-column {
   /* The start bar reaches the column's edges with the same number. */
-  --rv-gutter: 32px;
-  max-width: 1040px;
+  --rv-gutter: 40px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 28px var(--rv-gutter) 64px;
-}
-.rv-setup-column.is-empty {
-  max-width: 760px;
 }
 .rv-head {
   display: flex;
@@ -43,22 +41,6 @@
   line-height: 24px;
   color: var(--text-2);
 }
-.rv-empty {
-  padding: 72px 0;
-  text-align: center;
-}
-.rv-empty-title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 28px;
-  color: var(--text-2);
-}
-.rv-empty-sub {
-  margin-top: 6px;
-  font-size: 14px;
-  color: var(--text-3);
-}
-
 .rv-setup {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 272px;
@@ -226,10 +208,11 @@
   overflow: hidden;
 }
 .rv-mastery > span {
+  /* Ink, like the session's progress line: green would read as praise even when mastery drops. */
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--success);
+  background: var(--text-2);
 }
 .rv-mastery-pct {
   width: 32px;
@@ -344,30 +327,54 @@
   font-size: 13px;
   white-space: nowrap;
 }
-.rv-warn {
-  overflow-wrap: anywhere;
-  display: flex;
-  gap: 8px;
+.rv-unread {
   margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: var(--warning-soft);
-  color: var(--text-2);
   font-size: 13px;
   line-height: 18px;
+  color: var(--text-3);
 }
-.rv-warn > svg {
+.rv-unread-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.rv-unread-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.btn.rv-read-now {
   flex: none;
-  margin-top: 1px;
-  color: var(--warning);
+  margin-right: -10px;
+  font-size: 13px;
 }
-.rv-warn-link {
-  color: var(--link);
+.rv-unread-list {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* One note per line, so a long list never wraps into a ragged run of names and commas. */
+.rv-unread-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: inherit;
+  color: var(--text-2);
   text-align: left;
 }
-.rv-warn-link:hover {
+.rv-unread-link:hover {
+  color: var(--text);
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rv-unread-hint {
+  margin-top: 6px;
 }
 .rv-helper {
   margin-top: 16px;
@@ -375,24 +382,20 @@
   line-height: 18px;
   color: var(--text-3);
 }
+/* The composers' status row (dot, the state, Open settings), here above Start. */
+.composer-status.rv-status {
+  margin: 16px 0 0;
+  padding: 0;
+  box-shadow: none;
+  align-items: flex-start;
+}
+.rv-status .composer-status-dot {
+  margin-top: 6px;
+}
 .rv-start {
   width: 100%;
   height: 36px;
   margin-top: 16px;
-}
-.rv-promise {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-3);
-}
-.rv-promise-link {
-  color: var(--link);
-  font-size: inherit;
-  line-height: inherit;
-}
-.rv-promise-link:hover {
-  text-decoration: underline;
 }
 .rv-startbar {
   display: none;
@@ -415,7 +418,7 @@
   overflow: hidden;
 }
 /* In the main bar: what's being reviewed, "3 / 10", close; the progress runs along the bar's bottom edge. */
-.rv-bar {
+.rv-mainbar {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -925,9 +928,6 @@
   line-height: 20px;
   color: var(--text-2);
 }
-.rv-retry-result.is-right {
-  color: var(--success);
-}
 .rv-retry-result.is-wrong {
   color: var(--danger);
 }
@@ -961,7 +961,7 @@
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--success);
+  background: var(--text-2);
   transition: width 0.6s var(--ease);
 }
 .rv-pct {
@@ -1030,9 +1030,13 @@
 /* ------------------------------------------------------------ summary */
 
 .rv-summary-column {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 28px 32px 64px;
+  padding: 28px 40px 64px;
+}
+/* Its text keeps a reading width, on the column's left edge. */
+.rv-summary-column > * {
+  max-width: 696px;
 }
 .rv-summary-label {
   font-size: 13px;

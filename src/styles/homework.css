@@ -11,7 +11,9 @@
   align-items: center;
   gap: 12px;
   min-height: 44px;
-  padding: 0 6px 0 10px;
+  /* On the column's edges, the hover fill bleeding outside them (as note rows). */
+  margin: 0 -10px;
+  padding: 0 10px;
   border-radius: var(--radius);
   color: var(--text);
   cursor: default;
@@ -110,6 +112,10 @@
 .hw-row-item:focus-within .row-more {
   opacity: 1;
 }
+/* The ⋯ shows where the due date was. */
+.hw-row-item:is(:hover, :focus-within) .hw-row-due {
+  visibility: hidden;
+}
 
 /* "Done (5)" */
 .hw-done-list {
@@ -120,7 +126,7 @@
   align-items: center;
   gap: 4px;
   height: 28px;
-  margin-left: 2px;
+  margin-left: -4px;
   padding: 0 8px 0 4px;
   border-radius: 7px;
   font-size: 13px;

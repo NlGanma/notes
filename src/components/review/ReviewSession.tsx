@@ -108,7 +108,7 @@ export function ReviewSession() {
   return (
     <div className="screen review-view rv-session">
       <MainbarSlot>
-        <div className="rv-bar no-drag">
+        <div className="rv-mainbar no-drag">
           <span className="rv-topbar-label" title={label}>
             {label}
           </span>
@@ -541,13 +541,16 @@ function Feedback({ current }: { current: Current }) {
   const idk = !!current.dontKnow;
   const canRetry = canRetryOf(current);
   const retry = current.retry;
-  // A second try that landed turns the red down: the first answer still counts, but the news is good.
-  const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || (retry?.s !== undefined && retry.s >= 0.8) ? 'neutral' : fb.verdict;
+  // A second try that landed turns the red down and heads the card: the first answer still counts, but the news is good.
+  const rightOnRetry = !current.overridden && retry?.s !== undefined && retry.s >= 0.8;
+  const tone = current.overridden ? 'right' : idk || fb.verdict === 'partial' || rightOnRetry ? 'neutral' : fb.verdict;
   const title = idk
     ? 'Here’s the answer'
     : current.overridden
       ? 'Counted as right'
-      : fb.verdict === 'right'
+      : rightOnRetry
+        ? 'Right on the second try'
+        : fb.verdict === 'right'
         ? missedBefore > 0
           ? 'Right this time'
           : 'Right'
@@ -562,7 +565,7 @@ function Feedback({ current }: { current: Current }) {
         <span className="rv-feedback-icon" aria-hidden>
           {idk || fb.verdict === 'partial' ? (
             <BookOpen size={14} />
-          ) : fb.verdict === 'right' || current.overridden ? (
+          ) : fb.verdict === 'right' || current.overridden || rightOnRetry ? (
             <Check size={14} strokeWidth={2.75} />
           ) : (
             <X size={14} strokeWidth={2.75} />
@@ -571,7 +574,7 @@ function Feedback({ current }: { current: Current }) {
         <div className={cx('rv-verdict', `is-${fb.verdict}`, idk && 'is-idk')}>{title}</div>
         {fb.note && <div className="rv-grade-note">{fb.note}</div>}
       </div>
-      {fb.hypercorrect && <div className="rv-hyper">You were sure about this one. Confident mix-ups are the easiest to fix now.</div>}
+      {fb.hypercorrect && <div className="rv-hyper">You marked this Sure.</div>}
       {fb.lucky && <div className="rv-hyper">Right, though you were guessing.</div>}
 
       {canRetry && (
@@ -592,10 +595,8 @@ function Feedback({ current }: { current: Current }) {
         </div>
       ) : retry && retry.s === undefined ? (
         <div className="rv-retry-result">Compare it with what your notes say.</div>
-      ) : retry && retry.s !== undefined ? (
-        <div className={cx('rv-retry-result', retry.s >= 0.8 ? 'is-right' : 'is-wrong')}>
-          {retry.s >= 0.8 ? 'Got it on the second try.' : 'Not yet. Here’s what your notes say.'}
-        </div>
+      ) : retry && retry.s !== undefined && !rightOnRetry ? (
+        <div className="rv-retry-result is-wrong">Not yet. Here’s what your notes say.</div>
       ) : null}
 
       {(current.revealed || (!canRetry && !retry?.checking)) && (
