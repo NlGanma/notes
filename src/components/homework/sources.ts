@@ -1,6 +1,6 @@
 import type { FolderMeta, NoteDoc } from '../../lib/vault/types';
 import { classInfo, inFolder } from '../../lib/classes';
-import { dueTime } from '../../lib/homework';
+import { daysFrom, dueTime } from '../../lib/homework';
 import { plural } from '../../lib/util';
 
 /*
@@ -30,7 +30,6 @@ export function summarize(sel: SourceSelection, notes: Record<string, NoteDoc>, 
   return parts.join(' + ');
 }
 
-const DAY = 86_400_000;
 const startOfDay = (t: number) => new Date(t).setHours(0, 0, 0, 0);
 
 export const shortDate = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -57,7 +56,7 @@ export const DUE_GROUPS: { key: DueGroup; label: string }[] = [
 /** Which group a due date falls in. The days count from today, whatever the weekday. */
 export function dueGroup(due: number | undefined, now = Date.now()): DueGroup {
   if (!due) return 'none';
-  const days = Math.round((startOfDay(due) - startOfDay(now)) / DAY);
+  const days = daysFrom(due, now);
   if (days < 0) return 'overdue';
   if (days === 0) return 'today';
   if (days === 1) return 'tomorrow';

@@ -89,11 +89,17 @@ export function suggestSources(hw: NoteDoc, notes: Record<string, NoteDoc>, k = 
     });
 }
 
-/** Google's wording for a due date: 'Today', 'Tomorrow', the weekday within a week, else 'Oct 28'. */
+/**
+ * Days from today to a due date's day: 0 today, 1 tomorrow, negative once past. Counted midnight to
+ * midnight, so a clock change in between (a 23 or 25 hour day) can't shift a deadline by a day.
+ */
+export function daysFrom(due: number, now = Date.now()): number {
+  return Math.round((new Date(due).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86_400_000);
+}
+
+/** A due date in words: 'Today', 'Tomorrow', the weekday within a week, else 'Oct 28'. */
 export function dueDay(due: number, now = Date.now(), weekday: 'long' | 'short' = 'long'): string {
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
-  const days = Math.floor((due - startToday.getTime()) / 86_400_000);
+  const days = daysFrom(due, now);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   if (days > 1 && days < 7) return new Date(due).toLocaleDateString(undefined, { weekday });
@@ -118,10 +124,7 @@ export function isMissing(hw: { done?: boolean; due?: number } | undefined, now 
 
 export function dueLabel(due?: number, now = Date.now()): { text: string; tone: 'overdue' | 'soon' | 'later' } | null {
   if (!due) return null;
-  const day = 86_400_000;
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
-  const days = Math.floor((due - startToday.getTime()) / day);
+  const days = daysFrom(due, now);
   if (days < 0) return { text: `Overdue · ${new Date(due).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, tone: 'overdue' };
   if (days === 0) return { text: 'Due today', tone: 'soon' };
   if (days === 1) return { text: 'Due tomorrow', tone: 'soon' };

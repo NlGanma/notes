@@ -93,3 +93,33 @@ test('the Homework list groups by days from today, whatever the weekday, and lea
   assert.equal(dueInGroup(new Date(2026, 9, 22, 15, 0).getTime(), now)?.text.replace(/\s/g, ' '), new Date(2026, 9, 22, 15, 0).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' '));
   assert.equal(dueInGroup(now - 2 * DAY, now)?.overdue, true);
 });
+
+test('cards and the Homework list count days the same way, across a clock change', async () => {
+  const { dueGroup } = await import('../../src/components/homework/sources');
+  const agree = (due: number, now: number) => {
+    const label = dueLabel(due, now)!;
+    const group = dueGroup(due, now);
+    assert.equal(label.text === 'Due today', group === 'today', `${new Date(now)} → ${new Date(due)}`);
+    assert.equal(label.text === 'Due tomorrow', group === 'tomorrow', `${new Date(now)} → ${new Date(due)}`);
+    assert.equal(label.tone === 'overdue', group === 'overdue', `${new Date(now)} → ${new Date(due)}`);
+  };
+  // Whatever this machine's time zone: a year of mornings and evenings, deadlines a day back to a week out.
+  for (let day = 0; day < 370; day++) {
+    for (const hour of [0, 9, 23]) {
+      const now = new Date(2026, 0, 1 + day, hour, 30).getTime();
+      for (let d = -1; d <= 7; d++) agree(new Date(2026, 0, 1 + day + d, 23, 59).getTime(), now);
+    }
+  }
+  // And in a zone that changes its clocks: New York falls back on the night of Oct 31 to Nov 1, 2026.
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const now = new Date(2026, 9, 31, 10, 0).getTime();
+    const due = new Date(2026, 10, 1, 23, 59).getTime();
+    assert.equal(dueLabel(due, now)?.text, 'Due tomorrow');
+    assert.equal(dueGroup(due, now), 'tomorrow');
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
