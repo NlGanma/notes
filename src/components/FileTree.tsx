@@ -23,6 +23,8 @@ import { classForFolder, HOMEWORK_SUBFOLDER } from '../lib/classes';
 import { displayTitle } from '../lib/displayTitle';
 import type { NoteDoc } from '../lib/vault/types';
 import { bridge } from '../lib/platform';
+import { toast } from './common/toast';
+import { sanitizeFolderName } from '../lib/util';
 
 /*
  * The menus for a note, a folder and a class: the same items wherever they open (a row's ⋯, a
@@ -65,7 +67,7 @@ export function folderMenu(path: string): MenuItem[] {
             confirm: 'Delete class',
             danger: true,
           });
-          if (ok) void useVault.getState().deleteFolder(path);
+          if (ok) await deleteWithUndo(path, name);
         },
       },
     ];
@@ -81,7 +83,9 @@ export function folderMenu(path: string): MenuItem[] {
       icon: <Pencil {...ICON} />,
       run: async () => {
         const v = await promptDialog({ title: 'Rename folder', label: 'Name', value: name, confirm: 'Rename' });
-        if (v && v !== name) await useVault.getState().renameFolder(path, v);
+        if (!v || v === name || (await useVault.getState().renameFolder(path, v))) return;
+        const clean = sanitizeFolderName(v);
+        toast.error(clean ? `There is already a folder called “${short(clean)}”` : 'That name can’t be used for a folder');
       },
     },
     {
@@ -110,10 +114,17 @@ export function folderMenu(path: string): MenuItem[] {
           confirm: 'Delete folder',
           danger: true,
         });
-        if (ok) void useVault.getState().deleteFolder(path);
+        if (ok) await deleteWithUndo(path, name);
       },
     },
   ];
+}
+
+/** Deletes a class or folder, then offers Undo for a few seconds. */
+async function deleteWithUndo(path: string, name: string) {
+  // Undo is offered only once the folder is gone from disk, so restored notes never go to the Trash with it.
+  const gone = await useVault.getState().deleteFolder(path);
+  toast.info(`Deleted ${short(name)}`, undefined, { label: 'Undo', run: () => void useVault.getState().restoreFolder(gone) }, 8000);
 }
 
 /** The menu for a note (a row's ⋯, a right-click on a row or a tab). */

@@ -29,7 +29,7 @@ export const useToasts = create<ToastState>((set, get) => ({
 }));
 
 export const toast = {
-  info: (title: string, detail?: string, action?: Toast['action']) => useToasts.getState().push({ kind: 'info', title, detail, action }),
+  info: (title: string, detail?: string, action?: Toast['action'], ms?: number) => useToasts.getState().push({ kind: 'info', title, detail, action }, ms),
   success: (title: string, detail?: string) => useToasts.getState().push({ kind: 'success', title, detail }),
   error: (title: string, detail?: string) => useToasts.getState().push({ kind: 'error', title, detail }, 6500),
 };

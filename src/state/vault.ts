@@ -35,7 +35,10 @@ export interface VaultState {
   createFolder(path: string): Promise<string>;
   renameFolder(path: string, newName: string): Promise<string | null>;
   moveFolder(path: string, parent: string): Promise<string | null>;
-  deleteFolder(path: string): Promise<void>;
+  /** Moves the folder's notes to Trash and removes it. Returns what it took, for Undo. */
+  deleteFolder(path: string): Promise<DeletedFolder>;
+  /** Undoes deleteFolder: the folders, their class details, the notes and homework links come back. */
+  restoreFolder(gone: DeletedFolder): Promise<void>;
   setFolderMeta(path: string, meta: FolderMeta): void;
   /** Creates a class (a top-level folder with class metadata) and returns its path. */
   createClass(info: ClassDraft): Promise<string>;
@@ -44,6 +47,16 @@ export interface VaultState {
   /** Turns an existing folder into a class, or a class back into a plain folder. */
   setIsClass(path: string, isClass: boolean): void;
   flush(sync?: boolean): void;
+}
+
+/** What deleting a folder took away. */
+export interface DeletedFolder {
+  folders: string[];
+  folderMeta: Record<string, FolderMeta>;
+  /** The notes it moved to Trash (not the ones already there). */
+  notes: string[];
+  /** Other homework that read from it: the folders each lost. */
+  links: Record<string, string[]>;
 }
 
 export interface ClassDraft {
@@ -66,12 +79,14 @@ function parentsOf(path: string): string[] {
   return parts.map((_, i) => parts.slice(0, i + 1).join('/'));
 }
 
+/** A free folder path. Case-insensitive: on macOS "biology" is the "Biology" folder already there. */
 function uniqueFolderName(existing: string[], parent: string, name: string): string {
+  const taken = new Set(existing.map((f) => f.toLowerCase()));
   const base = (parent ? parent + '/' : '') + name;
-  if (!existing.includes(base)) return base;
+  if (!taken.has(base.toLowerCase())) return base;
   for (let i = 2; ; i++) {
     const c = `${base} ${i}`;
-    if (!existing.includes(c)) return c;
+    if (!taken.has(c.toLowerCase())) return c;
   }
 }
 
@@ -237,8 +252,17 @@ export const useVault = create<VaultState>((set, get) => {
     async deleteFolder(path) {
       const inside = (f: string) => f === path || f.startsWith(path + '/');
       const { notes } = get();
+      const gone: DeletedFolder = {
+        folders: get().folders.filter(inside),
+        folderMeta: Object.fromEntries(Object.entries(get().folderMeta).filter(([k]) => inside(k))),
+        notes: [],
+        links: {},
+      };
       for (const n of Object.values(notes)) {
-        if (inside(n.meta.folder)) get().trashNote(n.meta.id);
+        if (inside(n.meta.folder) && !n.meta.trashed) {
+          gone.notes.push(n.meta.id);
+          get().trashNote(n.meta.id);
+        }
       }
       // Forget the folder's class details first (so an interrupted delete can't leave them behind), or the
       // class would come back and a new folder with the same name would inherit them.
@@ -256,8 +280,28 @@ export const useVault = create<VaultState>((set, get) => {
       for (const [id, n] of Object.entries(get().notes)) {
         const hw = n.meta.homework;
         // Trashed notes (including this folder's own homework) are left alone.
-        if (!n.meta.trashed && hw?.folders.some(inside))
+        if (!n.meta.trashed && hw?.folders.some(inside)) {
+          gone.links[id] = hw.folders.filter(inside);
           get().updateMeta(id, { homework: { ...hw, folders: hw.folders.filter((f) => !inside(f)) }, updated: n.meta.updated });
+        }
+      }
+      return gone;
+    },
+
+    async restoreFolder(gone) {
+      const backend = get().backend;
+      // Parents sort before their subfolders, so each folder is made inside one that exists.
+      for (const f of gone.folders) await backend?.createFolder(f);
+      set({ folders: [...new Set([...get().folders, ...gone.folders])].sort() });
+      const folderMeta = { ...get().folderMeta, ...gone.folderMeta };
+      set({ folderMeta });
+      await backend?.saveFolderMeta(folderMeta);
+      // A note deleted for good from Trash meanwhile stays gone.
+      for (const id of gone.notes) if (get().notes[id]?.meta.trashed) get().restoreNote(id);
+      for (const [id, folders] of Object.entries(gone.links)) {
+        const n = get().notes[id];
+        const hw = n?.meta.homework;
+        if (hw) get().updateMeta(id, { homework: { ...hw, folders: [...hw.folders, ...folders.filter((f) => !hw.folders.includes(f))] }, updated: n.meta.updated });
       }
     },
 

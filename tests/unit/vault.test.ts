@@ -121,3 +121,34 @@ test('class and folder names are cleaned: no separators, no hidden dot-folders',
   assert.equal(await vault().createClass({ name: 'a/b:c' }), 'a b c');
   assert.equal(await vault().createClass({ name: '...' }), 'New class');
 });
+
+test('a new folder never takes an existing name in another case (macOS sees one folder)', async () => {
+  await vault().createClass({ name: 'Biology' });
+  assert.equal(await vault().createFolder('biology'), 'biology 2');
+  assert.equal(await vault().createClass({ name: 'BIOLOGY' }), 'BIOLOGY 3');
+  await vault().createFolder('Drafts/Week 1');
+  assert.equal(await vault().createFolder('drafts/week 1'), 'drafts/week 1 2');
+});
+
+test('Undo after deleting a class brings back its notes, details, empty folders and homework links', async () => {
+  const { cls, lecture, hw } = await setupClass();
+  await vault().createFolder(`${cls}/Labs`);
+  const old = vault().createNote({ folder: cls, title: 'Old draft' });
+  vault().trashNote(old.meta.id);
+  const other = vault().createNote({ folder: 'Biology/Homework', title: 'Bio HW' });
+  vault().updateMeta(other.meta.id, { homework: { sources: [], folders: ['Biology', cls] } });
+
+  const gone = await vault().deleteFolder(cls);
+  assert.ok(vault().notes[lecture.meta.id].meta.trashed && hw().meta.trashed);
+  assert.deepEqual(gone.notes.sort(), [lecture.meta.id, hw().meta.id].sort(), 'what was already in Trash is not part of it');
+
+  await vault().restoreFolder(gone);
+  assert.ok(!vault().notes[lecture.meta.id].meta.trashed && !hw().meta.trashed);
+  assert.ok(vault().notes[old.meta.id].meta.trashed, 'a note trashed earlier stays in Trash');
+  assert.equal(vault().folderMeta[cls].kind, 'class');
+  assert.equal(vault().folderMeta[cls].code, 'MATH 1A');
+  assert.equal(saved[cls].kind, 'class');
+  assert.ok(vault().folders.includes(`${cls}/Labs`));
+  assert.deepEqual(vault().notes[other.meta.id].meta.homework!.folders, ['Biology', cls]);
+  assert.equal(listClasses(vault().folders, vault().folderMeta).length, 1);
+});
