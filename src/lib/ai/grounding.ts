@@ -92,7 +92,7 @@ export function applyGrounding(root: HTMLElement, excerptFor: (n: number) => str
       c.classList.toggle('is-weak', weak);
       if (weak) {
         report.weak++;
-        c.title = excerpt === undefined ? 'There is no excerpt with this number' : 'This sentence doesn’t closely match the cited note — check it';
+        c.title = excerpt === undefined ? 'There is no excerpt with this number' : 'This sentence doesn’t closely match the cited note. Check it.';
       }
     }
   }

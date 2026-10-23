@@ -49,13 +49,20 @@ export function needsLegacyCheck(msg: ChatMsg, citations?: boolean): boolean {
 /** "Your notes don't cover this…" — written by the app, above the answer. */
 function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): void; onLink?(): void }) {
   const b = msg.banner;
-  if (!b) return null;
+  // Tagged items have no box header of their own, so the line above the answer says what the tag means.
+  const tagged = msg.role === 'assistant' && shownMarkdown(msg).includes(OWN_OPEN) ? LABELS.tagged : '';
+  if (!b)
+    return tagged ? (
+      <div className="coverage-banner is-partial">
+        <div className="coverage-text">{tagged}</div>
+      </div>
+    ) : null;
   const text = {
     none: LABELS.noneBody,
     noneOff: LABELS.noneOff(msg.grounding === 'library'),
     noLinked: LABELS.noLinked,
     collapsed: LABELS.collapsed,
-    partial: b === 'partial' && shownMarkdown(msg).includes(OWN_OPEN) ? LABELS.partialTagged : LABELS.partial,
+    partial: LABELS.partial,
     mayCover: LABELS.mayCover,
     // The example from the AI's own knowledge streams into `shown`.
     noExample: msg.ownOnly && (msg.shown || msg.content) ? LABELS.noneBody : '',
@@ -65,7 +72,7 @@ function CoverageBanner({ msg, onForce, onLink }: { msg: ChatMsg; onForce?(): vo
     <div className={cx('coverage-banner', none ? 'is-none' : 'is-partial')}>
       {(b === 'none' || b === 'noneOff') && <div className="coverage-title">{LABELS.noneTitle}</div>}
       {b === 'noExample' && <div className="coverage-title">{LABELS.exampleNone}</div>}
-      <div className="coverage-text">{text}</div>
+      <div className="coverage-text">{[text, tagged].filter(Boolean).join(' ')}</div>
       {msg.gaps && msg.gaps.length > 0 && (
         <ul className="coverage-gaps">
           {msg.gaps.map((g) => (

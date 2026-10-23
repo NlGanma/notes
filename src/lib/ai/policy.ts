@@ -46,8 +46,8 @@ export const LABELS = {
   noneOff: (_library: boolean) => 'Set to answer only from your notes (Settings → Local AI).',
   noLinked: 'You haven’t linked any notes to this homework, so nothing below comes from your class notes.',
   partial: 'Your notes only cover part of this.',
-  /** The same, when list items or table rows carry a "not in your notes" tag (a tag has no box header to say it). */
-  partialTagged: 'Your notes only cover part of this. Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution.',
+  /** Said whenever list items or table rows carry a "not in your notes" tag: a tag has no box header to say it. */
+  tagged: 'Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution.',
   /** For older replies' citation check (GroundingBar). */
   ownParts: (n: number) => `${n === 1 ? '1 part' : `${n} parts`} from the AI’s own knowledge`,
   collapsed: 'Couldn’t match this answer to your notes, so all of it is shown as the AI’s own knowledge.',

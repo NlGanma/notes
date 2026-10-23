@@ -370,7 +370,7 @@ function inlineMarkers(html: string): string {
     .replace(/\uE000/g, `<span class="own-inline" title="${OWN_HEAD}">`)
     .replace(/\uE001/g, `</span><span class="own-tag" title="${OWN_HEAD}">${OWN_TAG}</span>`)
     .replace(/\uE004/g, '</span>')
-    .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note — check it">')
+    .replace(/\uE002/g, '<span class="weak-claim" title="This doesn’t closely match the cited note. Check it.">')
     .replace(/\uE003/g, '</span>');
 }
 

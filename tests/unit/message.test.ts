@@ -145,6 +145,9 @@ test('the banners point at the boxes, tags and the switch as they really are', (
   const tagged = text(render(msg({ content: 'x', banner: 'partial', shown: '- Sum [1].\n- \uE000Archimedes proved it.\uE001', check: { claims: 2, supported: 1, weak: 0, contained: 1, outside: 0, repaired: 0 } })));
   assert.match(tagged, /Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution/);
   assert.match(tagged, /Archimedes proved it\. not in your notes/);
+  // Tags with no banner at all still get the line that says what they mean.
+  const bare = text(render(msg({ content: 'x', shown: '- Sum [1].\n- \uE000Archimedes proved it.\uE001', check: { claims: 2, supported: 1, weak: 0, contained: 1, outside: 0, repaired: 0 } })));
+  assert.match(bare, /Items tagged “not in your notes” are the AI’s own knowledge, so proceed with caution/);
   const off = (grounding: Msg['grounding']) => text(render(msg({ grounding, ownOnly: true, banner: 'noneOff', coverage: 'none' })));
   // One switch for both: Ask your notes has no chat settings of its own.
   assert.match(off('library'), /answer only from your notes.*Settings → Local AI/);
