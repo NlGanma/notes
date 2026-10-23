@@ -184,7 +184,7 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
 }
 /* A full strip: an inactive tab gives its name the close button's room; on hover the name fades out under the button. */
 .tabs.is-tight .tab:not(.is-active) {
-  padding-right: 6px;
+  padding-right: 4px;
 }
 .tabs.is-tight .tab:not(.is-active) .tab-close {
   position: absolute;
@@ -192,7 +192,7 @@ html.is-electron.is-mac:not(.is-fullscreen) .app.no-sidebar .mainbar {
   right: 4px;
 }
 .tabs.is-tight .tab:not(.is-active):hover .tab-title {
-  mask-image: linear-gradient(to left, transparent 18px, #000 28px);
+  mask-image: linear-gradient(to left, transparent 20px, #000 30px);
 }
 .tab-more {
   width: 28px;
