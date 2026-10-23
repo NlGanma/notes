@@ -418,12 +418,22 @@
     transform: translateX(16px);
   }
 }
+/* It takes focus when it opens (so keys reach its cards); the panel itself draws no ring, as a dialog doesn't. */
+.lib-artifact:focus {
+  outline: none;
+}
+section.lib-artifact:focus-visible {
+  box-shadow: inset 1px 0 0 var(--hairline);
+}
 /* A narrow page: the panel takes the whole page instead of squeezing the conversation (Close goes back to it). */
+.lib-artifact.is-overlay,
+section.lib-artifact.is-overlay:focus-visible {
+  box-shadow: none;
+}
 .lib-artifact.is-overlay {
   position: absolute;
   inset: 0;
   z-index: 20;
-  box-shadow: none;
 }
 /* The same height as the conversation's header, so the two lines meet. */
 .art-head {

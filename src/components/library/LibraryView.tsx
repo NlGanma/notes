@@ -127,6 +127,7 @@ export function LibraryView() {
   });
   const cite = useCitePreview({ placement: 'right' });
   const rootRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const stick = useRef(true);
@@ -385,12 +386,34 @@ export function LibraryView() {
   );
 
   const overlay = width < SIDE_BY_SIDE;
+  const openId = art?.msg.id ?? null;
+  // Over a narrow page the conversation is covered: Tab and typing can't reach it.
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    if (openId && overlay) main.setAttribute('inert', '');
+    else main.removeAttribute('inert');
+  }, [openId, overlay]);
+  // An output that opens takes the keyboard, so Space flips its first card; closing it gives the keyboard back to the composer.
+  const shownId = useRef<string | null>(null);
+  useEffect(() => {
+    const was = shownId.current;
+    shownId.current = openId;
+    const panel = rootRef.current?.querySelector<HTMLElement>('.lib-artifact');
+    const active = document.activeElement;
+    if (openId && panel) {
+      if (panel.contains(active)) return;
+      // Side by side, a question being typed keeps the keyboard.
+      const typing = active === inputRef.current && !!inputRef.current?.value.trim();
+      if (overlay || (openId !== was && !typing)) panel.focus({ preventScroll: true });
+    } else if (was && (!active || active === document.body)) inputRef.current?.focus();
+  }, [openId, overlay]);
   // The header names what's being asked (a class, some notes) and the conversation; "All notes" goes without saying.
   const scoped = scope.kind !== 'all' && scope.kind !== 'tag';
   const convTitle = empty ? '' : conversationTitle(messages);
   return (
     <div className={cx('library', art && 'has-artifact')} ref={rootRef}>
-      <div className="lib-main">
+      <div className="lib-main" ref={mainRef}>
         <header className="lib-head">
           <div className="library-title">
             {scoped && (

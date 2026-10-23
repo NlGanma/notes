@@ -87,7 +87,7 @@ export function ArtifactPanel({
   const json = tool === 'flashcards' || tool === 'quiz';
   const ready = !!parsed || (msg.status === 'done' && !output.failed);
   return (
-    <section className={cx('lib-artifact', overlay && 'is-overlay')} aria-label={output.title}>
+    <section className={cx('lib-artifact', overlay && 'is-overlay')} aria-label={output.title} tabIndex={-1}>
       <header className="art-head">
         <span className="art-icon">
           <ToolIcon tool={tool} />
