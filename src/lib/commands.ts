@@ -129,6 +129,8 @@ export async function newFolder(parent = currentFolder()) {
 }
 
 export function toggleAssistant(force?: boolean) {
+  // The Assistant belongs to a note: off one, ⌘J (and the menu item) would only flip a hidden flag the next note opens with.
+  if (!currentNoteId() && force !== false) return;
   const ui = useUI.getState();
   const next = force ?? !ui.assistant;
   ui.setAssistant(next);
