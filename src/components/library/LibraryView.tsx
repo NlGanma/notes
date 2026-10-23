@@ -315,8 +315,9 @@ export function LibraryView() {
   };
 
   // ---------------------------------------------------------------- render
+  // With no notes the greeting says so already; the (disabled) box keeps its usual words.
   const placeholder = !count
-    ? 'No notes to ask about yet'
+    ? 'Ask anything about your notes'
     : scope.kind === 'folder'
       ? `Ask about your ${name} notes`
       : scope.kind === 'all'
@@ -671,7 +672,7 @@ function ToolTurn({ output, open, onOpen, onRetry }: { output: Output; open: boo
     return (
       <div className="msg is-bot lib-tool-turn">
         <div className="msg-added">
-          None of what the model wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
+          None of what the AI wrote could be matched to your notes, so nothing is shown. Try again, or pick a larger model in Settings → Local AI.
         </div>
         {onRetry && <RetryRow onRetry={onRetry} />}
       </div>

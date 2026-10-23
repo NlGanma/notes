@@ -233,10 +233,11 @@ function rankOf(scores: number[]): number[] {
   return rank;
 }
 
-export function formatExcerpts(hits: Hit[], start = 1): string {
+/** The numbered excerpts of a prompt. `nameOf` gives each note the name the student sees (chunks keep the stored title). */
+export function formatExcerpts(hits: Hit[], start = 1, nameOf: (c: Chunk) => string = (c) => c.title): string {
   return hits
     .map((h, i) => {
-      const where = [h.chunk.folder, `"${h.chunk.title}"`, h.chunk.section].filter(Boolean).join(' › ');
+      const where = [h.chunk.folder, `"${nameOf(h.chunk)}"`, h.chunk.section].filter(Boolean).join(' › ');
       return `[${i + start}] (${where})\n${h.chunk.text.trim()}`;
     })
     .join('\n\n');

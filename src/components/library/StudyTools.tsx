@@ -147,7 +147,7 @@ export function Flashcards({
           </button>
           {missed.length > 0 && (
             <button className="btn is-primary" onClick={() => restart(missed)}>
-              Practice the {missed.length} missed
+              Practice the {missed.length} you missed
             </button>
           )}
         </div>

@@ -158,3 +158,13 @@ test('a study tool with nothing in the notes to make it from says so, marked, wi
   assert.deepEqual(reply.sources, [], 'it cites nothing');
   assert.equal(script.requests.length, 0);
 });
+
+test('an untitled note is named to the model as the app names it, never “Untitled”', async () => {
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell membranes are lipid bilayers.' }] }] };
+  const meta = { ...lecture.meta, id: 'untitled1', title: '' };
+  useVault.setState({ notes: { ...useVault.getState().notes, untitled1: { ...lecture, meta, content: doc } as never } });
+  await useAssistant.getState().ask('untitled1', { prompt: NOTE_STARTERS.explain });
+  const system = script.requests[0][0].content;
+  assert.match(system, /Cell membranes are lipid bilayers/);
+  assert.ok(!/Untitled/.test(system), system.slice(0, 300));
+});
