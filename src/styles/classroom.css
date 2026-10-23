@@ -244,6 +244,11 @@
   gap: 2px;
   padding: 10px 8px;
 }
+/* Every part of the card opens something, as its header does. */
+.class-card-body,
+.class-card-row {
+  cursor: pointer;
+}
 .class-card-row {
   display: flex;
   align-items: center;

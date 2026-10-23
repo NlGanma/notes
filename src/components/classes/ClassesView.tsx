@@ -70,7 +70,8 @@ export function ClassCard({ cls, notes }: { cls: ClassInfo; notes: Record<string
       <button className="icon-btn class-card-more" onClick={(e) => menuUnder(e, folderMenu(cls.path))} aria-label={`${cls.name} options`} title="Options">
         <MoreHorizontal size={18} strokeWidth={1.75} />
       </button>
-      <div className="class-card-body">
+      {/* The whole card lifts on hover, so a click on its body (not on a row) opens the class too. */}
+      <div className="class-card-body" onClick={(e) => e.target === e.currentTarget && open()}>
         {rows.map(({ note, kind }) => {
           const due = kind === 'homework' ? dueLabel(note.meta.homework!.due) : null;
           return (
@@ -81,7 +82,11 @@ export function ClassCard({ cls, notes }: { cls: ClassInfo; notes: Record<string
             </button>
           );
         })}
-        {!rows.length && <div className="class-card-empty">No notes yet</div>}
+        {!rows.length && (
+          <div className="class-card-empty" onClick={open}>
+            No notes yet
+          </div>
+        )}
       </div>
     </div>
   );
