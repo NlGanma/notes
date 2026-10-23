@@ -98,10 +98,12 @@
   text-align: center;
 }
 .page-empty-title {
+  max-width: 100%;
   font-family: var(--font-display);
   font-size: 22px;
   line-height: 28px;
   color: var(--text-2);
+  overflow-wrap: anywhere;
 }
 .page-empty-sub {
   font-size: 14px;
@@ -167,7 +169,8 @@
   position: relative;
   height: 96px;
   flex: none;
-  padding: 16px 52px 0 16px;
+  /* Clear of the class art on the right, so a name on two lines stops before the icon. */
+  padding: 16px 72px 0 16px;
   background: var(--class-banner);
   color: #fff;
   overflow: hidden;

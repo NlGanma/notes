@@ -355,9 +355,9 @@ export function NotePicker({
                     {r.kind === 'note' ? (
                       <>
                         {cls && (
-                          <span className="link-class">
+                          <span className="link-class" title={cls.name}>
                             <span className="class-square" style={{ background: cls.color }} />
-                            {cls.name}
+                            <span className="link-class-name">{cls.name}</span>
                           </span>
                         )}
                         <span>{editedLabel(r.note.meta.updated)}</span>
