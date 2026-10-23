@@ -2,14 +2,14 @@ import { create } from 'zustand';
 import { useEffect, useRef, useState } from 'react';
 import { Folder, FolderRoot } from 'lucide-react';
 import { Modal } from './Modal';
-import { Field } from './Field';
 import { useVault } from '../../state/vault';
+import { classInfo } from '../../lib/classes';
 import { cx } from '../../lib/util';
 
 type Dialog =
   | { kind: 'confirm'; title: string; message: string; confirm: string; danger?: boolean; resolve(v: boolean): void }
-  | { kind: 'folder'; title: string; current: string; only?: string[]; action?: string; resolve(v: string | null): void }
-  | { kind: 'prompt'; title: string; label: string; value: string; confirm: string; resolve(v: string | null): void };
+  | { kind: 'folder'; title: string; current: string; only?: string[]; exclude?: string[]; action?: string; resolve(v: string | null): void }
+  | { kind: 'prompt'; title: string; label: string; value: string; placeholder?: string; confirm: string; allowEmpty?: boolean; resolve(v: string | null): void };
 
 interface DialogState {
   dialog: Dialog | null;
@@ -27,19 +27,23 @@ export function confirmDialog(opts: { title: string; message: string; confirm?: 
   return new Promise((resolve) => useDialogs.getState().open({ kind: 'confirm', confirm: opts.confirm ?? 'OK', ...opts, resolve }));
 }
 
-/** Google Drive's "New folder" / "Rename" dialog: one field, its text selected, Cancel and the action as text buttons. */
-export function promptDialog(opts: { title: string; label: string; value?: string; confirm?: string }): Promise<string | null> {
+/**
+ * One field under a title (New folder, Rename), its text selected so typing replaces it. The button is
+ * never greyed out: an empty answer falls back to what was there (or, with `allowEmpty`, comes back empty).
+ */
+export function promptDialog(opts: { title: string; label: string; value?: string; placeholder?: string; confirm?: string; allowEmpty?: boolean }): Promise<string | null> {
   return new Promise((resolve) => useDialogs.getState().open({ kind: 'prompt', value: '', confirm: 'OK', ...opts, resolve }));
 }
 
-/** Picks a folder; `only` limits the choice (no "Top level" then), `action` names the button. */
-export function pickFolder(title: string, current = '', opts: { only?: string[]; action?: string } = {}): Promise<string | null> {
+/** Picks a folder; `only` limits the choice (no top level then), `exclude` hides folders and what's in them. */
+export function pickFolder(title: string, current = '', opts: { only?: string[]; exclude?: string[]; action?: string } = {}): Promise<string | null> {
   return new Promise((resolve) => useDialogs.getState().open({ kind: 'folder', title, current, ...opts, resolve }));
 }
 
 export function DialogHost() {
   const { dialog, close } = useDialogs();
   const folders = useVault((s) => s.folders);
+  const folderMeta = useVault((s) => s.folderMeta);
   const [sel, setSel] = useState('');
   useEffect(() => {
     if (dialog?.kind === 'folder') setSel(dialog.current);
@@ -51,16 +55,16 @@ export function DialogHost() {
   };
   if (dialog.kind === 'confirm') {
     return (
-      <Modal open onClose={() => finish(false)} width={420} bare className="dialog">
+      <Modal open onClose={() => finish(false)} width={400} bare className="dialog">
         <div className="dialog-body">
           <div className="dialog-title">{dialog.title}</div>
           <div className="dialog-message">{dialog.message}</div>
         </div>
         <div className="dialog-actions">
-          <button className="btn is-ghost" onClick={() => finish(false)}>
+          <button className="btn is-secondary" onClick={() => finish(false)}>
             Cancel
           </button>
-          <button className={cx('btn', dialog.danger ? 'is-danger-text' : 'is-ghost')} autoFocus onClick={() => finish(true)}>
+          <button className={cx('btn', dialog.danger ? 'is-danger' : 'is-primary')} autoFocus onClick={() => finish(true)}>
             {dialog.confirm}
           </button>
         </div>
@@ -68,32 +72,39 @@ export function DialogHost() {
     );
   }
   if (dialog.kind === 'prompt') return <PromptDialog key={dialog.title + dialog.value} dialog={dialog} finish={finish} />;
+  const hidden = (f: string) => !!dialog.exclude?.some((x) => f === x || f.startsWith(x + '/'));
+  const list = (dialog.only ?? folders).filter((f) => !hidden(f));
   return (
-    <Modal open onClose={() => finish(null)} width={440} title={dialog.title} className="dialog">
+    <Modal open onClose={() => finish(null)} width={420} title={dialog.title} className="dialog">
       <div className="folder-pick">
         {!dialog.only && (
           <button className={cx('folder-pick-row', sel === '' && 'is-active')} onClick={() => setSel('')} onDoubleClick={() => finish('')}>
-            <FolderRoot size={15} /> Top level
+            <FolderRoot size={16} strokeWidth={1.5} /> No folder
           </button>
         )}
-        {(dialog.only ?? folders).map((f) => (
-          <button
-            key={f}
-            className={cx('folder-pick-row', sel === f && 'is-active')}
-            style={{ paddingLeft: 12 + (f.split('/').length - 1) * 16 }}
-            onClick={() => setSel(f)}
-            onDoubleClick={() => finish(f)}
-          >
-            <Folder size={15} /> {f.split('/').pop()}
-          </button>
-        ))}
+        {list.map((f) => {
+          const cls = folderMeta[f]?.kind === 'class' ? classInfo(f, folderMeta[f]) : null;
+          return (
+            <button
+              key={f}
+              className={cx('folder-pick-row', sel === f && 'is-active')}
+              style={{ paddingLeft: 10 + (f.split('/').length - 1) * 18 }}
+              onClick={() => setSel(f)}
+              onDoubleClick={() => finish(f)}
+              title={f}
+            >
+              {cls ? <span className="class-square" style={{ background: cls.color }} /> : <Folder size={16} strokeWidth={1.5} />}
+              <span className="folder-pick-name">{f.split('/').pop()}</span>
+            </button>
+          );
+        })}
       </div>
       <div className="dialog-actions">
-        <button className="btn is-ghost" onClick={() => finish(null)}>
+        <button className="btn is-secondary" onClick={() => finish(null)}>
           Cancel
         </button>
-        <button className="btn is-ghost" disabled={!!dialog.only && !dialog.only.includes(sel)} onClick={() => finish(sel)}>
-          {dialog.action ?? 'Move here'}
+        <button className="btn is-primary" disabled={!!dialog.only && !dialog.only.includes(sel)} onClick={() => finish(sel)}>
+          {dialog.action ?? 'Move'}
         </button>
       </div>
     </Modal>
@@ -102,29 +113,39 @@ export function DialogHost() {
 
 function PromptDialog({ dialog, finish }: { dialog: Extract<Dialog, { kind: 'prompt' }>; finish(v: string | null): void }) {
   const [value, setValue] = useState(dialog.value);
-  const input = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
-  // Drive selects the suggested name so typing replaces it.
+  const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.select(), []);
-  const ok = !!value.trim();
+  const submit = () => {
+    const v = value.replace(/\s+/g, ' ').trim();
+    finish(v || (dialog.allowEmpty ? '' : dialog.value.trim() || null));
+  };
   return (
     <Modal open onClose={() => finish(null)} width={400} bare className="dialog prompt-dialog">
       <form
-        className="gdialog"
+        className="dialog-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (ok) finish(value.trim());
+          submit();
         }}
       >
-        <h2 className="gdialog-title">{dialog.title}</h2>
-        <div className="gdialog-fields">
-          <Field label={dialog.label} value={value} onChange={setValue} autoFocus inputRef={input} />
+        <div className="dialog-body">
+          <div className="dialog-title">{dialog.title}</div>
+          <input
+            ref={input}
+            className="input"
+            value={value}
+            aria-label={dialog.label}
+            placeholder={dialog.placeholder ?? dialog.label}
+            maxLength={100}
+            autoFocus
+            onChange={(e) => setValue(e.target.value)}
+          />
         </div>
-        <div className="gdialog-actions">
-          <span className="grow" />
-          <button type="button" className="btn is-ghost" onClick={() => finish(null)}>
+        <div className="dialog-actions">
+          <button type="button" className="btn is-secondary" onClick={() => finish(null)}>
             Cancel
           </button>
-          <button type="submit" className="btn is-ghost" disabled={!ok}>
+          <button type="submit" className="btn is-primary">
             {dialog.confirm}
           </button>
         </div>

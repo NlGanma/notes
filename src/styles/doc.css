@@ -11,7 +11,7 @@
   font-family: var(--font-ui, system-ui, sans-serif);
   font-size: 16px;
   line-height: var(--line);
-  color: var(--text, #1f1f1f);
+  color: var(--text, #141413);
   letter-spacing: -0.003em;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   word-wrap: break-word;
@@ -37,7 +37,7 @@
 }
 
 :is(.nib-editor, .doc-body, .thumb-body) h1 {
-  font-family: var(--font-display, system-ui, sans-serif);
+  font-family: var(--font-ui, system-ui, sans-serif);
   font-size: 24px;
   font-weight: 500;
   letter-spacing: 0;
@@ -45,7 +45,7 @@
   margin-top: var(--line);
 }
 :is(.nib-editor, .doc-body, .thumb-body) h2 {
-  font-family: var(--font-display, system-ui, sans-serif);
+  font-family: var(--font-ui, system-ui, sans-serif);
   font-size: 20px;
   font-weight: 500;
   letter-spacing: 0;
@@ -73,9 +73,9 @@
   font-weight: 600;
 }
 :is(.nib-editor, .doc-body, .thumb-body) a {
-  color: var(--accent-text, #0b57d0);
+  color: var(--link, #184f95);
   text-decoration: underline;
-  text-decoration-color: rgba(11, 87, 208, 0.35);
+  text-decoration-color: rgba(24, 79, 149, 0.35);
   text-underline-offset: 3px;
 }
 :is(.nib-editor, .doc-body, .thumb-body) mark {
@@ -104,10 +104,10 @@
   margin: 0;
 }
 :is(.nib-editor, .doc-body, .thumb-body) ul > li::marker {
-  color: var(--text, #1f1f1f);
+  color: var(--text, #141413);
 }
 :is(.nib-editor, .doc-body, .thumb-body) ol > li::marker {
-  color: var(--text-3, #5f6368);
+  color: var(--text-3, #6b6a64);
   font-variant-numeric: tabular-nums;
 }
 :is(.nib-editor, .doc-body, .thumb-body) ul ul > li {
@@ -161,12 +161,12 @@
   font-weight: 700;
 }
 :is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:hover {
-  border-color: var(--accent, #0b57d0);
+  border-color: var(--accent, #141413);
 }
 :is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:checked,
 .task.is-done .task-box {
-  background: var(--accent, #0b57d0);
-  border-color: var(--accent, #0b57d0);
+  background: var(--accent, #141413);
+  border-color: var(--accent, #141413);
 }
 :is(.nib-editor, .doc-body, .thumb-body) ul[data-type='taskList'] input[type='checkbox']:checked::after {
   content: '';
@@ -181,8 +181,8 @@
 /* quotes, code, rules, images */
 :is(.nib-editor, .doc-body, .thumb-body) blockquote {
   padding-left: 16px;
-  border-left: 3px solid var(--text, #1f1f1f);
-  color: var(--text, #1f1f1f);
+  border-left: 3px solid var(--text, #141413);
+  color: var(--text, #141413);
 }
 /* Notion's code block: warm grey, no border */
 :is(.nib-editor, .doc-body, .thumb-body) pre {
@@ -193,7 +193,7 @@
   font-size: 13.5px;
   line-height: calc(var(--line) * 0.75);
   white-space: pre-wrap;
-  color: var(--text, #1f1f1f);
+  color: var(--text, #141413);
 }
 :is(.nib-editor, .doc-body, .thumb-body) pre code {
   background: none;
@@ -204,7 +204,7 @@
 :is(.nib-editor, .doc-body, .thumb-body) hr {
   border: 0;
   height: 1px;
-  background: var(--border, #dadce0);
+  background: var(--border, rgba(20, 20, 19, 0.1));
   margin: calc(var(--line) / 2 - 0.5px) 0;
 }
 :is(.nib-editor, .doc-body, .thumb-body) img {
@@ -213,7 +213,7 @@
   height: auto;
   border-radius: 4px;
   margin: 0 auto;
-  box-shadow: 0 0 0 1px var(--border, #dadce0);
+  box-shadow: 0 0 0 1px var(--border, rgba(20, 20, 19, 0.1));
 }
 
 /* callouts: Notion's flat tinted boxes, no border. The text keeps the page's line grid. */
@@ -283,7 +283,7 @@
 }
 .callout-body,
 .callout {
-  color: var(--text, #1f1f1f);
+  color: var(--text, #141413);
 }
 /* Static copies (export, thumbnails) have no live icon: draw it. */
 .doc-body .callout::before,
@@ -331,7 +331,7 @@
   font-size: 1.06em;
 }
 .math-error {
-  color: var(--danger, #b3261e);
+  color: var(--danger, #b53333);
   font-family: var(--font-mono, ui-monospace, Menlo, monospace);
   font-size: 0.85em;
 }
@@ -356,57 +356,18 @@
   display: inline-block;
 }
 
-/* paper: the lines take the paper's colour (GoodNotes), never one blue for every paper */
+/* paper: three kinds, blank, squared and lined, with lines in the paper's own soft colour */
 .paper-blank,
 .paper-ruled,
-.paper-grid,
-.paper-dots,
-.paper-legal {
+.paper-grid {
   --paper: #fff;
   --rule: #d9e3ef;
   --grid-line: #e8edf3;
-  --dot: #c4c7c5;
-  --rule-margin: #f0b4b4;
 }
-.paper-legal {
-  --paper: #fff8d9;
-  --rule: #d6e2f0;
-  --rule-margin: #e79a9a;
-}
-.thumb-page.paper-legal,
-.nib-print.paper-legal {
-  background-color: var(--paper);
-}
-.thumb-page.paper-legal {
-  min-height: 1056px;
-}
-.paper-ruled :is(.surface, .thumb-body, .doc-body > .blk),
-.paper-legal :is(.surface, .thumb-body, .doc-body > .blk) {
+.paper-ruled :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--rule) calc(100% - 1px));
   background-size: 100% var(--line);
   background-position: 0 calc(var(--line) * -0.25);
-}
-/* A legal pad's soft red margin: a line and a fainter one beside it. */
-.paper-legal :is(.surface, .thumb-body, .doc-body > .blk) {
-  background-image:
-    linear-gradient(
-      to right,
-      transparent calc(var(--page-pad-x) - 16px),
-      var(--rule-margin) calc(var(--page-pad-x) - 16px),
-      var(--rule-margin) calc(var(--page-pad-x) - 15px),
-      transparent calc(var(--page-pad-x) - 15px),
-      transparent calc(var(--page-pad-x) - 13px),
-      rgba(231, 154, 154, 0.45) calc(var(--page-pad-x) - 13px),
-      rgba(231, 154, 154, 0.45) calc(var(--page-pad-x) - 12px),
-      transparent calc(var(--page-pad-x) - 12px)
-    ),
-    linear-gradient(to bottom, transparent calc(100% - 1px), var(--rule) calc(100% - 1px));
-  background-size:
-    100% 100%,
-    100% var(--line);
-  background-position:
-    0 0,
-    0 calc(var(--line) * -0.25);
 }
 .paper-grid :is(.surface, .thumb-body, .doc-body > .blk) {
   background-image:
@@ -415,19 +376,8 @@
   background-size: calc(var(--line) / 2) calc(var(--line) / 2);
   background-position: calc(var(--page-pad-x) - 1px) calc(var(--line) * -0.25);
 }
-/* Dots are a little darker than lines because they are small. */
-.paper-dots :is(.surface, .thumb-body, .doc-body > .blk) {
-  background-image: radial-gradient(circle at center, var(--dot) 0.75px, transparent 1.25px);
-  background-size: calc(var(--line) / 2) calc(var(--line) / 2);
-  background-position: calc(var(--page-pad-x) - var(--line) / 4) calc(var(--line) * 0.5);
-}
 /* static docs have no side padding on the body */
 :is(.doc-body, .thumb-body, .doc-body > .blk) {
   --page-pad-x: 0px;
 }
-.thumb-page.paper-legal .thumb-body,
-.nib-print.paper-legal .doc-body > .blk {
-  background-position:
-    -60px 0,
-    0 calc(var(--line) * -0.25);
-}
+

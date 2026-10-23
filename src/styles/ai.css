@@ -9,9 +9,8 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  margin: 0 8px 0 8px;
-  background: var(--bg);
-  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  background: var(--bg-canvas);
+  box-shadow: inset 1px 0 0 var(--hairline);
   overflow: hidden;
   animation: slide-in 0.2s var(--ease);
   min-height: 0;
@@ -412,7 +411,7 @@
   color: var(--accent);
 }
 .msg-save:disabled {
-  box-shadow: inset 0 0 0 1px rgba(31, 31, 31, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
   color: var(--text-3);
 }
 .followups {

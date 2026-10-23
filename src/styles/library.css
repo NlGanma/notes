@@ -263,7 +263,7 @@
 }
 /* Scans and pictures: NotebookLM's red PDF icon. */
 .src-type.is-scan {
-  color: #d93025;
+  color: var(--danger);
 }
 .src-title {
   flex: 1;
@@ -550,8 +550,8 @@
   background: var(--accent-tint);
 }
 .overview-btn:disabled {
-  color: rgba(31, 31, 31, 0.38);
-  box-shadow: inset 0 0 0 1px rgba(31, 31, 31, 0.12);
+  color: rgba(20, 20, 19, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
 }
 .overview-btn:disabled svg {
   opacity: 0.38;
@@ -995,10 +995,10 @@ button.art-crumb:hover {
   transition: transform 0.42s var(--ease);
 }
 .fc-front {
-  background: #1f1f1f;
+  background: #141413;
 }
 .fc-back {
-  background: #2d2f31;
+  background: #2c2c2a;
   transform: rotateY(180deg);
   padding: 40px 16px 12px;
 }

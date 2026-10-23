@@ -14,13 +14,13 @@
   min-height: 0;
   --rv-right: var(--success);
   --rv-right-bg: #e6f4ea;
-  --rv-right-fill: #1e8e3e;
+  --rv-right-fill: #2f7613;
   --rv-wrong: var(--danger);
   --rv-wrong-bg: #fce8e6;
   --rv-learn: var(--warning);
   --rv-learn-bg: var(--warning-soft);
   --rv-learn-fill: var(--warning-line);
-  --rv-track: #e8eaed;
+  --rv-track: #e8e6dc;
 }
 
 /* ------------------------------------------------------------ setup */
@@ -88,7 +88,7 @@
   background: var(--accent-tint);
 }
 .rv-row.is-checked:hover {
-  background: rgba(11, 87, 208, 0.12);
+  background: rgba(42, 120, 214, 0.12);
 }
 .rv-row.is-group {
   min-height: 48px;
@@ -398,7 +398,7 @@ button.rv-bucket:hover:not(:disabled) {
 }
 .rv-option.is-off .rv-option-label,
 .rv-opt-row.is-off .rv-option-label {
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 .switch.is-disabled {
   opacity: 0.38;
@@ -1194,7 +1194,7 @@ kbd.rv-key {
   width: 120px;
   height: 6px;
   border-radius: 3px;
-  background: rgba(31, 31, 31, 0.1);
+  background: rgba(20, 20, 19, 0.1);
   overflow: hidden;
 }
 .rv-bar > span {
@@ -1244,7 +1244,7 @@ kbd.rv-key {
   transform: translateY(1px);
 }
 .btn.rv-next:disabled {
-  background: rgba(31, 31, 31, 0.12);
+  background: rgba(20, 20, 19, 0.12);
 }
 .btn.rv-next:focus-visible {
   outline-color: var(--tone);

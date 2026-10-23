@@ -280,7 +280,7 @@
 }
 .hw-help-input .icon-btn:disabled {
   opacity: 1;
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 
 .hw-add-menu {
@@ -391,7 +391,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #e8f0fe;
+  background: var(--info-soft);
   color: var(--accent);
 }
 .hw-appbar-title {
@@ -431,8 +431,8 @@
   background: #1a5fd8;
 }
 .hw-split-arrow:disabled {
-  background: rgba(31, 31, 31, 0.12);
-  color: rgba(31, 31, 31, 0.38);
+  background: rgba(20, 20, 19, 0.12);
+  color: rgba(20, 20, 19, 0.38);
 }
 /* Material's arrow_drop_down. */
 .hw-caret {
@@ -450,8 +450,8 @@
   border-top-color: #fff;
 }
 .btn:disabled .spinner.is-light {
-  border-color: rgba(31, 31, 31, 0.12);
-  border-top-color: rgba(31, 31, 31, 0.38);
+  border-color: rgba(20, 20, 19, 0.12);
+  border-top-color: rgba(20, 20, 19, 0.38);
 }
 
 .hw-create-body {
@@ -499,7 +499,7 @@
   transition: background 0.15s var(--ease);
 }
 .hw-instr:hover {
-  background: #e9eef6;
+  background: var(--bg-subtle);
 }
 .hw-instr.is-focused {
   box-shadow: inset 0 -2px 0 var(--accent);
@@ -575,7 +575,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid #e8eaed;
+  border: 1px solid var(--border);
   background: #fff;
   color: var(--text-2);
   transition: background 0.15s var(--ease);
@@ -590,7 +590,7 @@
   color: var(--success);
 }
 .hw-attach-tile:disabled {
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 .hw-attached {
   display: flex;
@@ -687,7 +687,7 @@
   transition: background 0.15s var(--ease);
 }
 .hw-select:hover {
-  background: #e9eef6;
+  background: var(--bg-subtle);
 }
 .hw-select::after {
   content: '';
@@ -745,10 +745,10 @@ button.hw-select:focus-visible {
   font-size: 16px;
 }
 .hw-select.is-disabled select {
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 .hw-select.is-disabled::after {
-  border-top-color: rgba(31, 31, 31, 0.38);
+  border-top-color: rgba(20, 20, 19, 0.38);
 }
 /* "Answers from": an outlined pill that sums up the choice (Classroom's "Assign to: All students"). */
 .hw-answers {
@@ -954,7 +954,7 @@ button.hw-select:focus-visible {
   height: 48px;
   font-size: 14px;
   color: var(--text);
-  border-bottom: 1px solid #f1f3f4;
+  border-bottom: 1px solid var(--border);
   outline: none;
 }
 .link-row:hover {
@@ -1007,7 +1007,7 @@ button.hw-select:focus-visible {
 }
 /* Included with a linked folder: selected, but greyed. */
 .link-row.is-included .link-box {
-  background: rgba(31, 31, 31, 0.38);
+  background: rgba(20, 20, 19, 0.38);
 }
 .link-row.is-included .link-name {
   color: var(--text-2);

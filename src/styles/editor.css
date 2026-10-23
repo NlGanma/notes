@@ -49,8 +49,8 @@
   background: var(--paper, #fff);
   border-radius: 0;
   box-shadow:
-    0 0 0 1px rgba(60, 64, 67, 0.08),
-    0 1px 3px 1px rgba(60, 64, 67, 0.1);
+    0 0 0 1px rgba(20, 20, 19, 0.08),
+    0 1px 3px 1px rgba(20, 20, 19, 0.1);
   min-height: 1056px;
   display: flex;
   flex-direction: column;
@@ -122,17 +122,6 @@
 }
 .page-meta :is(.crumb-sep, .crumb-dot) {
   color: var(--text-3);
-}
-
-.paper-swatch {
-  width: 14px;
-  height: 18px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px var(--border);
-  background-color: var(--paper, #fff);
-  --page-pad-x: 0px;
-  display: inline-block;
-  flex: none;
 }
 
 /* Docs' Title style. (Scoped: classroom.css has a .page-title for page heads.) */
@@ -301,7 +290,7 @@
   outline: none;
 }
 .nib-editor ::selection {
-  background: rgba(11, 87, 208, 0.18);
+  background: rgba(42, 120, 214, 0.18);
 }
 .nib-editor .ProseMirror-gapcursor:after {
   border-top-color: var(--accent);
@@ -405,7 +394,7 @@
   stroke: rgba(28, 28, 30, 0.55);
 }
 .lasso-path {
-  fill: rgba(11, 87, 208, 0.04);
+  fill: rgba(42, 120, 214, 0.04);
   stroke: var(--accent);
   stroke-dasharray: 5 5;
   animation: ants 0.6s linear infinite;
@@ -450,14 +439,14 @@
 }
 /* the lines that open between two blocks when ink can't land on the text */
 .room-band {
-  fill: rgba(11, 87, 208, 0.045);
+  fill: rgba(42, 120, 214, 0.045);
 }
 .room-line {
   stroke: var(--accent);
   stroke-linecap: round;
 }
 .snip-rect rect {
-  fill: rgba(11, 87, 208, 0.05);
+  fill: rgba(42, 120, 214, 0.05);
   stroke: var(--accent);
   stroke-dasharray: 6 5;
   animation: ants 0.6s linear infinite;
@@ -467,10 +456,10 @@
 }
 @keyframes snapflash {
   0% {
-    filter: drop-shadow(0 0 0 rgba(11, 87, 208, 0));
+    filter: drop-shadow(0 0 0 rgba(42, 120, 214, 0));
   }
   40% {
-    filter: drop-shadow(0 0 5px rgba(11, 87, 208, 0.8));
+    filter: drop-shadow(0 0 5px rgba(42, 120, 214, 0.8));
   }
 }
 
@@ -485,7 +474,7 @@
 }
 /* Notion's block selection: a soft tint, no outline. */
 .ink-block.is-selected {
-  background: rgba(11, 87, 208, 0.08);
+  background: rgba(42, 120, 214, 0.08);
 }
 .ink-block.tool-text {
   cursor: text;
@@ -630,7 +619,7 @@
 }
 .ink-inline.is-selected,
 .ink-inline:hover {
-  background: rgba(11, 87, 208, 0.08);
+  background: rgba(42, 120, 214, 0.08);
 }
 /* A sketch that was just dropped into the text glows for a moment */
 .is-landed .ink-inline {
@@ -639,10 +628,10 @@
 @keyframes landed {
   0%,
   35% {
-    background: rgba(11, 87, 208, 0.16);
+    background: rgba(42, 120, 214, 0.16);
   }
   100% {
-    background: rgba(11, 87, 208, 0);
+    background: rgba(42, 120, 214, 0);
   }
 }
 
@@ -659,7 +648,7 @@
   background: var(--bg-hover);
 }
 .math-inline.is-selected {
-  background: rgba(11, 87, 208, 0.12);
+  background: rgba(42, 120, 214, 0.12);
 }
 .math-block-node {
   position: relative;
@@ -672,16 +661,15 @@
   padding: 6px 0;
   background: var(--math-bg, var(--paper, #fff));
 }
-/* The cover runs edge to edge, like the unruled header band, so the rules don't stop at the text column.
-   (Legal paper keeps its red margin line.) */
-.page:not(.paper-legal) .nib-editor > .math-block-node > .math-block {
+/* The cover runs edge to edge, like the unruled header band, so the rules don't stop at the text column. */
+.page .nib-editor > .math-block-node > .math-block {
   border-radius: 0;
   box-shadow:
     calc(-1 * var(--page-pad-x)) 0 0 var(--math-bg, var(--paper, #fff)),
     var(--page-pad-x) 0 0 var(--math-bg, var(--paper, #fff));
 }
 .math-block.is-selected {
-  background: linear-gradient(rgba(11, 87, 208, 0.08), rgba(11, 87, 208, 0.08)), var(--math-bg, var(--paper, #fff));
+  background: linear-gradient(rgba(42, 120, 214, 0.08), rgba(42, 120, 214, 0.08)), var(--math-bg, var(--paper, #fff));
 }
 .math-block.is-editing {
   background: var(--bg-subtle);
@@ -808,7 +796,7 @@
   background: var(--bg-active);
 }
 .tb-btn:disabled {
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 /* Tools: a 32px pale-blue disc when selected (GoodNotes' selected tool, in GM3's primary container). */
 .tb-tool {
@@ -900,7 +888,7 @@
   background: var(--bg-hover);
 }
 .tb-size.is-active {
-  background: rgba(31, 31, 31, 0.1);
+  background: rgba(20, 20, 19, 0.1);
 }
 .tb-line {
   width: 16px;
@@ -937,7 +925,7 @@
 .tb-swatch:hover > span:first-child {
   box-shadow:
     0 0 0 2px var(--bg-subtle),
-    0 0 0 4px rgba(31, 31, 31, 0.08);
+    0 0 0 4px rgba(20, 20, 19, 0.08);
 }
 .tb-swatch.is-active > span:first-child {
   box-shadow:
@@ -1194,7 +1182,7 @@
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.1),
     0 0 0 2px #fff,
-    0 0 0 4px rgba(31, 31, 31, 0.08);
+    0 0 0 4px rgba(20, 20, 19, 0.08);
 }
 .swatch.is-active > span {
   box-shadow:
@@ -1327,7 +1315,7 @@
   color: var(--accent);
 }
 .fmt-seg:disabled {
-  color: rgba(31, 31, 31, 0.38);
+  color: rgba(20, 20, 19, 0.38);
 }
 .fmt-marker {
   position: relative;
@@ -1404,43 +1392,6 @@
   font-weight: 400;
   color: var(--text-3);
 }
-.pp-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-}
-.pp-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0 2px;
-  border-radius: 8px;
-}
-.pp-thumb {
-  width: 48px;
-  height: 62px;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px var(--border);
-  background-color: var(--paper, #fff);
-  --page-pad-x: 0px;
-}
-.pp-item:hover .pp-thumb {
-  box-shadow: 0 0 0 1px var(--text-4);
-}
-.pp-item.is-active .pp-thumb {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.pp-label {
-  font-size: 12px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.pp-item.is-active .pp-label {
-  color: var(--accent);
-  font-weight: 500;
-}
 .pp-sep {
   height: 1px;
   background: var(--border);
@@ -1456,69 +1407,6 @@
   padding: 0 10px;
   font-size: 13px;
 }
-.pp-default {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-.pp-default input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-/* Template thumbnails: an unruled top band, then the template, in the paper's own line colour. */
-:is(.pp-thumb, .paper-swatch) {
-  --t: 5px;
-  --band: 13px;
-  --edge: 9px;
-}
-.paper-swatch {
-  --t: 3px;
-  --band: 3px;
-  --edge: 3px;
-}
-:is(.pp-thumb, .paper-swatch):is(.paper-ruled, .paper-legal) {
-  background-image: linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
-  background-size:
-    100% var(--band),
-    100% var(--t);
-  background-repeat: no-repeat, repeat;
-}
-:is(.pp-thumb, .paper-swatch).paper-legal {
-  background-image:
-    linear-gradient(to right, transparent var(--edge), var(--rule-margin) var(--edge), var(--rule-margin) calc(var(--edge) + 1px), transparent 0),
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--rule) 0);
-  background-size:
-    100% 100%,
-    100% var(--band),
-    100% var(--t);
-  background-repeat: no-repeat, no-repeat, repeat;
-}
-:is(.pp-thumb, .paper-swatch).paper-grid {
-  background-image:
-    linear-gradient(var(--paper, #fff), var(--paper, #fff)), linear-gradient(to bottom, transparent calc(var(--t) - 1px), var(--grid-line) 0),
-    linear-gradient(to right, transparent calc(var(--t) - 1px), var(--grid-line) 0);
-  background-size:
-    100% var(--band),
-    var(--t) var(--t),
-    var(--t) var(--t);
-  background-repeat: no-repeat, repeat, repeat;
-}
-.pp-thumb.paper-grid {
-  --grid-line: #dde4ec;
-}
-:is(.pp-thumb, .paper-swatch).paper-dots {
-  background-image: linear-gradient(var(--paper, #fff), var(--paper, #fff)), radial-gradient(circle at center, var(--dot) 0.6px, transparent 0.9px);
-  background-size:
-    100% var(--band),
-    var(--t) var(--t);
-  background-repeat: no-repeat, repeat;
-}
-
 /* ⋯ More */
 .more-menu {
   width: 264px;
@@ -1609,7 +1497,7 @@
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.12),
     0 0 0 2px #fff,
-    0 0 0 4px rgba(31, 31, 31, 0.1);
+    0 0 0 4px rgba(20, 20, 19, 0.1);
 }
 
 .snip-ask {
@@ -1648,8 +1536,8 @@
   color: #fff;
 }
 .snip-send:disabled {
-  background: rgba(31, 31, 31, 0.12);
-  color: rgba(31, 31, 31, 0.38);
+  background: rgba(20, 20, 19, 0.12);
+  color: rgba(20, 20, 19, 0.38);
 }
 .snip-close {
   width: 32px;
@@ -1880,7 +1768,7 @@
   padding: 10px 12px;
   border-radius: 4px;
   background: var(--bg);
-  box-shadow: 0 0 0 1px rgba(60, 64, 67, 0.08);
+  box-shadow: 0 0 0 1px rgba(20, 20, 19, 0.08);
   color: var(--text);
 }
 .sp-bar {

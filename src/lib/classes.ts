@@ -23,10 +23,10 @@ export interface ClassInfo {
 }
 
 /**
- * Class themes, as Google Classroom does them: each is a coordinated set used
- * in fixed roles — the banner and card header, the main colour for icons and
- * filled buttons, the dark colour for small accent text, the light colour for
- * tonal backgrounds such as the letter avatar.
+ * Class colours: calm, slightly muted tones that keep white text readable on a card header. Each theme
+ * is a coordinated set used in fixed roles: the header colour, the main colour for icons, dots and
+ * checkboxes, the dark colour for small accent text, the light colour for tinted backgrounds.
+ * The keys stay from older versions (stored colours map onto them); only the tones changed.
  */
 export interface ClassTheme {
   key: string;
@@ -37,18 +37,19 @@ export interface ClassTheme {
   light: string;
 }
 
+// Lowercase: themeFor matches stored colours after lowercasing them.
 export const CLASS_THEMES: ClassTheme[] = [
-  { key: 'blue', label: 'Blue', banner: '#4285f4', main: '#1967d2', dark: '#174ea6', light: '#e8f0fe' },
-  { key: 'ocean', label: 'Ocean', banner: '#0277bd', main: '#1a73e8', dark: '#185abc', light: '#e8f0fe' },
-  { key: 'green', label: 'Green', banner: '#33ac71', main: '#1e8e3e', dark: '#137333', light: '#e6f4ea' },
-  { key: 'teal', label: 'Teal', banner: '#009688', main: '#129eaf', dark: '#007b83', light: '#e4f7fb' },
-  { key: 'orange', label: 'Orange', banner: '#ff8a66', main: '#e8710a', dark: '#c26401', light: '#feefe3' },
-  { key: 'pink', label: 'Pink', banner: '#d91a60', main: '#e52592', dark: '#b80672', light: '#fde7f3' },
-  { key: 'purple', label: 'Purple', banner: '#863a95', main: '#9334e6', dark: '#7627bb', light: '#f3e8fd' },
-  { key: 'slate', label: 'Slate', banner: '#566e7a', main: '#5f6368', dark: '#202124', light: '#f1f3f4' },
+  { key: 'blue', label: 'Sky', banner: '#3e6fa8', main: '#3e6fa8', dark: '#305783', light: '#e8eef5' },
+  { key: 'ocean', label: 'Indigo', banner: '#4f5ba8', main: '#4f5ba8', dark: '#3e4783', light: '#eaebf5' },
+  { key: 'green', label: 'Olive', banner: '#5e7a45', main: '#5e7a45', dark: '#495f36', light: '#ecefe9' },
+  { key: 'teal', label: 'Teal', banner: '#2f7d7a', main: '#2f7d7a', dark: '#25625f', light: '#e6efef' },
+  { key: 'orange', label: 'Ochre', banner: '#946a16', main: '#946a16', dark: '#735311', light: '#f2ede3' },
+  { key: 'pink', label: 'Rose', banner: '#b44f6b', main: '#b44f6b', dark: '#8c3e53', light: '#f6eaed' },
+  { key: 'purple', label: 'Plum', banner: '#7d5a9e', main: '#7d5a9e', dark: '#62467b', light: '#efebf3' },
+  { key: 'slate', label: 'Slate', banner: '#5c5f66', main: '#5c5f66', dark: '#484a50', light: '#ebeced' },
 ];
 
-/** Colours older versions stored for classes, and the theme each now uses. */
+/** Colours older versions stored for classes, and the theme each now uses. Stored colours are never rewritten. */
 const LEGACY_THEME: Record<string, string> = {
   '#2160e8': 'blue',
   '#7346e6': 'purple',
@@ -61,6 +62,31 @@ const LEGACY_THEME: Record<string, string> = {
   '#dc2b2b': 'pink',
   '#1f3a8a': 'ocean',
   '#5b6472': 'slate',
+  // The Google Classroom themes of the previous design (banner, main and dark of each).
+  '#4285f4': 'blue',
+  '#1967d2': 'blue',
+  '#174ea6': 'blue',
+  '#0277bd': 'ocean',
+  '#1a73e8': 'ocean',
+  '#185abc': 'ocean',
+  '#33ac71': 'green',
+  '#1e8e3e': 'green',
+  '#137333': 'green',
+  '#009688': 'teal',
+  '#129eaf': 'teal',
+  '#007b83': 'teal',
+  '#ff8a66': 'orange',
+  '#e8710a': 'orange',
+  '#c26401': 'orange',
+  '#d91a60': 'pink',
+  '#e52592': 'pink',
+  '#b80672': 'pink',
+  '#863a95': 'purple',
+  '#9334e6': 'purple',
+  '#7627bb': 'purple',
+  '#566e7a': 'slate',
+  '#5f6368': 'slate',
+  '#202124': 'slate',
 };
 
 function hue(hex: string): number | null {
@@ -106,8 +132,8 @@ export function themeVars(t: ClassTheme): Record<string, string> {
 
 export const HOMEWORK_SUBFOLDER = 'Homework';
 
-/** The colour a new class is given (each theme's banner colour); the class page's Customize changes it. */
-export const CLASS_COLORS = ['#4285f4', '#33ac71', '#ff8a66', '#863a95', '#009688', '#d91a60', '#0277bd', '#566e7a'];
+/** The colour a new class is given, in turn (each theme's header colour). */
+export const CLASS_COLORS = ['#3e6fa8', '#5e7a45', '#946a16', '#7d5a9e', '#2f7d7a', '#b44f6b', '#4f5ba8', '#5c5f66'];
 
 export const CLASS_ICONS = [
   'sigma',

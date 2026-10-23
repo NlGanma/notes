@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@fontsource-variable/google-sans/opsz.css';
 import '@fontsource-variable/source-serif-4';
 import 'katex/dist/katex.min.css';
 import './styles/tokens.css';
@@ -18,10 +17,11 @@ import './styles/print.css';
 import { App } from './App';
 import { useReview } from './state/review';
 import { useVault } from './state/vault';
+import { useUI } from './state/ui';
 import { scheduler } from './lib/ai/engine';
 
 // Dev server only: lets the end-to-end tests read app state (never in a build).
-if (import.meta.env.DEV) Object.assign(window, { __nib: { review: useReview, vault: useVault, scheduler } });
+if (import.meta.env.DEV) Object.assign(window, { __nib: { review: useReview, vault: useVault, ui: useUI, scheduler } });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

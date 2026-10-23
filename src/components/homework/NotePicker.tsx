@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, FileText, Folder, Search, X } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Tabs } from '../common/Tabs';
-import { NibMark } from '../TopBar';
+import { NibMark } from '../common/NibMark';
 import { useVault } from '../../state/vault';
 import { classForFolder, classInfo, inFolder } from '../../lib/classes';
 import { inHomeworkFolder, suggestSources } from '../../lib/homework';

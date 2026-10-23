@@ -11,7 +11,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--bg-canvas);
   position: relative;
 }
 .screen-head {
@@ -24,9 +24,10 @@
 }
 .screen-title {
   margin: 0;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 500;
   color: var(--text);
 }
 .screen-scroll {
@@ -59,13 +60,13 @@
 .drop-hint {
   position: absolute;
   inset: 12px;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-l);
-  background: rgba(11, 87, 208, 0.08);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: rgba(250, 249, 245, 0.85);
   display: grid;
   place-items: center;
-  font-size: 16px;
-  color: var(--accent);
+  font-size: 15px;
+  color: var(--text-2);
   pointer-events: none;
   z-index: 20;
 }
@@ -115,59 +116,58 @@
 /* ------------------------------------------------------------------ primary tabs */
 
 .gtabs {
-  height: 48px;
+  height: 40px;
   flex: none;
   display: flex;
   align-items: stretch;
   padding: 0 8px 0 24px;
-  box-shadow: inset 0 -1px 0 var(--outline-variant);
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 .gtabs-list {
   display: flex;
+  gap: 4px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
 .gtab {
   position: relative;
-  height: 48px;
-  padding: 0 24px;
+  height: 40px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  color: var(--text-2);
+  font-weight: 400;
+  color: var(--text-3);
   white-space: nowrap;
 }
 .gtab:hover {
-  background: var(--bg-hover);
+  color: var(--text);
 }
 .gtab.is-active {
-  color: var(--accent);
-}
-.gtabs.is-class .gtab.is-active {
-  color: var(--class-dark, var(--accent));
+  color: var(--text);
+  font-weight: 500;
 }
 .gtab.is-active::after {
   content: '';
   position: absolute;
-  left: 2px;
-  right: 2px;
+  left: 10px;
+  right: 10px;
   bottom: 0;
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: currentColor;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--text);
 }
 .gtab-count {
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--danger);
-  color: #fff;
+  padding: 0 6px;
+  border-radius: 4.5px;
+  background: var(--danger-soft);
+  color: var(--danger-strong);
   font-size: 11px;
+  font-weight: 500;
   display: inline-grid;
   place-items: center;
 }
@@ -188,7 +188,7 @@
   display: grid;
   place-items: center;
   flex: none;
-  background: var(--class-main, #1967d2);
+  background: var(--class-main, var(--text-2));
   color: #fff;
 }
 .item-circle.is-40 {
@@ -634,7 +634,7 @@
 }
 .stream-actions .btn.is-tonal {
   padding: 0 24px 0 16px !important;
-  color: #004a77;
+  color: var(--text);
 }
 .stream-card {
   display: flex;
@@ -647,7 +647,7 @@
   cursor: pointer;
 }
 .stream-card:hover {
-  background: #e9eef6;
+  background: var(--bg-subtle);
 }
 .stream-card.is-empty {
   display: block;
@@ -793,7 +793,7 @@
   cursor: pointer;
 }
 .cw-row:hover {
-  background: rgba(31, 31, 31, 0.04);
+  background: rgba(20, 20, 19, 0.04);
 }
 .cw-row + .cw-row {
   box-shadow: inset 0 1px 0 var(--border);
@@ -1052,88 +1052,14 @@
 
 /* ------------------------------------------------------------------ fields and dialogs */
 
-/* Material 3 filled text field. */
-.gfield-box {
-  position: relative;
-  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  background: var(--bg-field);
-  box-shadow: inset 0 -1px 0 var(--text-2);
-  transition: background 0.15s var(--ease);
-}
-.gfield-box:hover {
-  background: #e9eef6;
-}
-.gfield-box:focus-within {
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-.gfield.is-error .gfield-box {
-  box-shadow: inset 0 -2px 0 var(--danger);
-}
-.gfield input,
-.gfield textarea {
-  display: block;
-  width: 100%;
-  height: 56px;
-  padding: 24px 16px 6px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text);
-  user-select: text;
-  resize: none;
-}
-.gfield textarea {
-  height: auto;
-  min-height: 112px;
-}
-.gfield label {
-  position: absolute;
-  left: 16px;
-  top: 16px;
-  font-size: 16px;
-  line-height: 24px;
-  color: var(--text-2);
-  pointer-events: none;
-  transform-origin: left top;
-  transition:
-    transform 0.15s var(--ease),
-    color 0.15s var(--ease),
-    top 0.15s var(--ease);
-}
-.gfield input:focus + label,
-.gfield textarea:focus + label,
-.gfield input:not(:placeholder-shown) + label,
-.gfield textarea:not(:placeholder-shown) + label {
-  top: 6px;
-  transform: scale(0.75);
-}
-.gfield input:focus + label,
-.gfield textarea:focus + label {
-  color: var(--accent);
-}
-.gfield.is-error label {
-  color: var(--danger) !important;
-}
-.gfield-help {
-  padding: 4px 16px 0;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text-2);
-}
-.gfield.is-error .gfield-help {
-  color: var(--danger);
-}
-
 .gdialog {
-  padding: 24px 24px 20px;
+  padding: 20px 24px 20px;
 }
 .gdialog-title {
   margin: 0 0 16px;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 400;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
   color: var(--text);
 }
 .gdialog-fields {
@@ -1145,13 +1071,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 24px;
-}
-/* Material 3 dialogs (Classroom's Create class): 28px corners for every dialog. */
-.modal.dialog,
-.class-dialog.modal,
-.customize-dialog.modal {
-  border-radius: var(--radius-2xl);
+  justify-content: flex-end;
+  margin-top: 20px;
 }
 
 .customize-preview {
