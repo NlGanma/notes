@@ -103,6 +103,7 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
     const keep = [...selected].filter((id) => countIdeas([notes[id]], file)[bucket] > 0).length;
     return keep > 0 && keep < selected.size;
   };
+  // Each part keeps its words together when the line wraps.
   const part = (n: number, label: string, bucket?: 'fresh' | 'learning', title?: string) =>
     n > 0 && (
       <Fragment key={label}>
@@ -112,7 +113,9 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
             {n} {label}
           </button>
         ) : (
-          `${n} ${label}`
+          <span className="rv-stat">
+            {n} {label}
+          </span>
         )}
       </Fragment>
     );
@@ -162,11 +165,19 @@ function ReviewSetup({ loaded }: { loaded: boolean }) {
                 </div>
                 {selected.size > 0 && (
                   <div className="rv-panel-stats">
-                    {plural(selected.size, 'note')} · {plural(stats.total, 'idea')}
+                    <span className="rv-stat">{plural(selected.size, 'note')}</span>
+                    {' · '}
+                    <span className="rv-stat">{plural(stats.total, 'idea')}</span>
                     {part(stats.fresh, 'new', 'fresh', 'Pick only the notes with new ideas')}
                     {part(stats.learning, 'learning', 'learning', 'Pick only the notes with ideas you’re still learning')}
                     {part(stats.mastered, 'mastered')}
-                    {stats.due > 0 ? ` · ${stats.due} due` : !askable && stats.total ? ` · next review ${dayLabel(stats.next)}` : ''}
+                    {part(stats.due, 'due')}
+                    {!askable && stats.total > 0 && (
+                      <>
+                        {' · '}
+                        <span className="rv-stat">next review {dayLabel(stats.next)}</span>
+                      </>
+                    )}
                     {reading && (
                       <span className="rv-reading">
                         {' · '}

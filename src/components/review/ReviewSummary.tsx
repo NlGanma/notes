@@ -109,19 +109,6 @@ export function ReviewSummary() {
             </div>
           </header>
 
-          {summary.calibration.some((c) => c.n) && (
-            <section className="rv-section rv-calib">
-              <h2 className="rv-section-title">How sure vs. how right</h2>
-              <div className="rv-calib-nums">
-                {summary.calibration
-                  .filter((c) => c.n)
-                  .map((c) => `${CONF_LABEL[c.conf]} ${c.correct}/${c.n}`)
-                  .join(' · ')}
-              </div>
-              {calib && <div className="rv-calib-msg">{calib}</div>}
-            </section>
-          )}
-
           <section className="rv-section">
             <h2 className="rv-section-title">By class</h2>
             <div className="rv-classes">
@@ -149,6 +136,19 @@ export function ReviewSummary() {
             <section className="rv-section">
               <h2 className="rv-section-title">Still learning · {learning.length}</h2>
               <div className="rv-ideas">{learning.map(ideaRow)}</div>
+            </section>
+          )}
+
+          {summary.calibration.some((c) => c.n) && (
+            <section className="rv-section rv-calib">
+              <h2 className="rv-section-title">How sure vs. how right</h2>
+              <div className="rv-calib-nums">
+                {summary.calibration
+                  .filter((c) => c.n)
+                  .map((c) => `${CONF_LABEL[c.conf]}: ${c.correct} of ${c.n} right`)
+                  .join(' · ')}
+              </div>
+              {calib && <div className="rv-calib-msg">{calib}</div>}
             </section>
           )}
 
