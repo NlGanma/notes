@@ -1,7 +1,7 @@
 // End-to-end test of the local-AI features against scripts/mock-llm.mjs.
 //   node scripts/mock-llm.mjs &   (port 11434)
 //   node tests/e2e/ai.mjs
-import { launch, shot, BASE, openClassNote, noteMenuItem } from './lib.mjs';
+import { launch, shot, BASE, openClassNote, noteMenuItem, showSidebar } from './lib.mjs';
 
 const { browser, page, errors } = await launch({ width: 1440, height: 940 });
 const V = '.note-view:not(.is-hidden)';
@@ -170,6 +170,75 @@ await page.click('.menu-item:has-text("Delete conversation")');
 check(/What do you want to know/.test(await page.textContent('.library')), 'deleting the conversation on the page goes back to the greeting');
 await page.click('.toast-action:has-text("Undo")');
 check(await page.locator('.library .art-card').count(), '…and Undo brings it back');
+
+// 7b. Every way into Ask your notes comes back to the live conversation, on the notes it was asking about.
+{
+  const state = () =>
+    page.evaluate(() => ({
+      chip: document.querySelector('.library .scope-chip-label')?.textContent ?? '',
+      head: document.querySelector('.library .library-title h1')?.textContent ?? '',
+      asked: document.querySelector('.library .msg.is-user .msg-bubble')?.textContent ?? '',
+    }));
+  await page.click('.library button[title="New conversation"]');
+  await page.click('.library .scope-chip');
+  await page.click('.scope-menu .menu-item:has-text("Calculus I")');
+  await page.fill('.library-composer textarea', 'What is a limit?');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.library .msg.is-bot');
+  await waitIdle();
+  await page.click('.tab:has-text("Lecture 4")');
+  await showSidebar(page);
+  await page.click('.nav-item:has-text("Ask your notes")');
+  await page.waitForSelector('.library');
+  const side = await state();
+  check(side.chip === 'Calculus I' && side.head === 'Calculus I' && side.asked === 'What is a limit?', `the sidebar's Ask your notes returns to the conversation, still on its class (${JSON.stringify(side)})`);
+  await page.click('.tab:has-text("Lecture 4")');
+  await page.keyboard.press('Meta+k');
+  await page.waitForSelector('.palette');
+  await page.keyboard.type('Ask your notes');
+  await page.click('.palette-item:has(.palette-label:text-is("Ask your notes"))');
+  await page.waitForSelector('.library');
+  const pal = await state();
+  check(pal.chip === 'Calculus I' && pal.asked === 'What is a limit?', `…and so does the palette's (${JSON.stringify(pal)})`);
+
+  // A study tool with nothing in the notes to make it from says so in the conversation; it isn't an output.
+  await page.fill('.library-composer textarea', 'zebra migration across the Serengeti');
+  await page.click('.study-tool:has-text("Summarize")');
+  await page.waitForTimeout(300);
+  await waitIdle();
+  const refusal = await page.locator('.library .msg.is-bot').last().textContent();
+  check(/isn.t enough in these notes/.test(refusal), `a study tool the notes can't support says so (${refusal.trim().slice(0, 60)})`);
+  check(!(await page.locator('.library .art-card:has-text("zebra")').count()) && !(await page.locator('.lib-artifact').count()), '…as a reply, not as a study output to open or save');
+  check(await page.locator('.library .msg.is-bot').last().locator('.msg-act[title="Retry"]').count(), '…with Retry');
+
+  // A narrow page: the output covers the conversation and takes the keyboard; Escape gives it back.
+  await page.setViewportSize({ width: 1000, height: 760 });
+  await page.click('.library button[title="New conversation"]');
+  await page.click('.study-tool:has-text("Flashcards")');
+  await page.waitForSelector('.lib-artifact.is-overlay .flashcards', { timeout: 20000 });
+  await page.waitForTimeout(200);
+  const focus = await page.evaluate(() => ({
+    inPanel: !!document.activeElement?.closest('.lib-artifact'),
+    inert: document.querySelector('.lib-main')?.hasAttribute('inert'),
+  }));
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(300);
+  const flipped = await page.locator('.fc-card.is-flipped').count();
+  const typed = await page.inputValue('.library-composer textarea');
+  check(focus.inPanel && focus.inert && flipped && typed === '', `at 1000px the flashcards take the keyboard: Space flips the card (${JSON.stringify({ ...focus, flipped, typed })})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const back = await page.evaluate(() => ({
+    open: !!document.querySelector('.lib-artifact'),
+    composer: document.activeElement?.matches('.library-composer textarea'),
+    inert: document.querySelector('.lib-main')?.hasAttribute('inert'),
+  }));
+  check(!back.open && back.composer && !back.inert, `…and Escape closes them, back to the composer (${JSON.stringify(back)})`);
+  await page.setViewportSize({ width: 1440, height: 940 });
+  await page.waitForTimeout(300);
+  await page.click('.library .scope-chip');
+  await page.click('.scope-menu .menu-item:has-text("All notes")');
+}
 
 // 8. Polish → read handwriting in the background-transcription path.
 await page.click('.tab:has-text("Lecture 4")');

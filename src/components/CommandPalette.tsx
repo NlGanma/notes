@@ -179,7 +179,7 @@ function Palette() {
       { id: 'c:new', group: 'Commands', label: 'New note', icon: <FilePlus {...ICON} />, hint: `${MOD}N`, always: true, run: () => newNote() },
       { id: 'c:hw', group: 'Commands', label: 'New homework', icon: <ClipboardList {...ICON} />, hint: `${SHIFT}${MOD}Y`, always: true, run: () => newHomework() },
       { id: 'c:class', group: 'Commands', label: 'New class', icon: <GraduationCap {...ICON} />, always: true, run: () => newClass() },
-      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <MessagesSquare {...ICON} />, hint: `${SHIFT}${MOD}L`, always: true, run: () => openLibrary({ kind: 'all' }) },
+      { id: 'c:lib', group: 'Commands', label: 'Ask your notes', icon: <MessagesSquare {...ICON} />, hint: `${SHIFT}${MOD}L`, always: true, run: () => openLibrary() },
       { id: 'c:review-due', group: 'Commands', label: 'Review what’s due', icon: <Repeat {...ICON} />, hint: `${SHIFT}${MOD}E`, always: true, run: () => openReview(dueNotes().ids) },
       { id: 'c:import', group: 'Commands', label: 'Import…', sub: 'PDF, Markdown or images', icon: <FileUp {...ICON} />, always: true, run: () => void importFiles() },
       { id: 'c:settings', group: 'Commands', label: 'Settings', icon: <Settings {...ICON} />, hint: `${MOD},`, always: true, run: () => useUI.getState().openSettings() },
