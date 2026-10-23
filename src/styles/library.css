@@ -694,12 +694,18 @@
     background 0.15s var(--ease),
     color 0.15s var(--ease);
 }
-.lib-send.is-ready,
+/* Send is clay; Stop, like Claude's, stays ink. */
+.lib-send.is-ready {
+  background: var(--clay-strong);
+  color: #fff;
+}
+.lib-send.is-ready:hover {
+  background: var(--clay-hover);
+}
 .lib-send.is-stop {
   background: var(--accent);
   color: #fff;
 }
-.lib-send.is-ready:hover,
 .lib-send.is-stop:hover {
   background: var(--accent-hover);
 }

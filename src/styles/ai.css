@@ -657,7 +657,7 @@
   background: var(--bg-selected);
   color: var(--on-selected);
 }
-/* Send: a round button, grey until there's something to send. */
+/* Send: a round clay button (one of clay's few places), grey until there's something to send. */
 .send-btn {
   width: 40px;
   height: 40px;
@@ -665,11 +665,18 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  background: var(--clay-strong);
   color: #fff;
   transition: background 0.15s var(--ease);
 }
 .send-btn:hover:not(:disabled) {
+  background: var(--clay-hover);
+}
+/* Stop, like Claude's, stays ink. */
+.send-btn.is-stop {
+  background: var(--accent);
+}
+.send-btn.is-stop:hover {
   background: var(--accent-hover);
 }
 .send-btn:disabled {

@@ -1532,7 +1532,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--clay-strong);
   color: #fff;
 }
 .snip-send:disabled {
