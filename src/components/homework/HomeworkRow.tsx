@@ -107,7 +107,12 @@ export const HomeworkRow = memo(function HomeworkRow({
           <span className="hw-row-class-name">{cls.name}</span>
         </span>
       )}
-      {due?.text && <span className={cx('hw-row-due', due.overdue && 'is-overdue')}>{due.text}</span>}
+      {/* Beside a class tag the date cell is always there, even empty, so every tag ends at the same edge. */}
+      {(showClass || due?.text) && (
+        <span className={cx('hw-row-due', due?.overdue && 'is-overdue')} aria-hidden={due?.text ? undefined : true}>
+          {due?.text}
+        </span>
+      )}
       <button className="icon-btn is-tiny row-more" aria-label="More" onClick={(e) => menuUnder(e, noteMenu(note))}>
         <MoreHorizontal size={16} strokeWidth={1.5} />
       </button>

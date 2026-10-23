@@ -92,10 +92,14 @@
 .hw-row-due.is-overdue {
   color: var(--danger);
 }
-/* On the Homework page the dates line up in a column, so the class names beside them do too. */
-.hw-group .hw-row-due {
-  min-width: 64px;
+/* On the Homework page the dates sit in one column, so the class tags beside them end at one edge. 96px
+   fits the longest label ("Wed, 11:30 PM", "Dec 31, 2025"). */
+.homework-view .hw-row-due {
+  width: 96px;
   text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hw-row-item:hover .row-more,
 .hw-row-item:focus-within .row-more {

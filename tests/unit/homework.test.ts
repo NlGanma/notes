@@ -92,6 +92,10 @@ test('the Homework list groups by days from today, whatever the weekday, and lea
   assert.equal(dueInGroup(new Date(2026, 9, 22, 23, 59).getTime(), now), null);
   assert.equal(dueInGroup(new Date(2026, 9, 22, 15, 0).getTime(), now)?.text.replace(/\s/g, ' '), new Date(2026, 9, 22, 15, 0).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' '));
   assert.equal(dueInGroup(now - 2 * DAY, now)?.overdue, true);
+  // This week: the whole weekday, or the short one when a time follows it.
+  const wk = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime();
+  assert.equal(dueInGroup(wk(23, 59), now)?.text, new Date(wk(23, 59)).toLocaleDateString(undefined, { weekday: 'long' }));
+  assert.ok(dueInGroup(wk(15, 30), now)!.text.startsWith(new Date(wk(15, 30)).toLocaleDateString(undefined, { weekday: 'short' }) + ', '));
   // Homework ticked a moment ago stays in its group until it's let go.
   const ticked = hw('just ticked', now + 3 * DAY, true);
   const list = [hw('in three days', now + 3 * DAY), ticked];

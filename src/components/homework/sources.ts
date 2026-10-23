@@ -80,7 +80,8 @@ export function groupHomework(list: NoteDoc[], now = Date.now(), held: ReadonlyS
 
 /**
  * A row's due text inside its group, saying only what the group doesn't: the time today and tomorrow,
- * the weekday this week, the date later on or when overdue.
+ * the weekday this week (short when a time follows, so the date column stays narrow), the date later on
+ * or when overdue.
  */
 export function dueInGroup(due: number | undefined, now = Date.now()): { text: string; overdue?: boolean } | null {
   if (!due) return null;
@@ -91,6 +92,6 @@ export function dueInGroup(due: number | undefined, now = Date.now()): { text: s
   const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
   if (g === 'overdue') return { text: date, overdue: true };
   if (g === 'today' || g === 'tomorrow') return time ? { text: time } : null;
-  if (g === 'week') return { text: [d.toLocaleDateString(undefined, { weekday: 'long' }), time].filter(Boolean).join(', ') };
+  if (g === 'week') return { text: time ? `${d.toLocaleDateString(undefined, { weekday: 'short' })}, ${time}` : d.toLocaleDateString(undefined, { weekday: 'long' }) };
   return { text: date };
 }
