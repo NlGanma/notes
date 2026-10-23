@@ -981,25 +981,40 @@ textarea.input {
 .settings-nav-item.is-active svg {
   color: var(--text);
 }
-.settings-body {
-  position: relative;
+.settings-main {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  padding: 24px 32px 32px;
+  display: flex;
+  flex-direction: column;
 }
-.settings-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 1;
+/* The pane's name and the close button, outside the scrolling rows so nothing runs under the ×. */
+.settings-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 14px 8px 32px;
+  transition: box-shadow var(--dur) var(--ease);
 }
-.settings-section h2 {
-  margin: 0 0 8px;
+.settings-head.is-scrolled {
+  box-shadow: 0 1px 0 var(--hairline);
+}
+.settings-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: 22px;
   line-height: 28px;
   font-weight: 600;
   color: var(--text);
+}
+.settings-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 32px 32px;
 }
 .settings-group {
   margin: 20px 0 0;
@@ -1212,9 +1227,13 @@ textarea.input {
   color: var(--text-3);
   line-height: 20px;
 }
-.about h2 {
+.about-name {
   font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 28px;
   font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
 }
 
 /* ------------------------------------------------------------ classes */

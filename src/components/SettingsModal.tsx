@@ -27,6 +27,8 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] 
 export function SettingsModal() {
   const section = useUI((s) => s.settings);
   const close = () => useUI.getState().openSettings(null);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => setScrolled(false), [section]);
   return (
     <Modal open={!!section} onClose={close} width={880} bare className="settings">
       <div className="settings-layout">
@@ -44,15 +46,21 @@ export function SettingsModal() {
             </button>
           ))}
         </nav>
-        <button className="icon-btn is-tiny settings-close" onClick={close} aria-label="Close">
-          <X size={16} strokeWidth={1.5} />
-        </button>
-        <div className="settings-body">
-          {section === 'general' && <GeneralSection />}
-          {section === 'ai' && <AISection />}
-          {section === 'writing' && <WritingSection />}
-          {section === 'shortcuts' && <ShortcutsSection />}
-          {section === 'about' && <AboutSection />}
+        <div className="settings-main">
+          {/* The pane's name and the close button stay put; only the rows under them scroll. */}
+          <div className={cx('settings-head', scrolled && 'is-scrolled')}>
+            <h2>{SECTIONS.find((s) => s.id === section)?.label}</h2>
+            <button className="icon-btn is-tiny settings-close" onClick={close} aria-label="Close">
+              <X size={16} strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="settings-body" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 2)}>
+            {section === 'general' && <GeneralSection />}
+            {section === 'ai' && <AISection />}
+            {section === 'writing' && <WritingSection />}
+            {section === 'shortcuts' && <ShortcutsSection />}
+            {section === 'about' && <AboutSection />}
+          </div>
         </div>
       </div>
     </Modal>
@@ -102,9 +110,18 @@ function Segmented<T extends string | number>({ value, options, onChange }: { va
 }
 
 function modelLabel(m: ModelInfo) {
-  const parts = [m.name];
+  // ":latest" is the tag a model gets when none is named; it only crowds the menu.
+  const parts = [m.name.replace(/:latest$/, '')];
   if (m.params) parts.push(m.params);
   return parts.join(' · ');
+}
+
+/** What a picked model can do, for the row's help line (the menu itself only names the models). */
+function modelNote(value: string, models: ModelInfo[]) {
+  if (!value) return '';
+  const m = models.find((m) => m.name === value);
+  if (!m) return models.length ? ` ${value} isn’t on the server.` : '';
+  return [m.vision && ' Sees images.', m.thinking && ' Reasons before answering.'].filter(Boolean).join('');
 }
 
 function ModelSelect({
@@ -125,12 +142,10 @@ function ModelSelect({
   return (
     <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
       {none !== undefined && <option value="">{none}</option>}
-      {!known && value && <option value={value}>{value} (not found)</option>}
+      {!known && value && <option value={value}>{value}</option>}
       {list.map((m) => (
         <option key={m.name} value={m.name}>
           {modelLabel(m)}
-          {m.vision ? '  — sees images' : ''}
-          {m.thinking ? '  — reasoning' : ''}
         </option>
       ))}
     </select>
@@ -179,21 +194,21 @@ function AISection() {
         : ai.status === 'offline'
           ? 'Local AI isn’t running'
           : 'Not connected yet';
+  // The browser's own error ("Failed to fetch") goes in the tooltip, not in the line.
   const statusSub =
     ai.status === 'offline'
-      ? ai.lastError || `Nothing answers at ${ai.baseUrl}`
+      ? `Nothing answers at ${ai.baseUrl}`
       : ai.status === 'online'
         ? [ai.chatModel && `Chat: ${ai.chatModel}`, vision && `Vision: ${vision}`].filter(Boolean).join(' · ') || `${ai.models.length} models available`
         : ai.baseUrl;
 
   return (
     <div className="settings-section">
-      <h2>Local AI</h2>
       {/* The one place the model's state is shown in full. */}
       <div className="set-row">
         <div className={cx('status-card', `is-${ai.status}`)}>
           <span className="ai-dot" />
-          <div className="status-text">
+          <div className="status-text" title={ai.status === 'offline' ? ai.lastError || undefined : undefined}>
             <div className="status-title">{statusText}</div>
             <div className="status-sub">{statusSub}</div>
           </div>
@@ -240,10 +255,10 @@ function AISection() {
       )}
 
       <div className="settings-group">Models</div>
-      <Row title="Chat model" help="Answers questions, tutors, summarises.">
+      <Row title="Chat model" help={`Answers questions, tutors, summarizes.${modelNote(ai.chatModel, ai.models)}`}>
         <ModelSelect value={ai.chatModel} onChange={(v) => ai.set({ chatModel: v })} models={ai.models} filter={(m) => !m.embedding} />
       </Row>
-      <Row title="Vision model" help="Reads your handwriting and what’s on screen.">
+      <Row title="Vision model" help={`Reads your handwriting and what’s on screen.${modelNote(ai.visionModel, ai.models).replace(' Sees images.', '')}`}>
         <ModelSelect
           value={ai.visionModel}
           onChange={(v) => ai.set({ visionModel: v })}
@@ -252,14 +267,14 @@ function AISection() {
           none={chatModels.find((m) => m.name === ai.chatModel)?.vision ? 'Same as chat model' : 'None'}
         />
       </Row>
-      <Row title="Embedding model" help="Optional. Lets Ask your notes match meaning, not just words.">
+      <Row title="Embedding model" help={`Optional. Lets Ask your notes match meaning, not just words.${modelNote(ai.embedModel, ai.models)}`}>
         <ModelSelect value={ai.embedModel} onChange={(v) => ai.set({ embedModel: v })} models={ai.models} filter={(m) => m.embedding} none="None (keyword search)" />
       </Row>
       <Row
         title="Context size"
         help={
           chatInfo?.contextLength && chatInfo.contextLength < ai.numCtx
-            ? `${ai.chatModel} reads up to ${Math.round(chatInfo.contextLength / 1024)}K; Nib uses that.`
+            ? `${ai.chatModel} reads up to ${Math.round(chatInfo.contextLength / 1024)}K, so that’s what’s used.`
             : 'How much of a long note the model reads at once. Larger uses more memory.'
         }
       >
@@ -287,13 +302,13 @@ function AISection() {
       <div className="settings-group">Answers</div>
       <SwitchRow
         title="When my notes don’t cover a question, answer from the AI’s own knowledge"
-        help="Nib first says your notes don’t cover it, and shows that answer in a box marked “proceed with caution”. Off: it only says so."
+        help="The reply first says your notes don’t cover it, then gives the AI’s answer in a box marked “proceed with caution”. Off: it only says so."
         checked={ai.outsideKnowledge === 'auto'}
         onChange={(v) => ai.set({ outsideKnowledge: v ? 'auto' : 'never' })}
       />
       <SwitchRow
         title="Double-check loosely matched sentences"
-        help="A second, quick pass asks the model to quote the passage behind each one; Nib checks the quote itself. Anything it can’t back is boxed."
+        help="A second, quick pass asks the model to quote the passage behind each one, and the quote is checked against your notes. Anything that can’t be backed is boxed."
         checked={ai.doubleCheck}
         onChange={(v) => ai.set({ doubleCheck: v })}
       />
@@ -301,7 +316,7 @@ function AISection() {
       <div className="settings-group">Handwriting</div>
       <SwitchRow
         title="Read handwriting in the background"
-        help="Makes handwritten notes searchable and visible to the assistant (needs a vision model)."
+        help="Makes handwritten notes searchable and readable by the AI. Needs a vision model."
         checked={ai.autoTranscribe}
         onChange={(v) => ai.set({ autoTranscribe: v })}
       />
@@ -390,14 +405,9 @@ function GeneralSection() {
   const live = Object.values(notes).filter((n) => !n.meta.trashed).length;
   return (
     <div className="settings-section">
-      <h2>General</h2>
       <Row
         title={isElectron ? 'Vault folder' : 'Storage'}
-        help={
-          isElectron
-            ? 'Your notes are ordinary files in this folder. Put it in iCloud Drive or Dropbox to sync it, and back it up like any other folder.'
-            : 'In the browser, notes are kept in this browser’s storage.'
-        }
+        help={isElectron ? 'Your notes are ordinary files in this folder. Put it in iCloud Drive or Dropbox to sync it, and back it up like any other folder.' : undefined}
         stacked
       >
         <div className="vault-card">
@@ -431,7 +441,6 @@ function WritingSection() {
   const t = useTools();
   return (
     <div className="settings-section">
-      <h2>Writing & paper</h2>
       <Row title="Line spacing" help="Typed text and handwriting share these lines.">
         <Segmented
           value={s.lineSpacing}
@@ -509,6 +518,9 @@ const SHORTCUTS: [string, [string, string][]][] = [
       [`${ALT}H`, 'Highlighter'],
       [`${ALT}E`, 'Eraser'],
       [`${ALT}S  /  ${ALT}L`, 'Select'],
+      ['Hold Space', 'Move the Select box as you drag'],
+      [`Hold ${ALT}`, 'Grow the box from its center'],
+      ['Esc', 'Cancel the box'],
       [`${ALT}T`, 'Type'],
       ['Just type', 'Switch to typing below your handwriting'],
       ['Esc', 'Back to the marker'],
@@ -539,7 +551,6 @@ const SHORTCUTS: [string, [string, string][]][] = [
 function ShortcutsSection() {
   return (
     <div className="settings-section">
-      <h2>Shortcuts</h2>
       <div className="shortcut-groups">
         {SHORTCUTS.map(([g, list]) => (
           <div key={g} className="shortcut-group">
@@ -570,7 +581,7 @@ function AboutSection() {
       <div className="about-mark">
         <NibMark size={44} />
       </div>
-      <h2>Nib</h2>
+      <div className="about-name">Nib</div>
       <p>{info ? `Version ${info.version} · Electron ${info.electron}` : 'Version 0.1.0'}</p>
       <p>A notebook for typing and handwriting, with a local AI that answers from your own notes.</p>
     </div>
