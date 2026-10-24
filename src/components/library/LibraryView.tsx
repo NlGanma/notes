@@ -79,6 +79,13 @@ function notesCited(m: ChatMsg): number {
   return n;
 }
 
+const parsedCache = new WeakMap<ChatMsg, ReturnType<typeof parseStudyJSON>>();
+/** Cards or questions of a finished output, parsed once: a fresh parse on every new message restarted an open quiz. */
+function parsedOf(m: ChatMsg, tool: string) {
+  if (!parsedCache.has(m)) parsedCache.set(m, parseStudyJSON(tool, m.content));
+  return parsedCache.get(m)!;
+}
+
 export function LibraryView() {
   const notes = useVault((s) => s.notes);
   const folders = useVault((s) => s.folders);
@@ -151,7 +158,7 @@ export function LibraryView() {
       if (m.role !== 'assistant' || !m.tool) return;
       const tool = m.tool;
       const json = tool === 'flashcards' || tool === 'quiz';
-      const parsed = json && m.status === 'done' ? parseStudyJSON(tool, m.content) : null;
+      const parsed = json && m.status === 'done' ? parsedOf(m, tool) : null;
       const ask = messages[i - 1]?.role === 'user' ? messages[i - 1] : undefined;
       out.set(m.id, {
         msg: m,

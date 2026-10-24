@@ -218,6 +218,11 @@ check((await page.inputValue('.library-composer textarea')) === '', '…and the 
 await page.locator('.quiz-choice').nth(1).click();
 check(await page.locator('.quiz-choice.is-right').count(), 'quiz marks answers');
 await shot(page, 'ai-09-quiz');
+// Asking something else while the quiz is open doesn't restart it.
+await page.fill('.library-composer textarea', 'What is a limit?');
+await page.keyboard.press('Enter');
+await waitIdle();
+check(await page.locator('.quiz .quiz-choice.is-right').count(), '…and a question asked beside the quiz keeps its answers');
 
 // History: earlier conversations come back, and the one they replace goes into History.
 await page.click('.mainbar button[title="History"]');

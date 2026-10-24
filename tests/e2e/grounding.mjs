@@ -102,7 +102,9 @@ await page.click('.assistant .msg.is-bot >> nth=-3 >> .msg-act:has-text("Insert 
 // ---------------------------------------------------------------- Ask your notes
 await page.click('.nav-item:has-text("Ask your notes")');
 await page.waitForSelector('.library');
-await page.click('.mainbar button[title="New conversation"]').catch(() => undefined);
+// The button shows only once there is a conversation to leave.
+const newConv = page.locator('.mainbar button[title="New conversation"]');
+if (await newConv.count()) await newConv.click();
 const libBot = () => page.locator('.library .msg.is-bot').last();
 const libAsk = async (q) => {
   await page.fill('.library-composer textarea', q);
