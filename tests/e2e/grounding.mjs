@@ -22,6 +22,8 @@ const waitCalls = async (since, n) => {
   for (let i = 0; i < 80 && (await stats()).chat < since.chat + n; i++) await page.waitForTimeout(250);
   await waitIdle();
 };
+/** The answer's own model calls since `before` (background work such as reading handwriting may run in between). */
+const answerCalls = (before, after) => after.kinds.slice(before.kinds.length).filter((k) => k === 'note' || k === 'general');
 const bot = () => page.locator('.assistant .msg.is-bot').last();
 const ask = async (text) => {
   await page.fill('.assistant .composer textarea', text);
@@ -56,7 +58,7 @@ const head = (await bot().locator('.outside-notes .outside-head').first().textCo
 check(/AI.s own knowledge/.test(head) && /proceed with caution/.test(head), '…and the answer is boxed as the AI’s own knowledge');
 check(/Lima/.test(await bot().locator('.outside-notes').textContent().catch(() => '')), '…with the general-knowledge answer inside the box');
 check(!(await bot().locator('.outside-notes .cite').count()), '…and no citations inside the box');
-const kinds = after.kinds.slice(before.kinds.length);
+const kinds = answerCalls(before, after);
 check(kinds.length === 1 && kinds[0] === 'general', `the coverage check ran first: no notes prompt was sent (${kinds.join(', ')})`);
 await shot(page, 'grounding-01-not-covered');
 
@@ -65,7 +67,7 @@ before = await stats();
 await bot().locator('.coverage-force').click();
 await waitCalls(before, 2);
 after = await stats();
-check(after.kinds.slice(before.kinds.length).join(',') === 'note,general', '“Search my notes anyway” asks the notes first, then answers the rest separately');
+check(answerCalls(before, after).join(',') === 'note,general', '“Search my notes anyway” asks the notes first, then answers the rest separately');
 check(/notes don.t cover this/i.test((await bot().locator('.coverage-banner').textContent().catch(() => '')) ?? ''), '…and still labels it');
 check(!/NOT IN NOTES/.test(await bot().textContent()), '…without showing the model’s raw “NOT IN NOTES” line');
 
@@ -153,7 +155,7 @@ after = await stats();
 check(await bot().locator('.md > p .cite').count(), 'partly covered: what the notes have is answered with citations');
 check(/Not in your notes: .*tener/i.test(await bot().locator('.coverage-banner').textContent().catch(() => '')), '…what they lack is named');
 check(/AI.s own knowledge/.test(await bot().locator('.outside-notes').last().textContent().catch(() => '')), '…and answered separately, boxed');
-check(after.kinds.slice(before.kinds.length).join(',') === 'note,general', `…in two calls: the notes, then general knowledge (${after.kinds.slice(before.kinds.length).join(', ')})`);
+check(answerCalls(before, after).join(',') === 'note,general', `…in two calls: the notes, then general knowledge (${answerCalls(before, after).join(', ')})`);
 await shot(page, 'grounding-05-partial');
 
 // ---------------------------------------------------------------- text actions
@@ -191,7 +193,7 @@ await waitCalls(before, 1);
 after = await stats();
 check(/don.t include an example/i.test(await bot().locator('.coverage-banner').textContent().catch(() => '')), 'no example in the notes: Nib says so');
 check(await bot().locator('.outside-notes').count(), '…and the example it gives is boxed as the AI’s own knowledge');
-check(after.kinds.slice(before.kinds.length).join(',') === 'general', '…without sending a notes prompt');
+check(answerCalls(before, after).join(',') === 'general', '…without sending a notes prompt');
 
 check(!errors.some((e) => /Warning:|Maximum update depth/.test(e)), 'no React warnings (an effect setting state on every keystroke shows up here)');
 console.log(errors.join('\n') || 'no page errors');

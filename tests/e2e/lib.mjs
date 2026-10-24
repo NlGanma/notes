@@ -49,7 +49,46 @@ export async function launch({ width = 1440, height = 900, scale = 1, storage } 
     // Print right away too, so the log shows which step caused it.
     if (/Maximum update depth/.test(text)) console.log(`     [react warning at this point] ${text.slice(0, 5000)}`);
   });
+  reportOnCrash(page, errors);
   return { browser, context, page, errors };
+}
+
+/**
+ * A step that throws ends the suite with only Playwright's message. Before exiting, say what the page was
+ * doing (the page, focus, selection, page errors) and keep a picture of it, so a failure on CI explains itself.
+ */
+let crashPage = null;
+function reportOnCrash(page, errors) {
+  if (crashPage) return;
+  crashPage = page;
+  const report = async (err) => {
+    console.log(String(err?.stack || err));
+    try {
+      const state = await crashPage.evaluate(() => {
+        const a = document.activeElement;
+        const sel = document.getSelection();
+        const ui = window.__nib?.ui?.getState();
+        return {
+          url: location.href,
+          view: ui?.view,
+          active: a ? `${a.tagName.toLowerCase()}.${String(a.className).split(' ').join('.')}` : null,
+          selection: sel ? { text: sel.toString().slice(0, 80), collapsed: sel.isCollapsed, in: sel.anchorNode?.parentElement?.closest('[class]')?.className } : null,
+          bubble: !!document.querySelector('.bubble'),
+          open: [...document.querySelectorAll('.popover, .menu, .modal-backdrop, .bubble-panel')].map((e) => e.className).slice(0, 5),
+        };
+      });
+      console.log(`  page when it failed: ${JSON.stringify(state)}`);
+      if (errors.length) console.log(`  page errors: ${errors.slice(-5).join(' | ')}`);
+      const file = path.join(OUT, `FAILED-${path.basename(process.argv[1], '.mjs')}.png`);
+      await crashPage.screenshot({ path: file });
+      console.log(`  screenshot: ${file}`);
+    } catch {
+      /* the page is gone too */
+    }
+    process.exit(1);
+  };
+  process.on('uncaughtException', report);
+  process.on('unhandledRejection', report);
 }
 
 /** Makes sure the sidebar is showing (it hides itself on narrow windows and beside the assistant). */
